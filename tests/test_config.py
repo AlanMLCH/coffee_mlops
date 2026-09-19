@@ -29,3 +29,12 @@ def test_data_dir_comes_from_environment(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
 
     assert Settings().data_dir == tmp_path
+
+
+def test_zip_source_must_name_its_member(tmp_path: Path) -> None:
+    (tmp_path / "bad.yaml").write_text(
+        "name: bad\nsources:\n  s:\n    url: https://example.com/a.zip\n    filename: a.zip\n"
+    )
+
+    with pytest.raises(ValidationError, match="member"):
+        load_domain_config("bad", configs_dir=tmp_path)

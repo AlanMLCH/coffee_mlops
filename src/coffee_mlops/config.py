@@ -1,9 +1,10 @@
 """Runtime settings (environment) and domain config (YAML), both validated with pydantic."""
 
 from pathlib import Path
+from typing import Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIGS_DIR = Path(__file__).resolve().parents[2] / "configs"
@@ -22,6 +23,16 @@ class SourceConfig(BaseModel):
 
     url: HttpUrl
     filename: str
+    # CSV inside the archive, when the download is a ZIP.
+    member: str | None = None
+    # Literal strings the upstream uses for missing values (e.g. R writes "NA").
+    null_values: list[str] = []
+
+    @model_validator(mode="after")
+    def _zip_needs_member(self) -> Self:
+        if self.filename.endswith(".zip") and self.member is None:
+            raise ValueError(f"'{self.filename}' is a ZIP: set `member` to the CSV inside it")
+        return self
 
 
 class DomainConfig(BaseModel):

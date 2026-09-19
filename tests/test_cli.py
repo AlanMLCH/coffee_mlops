@@ -34,6 +34,16 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
     assert {p.name for p in raw.iterdir()} == {"cqi_2018", "cqi_2023", "psd_coffee"}
 
 
+def test_validate_runs_after_extract(data_dir: Path) -> None:
+    runner = CliRunner()
+    runner.invoke(cli.app, ["extract"])
+
+    result = runner.invoke(cli.app, ["validate", "--domain", "coffee"])
+
+    assert result.exit_code == 0, result.output
+    assert "psd_coffee: 114 rows valid" in result.output
+
+
 def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Signed URLs (and, from stage 2, API tokens) travel in URLs; they must not hit logs."""
     caplog.set_level(logging.DEBUG)
