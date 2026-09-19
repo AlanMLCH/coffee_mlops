@@ -22,13 +22,11 @@ import httpx
 from pydantic import BaseModel
 
 from coffee_mlops.config import DomainConfig, SourceConfig
+from coffee_mlops.storage import MANIFEST_NAME, latest_partition, new_partition
 
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "coffee-mlops/0.1 (+https://github.com/AlanMLCH/coffee_mlops)"
-MANIFEST_NAME = "manifest.json"
-PARTITION_PREFIX = "ingested_at="
-TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 
 
 class Manifest(BaseModel):
@@ -64,13 +62,11 @@ def http_client(transport: httpx.BaseTransport | None = None) -> Iterator[httpx.
 
 
 def latest_ingestion(raw_dir: Path, source: str) -> RawArtifact | None:
-    partitions = sorted(
-        p for p in (raw_dir / source).glob(f"{PARTITION_PREFIX}*") if (p / MANIFEST_NAME).is_file()
-    )
-    if not partitions:
+    partition = latest_partition(raw_dir / source)
+    if partition is None:
         return None
-    manifest = Manifest.model_validate_json((partitions[-1] / MANIFEST_NAME).read_text())
-    return RawArtifact(partitions[-1], manifest)
+    manifest = Manifest.model_validate_json((partition / MANIFEST_NAME).read_text())
+    return RawArtifact(partition, manifest)
 
 
 def ingest(
@@ -93,8 +89,7 @@ def ingest(
         return previous
 
     ingested_at = now or datetime.now(UTC)
-    partition = source_dir / f"{PARTITION_PREFIX}{ingested_at.strftime(TIMESTAMP_FORMAT)}"
-    partition.mkdir()
+    partition = new_partition(source_dir, "ingested_at", ingested_at)
     part_file.replace(partition / source.filename)
     manifest = Manifest(
         source=name,

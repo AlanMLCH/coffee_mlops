@@ -35,11 +35,21 @@ class SourceConfig(BaseModel):
         return self
 
 
+class CleaningConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    altitude_m: tuple[float, float]
+    country_aliases: dict[str, str]
+    processing_methods: dict[str, str]
+    colors: dict[str, str | None]
+
+
 class DomainConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     sources: dict[str, SourceConfig]
+    cleaning: CleaningConfig
 
 
 def load_domain_config(domain: str, configs_dir: Path = CONFIGS_DIR) -> DomainConfig:

@@ -3,6 +3,7 @@ validate it against its Pandera contract. Any violation stops the pipeline."""
 
 import logging
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandera.polars as pa
@@ -13,6 +14,12 @@ from coffee_mlops.extract import RawArtifact, latest_ingestion
 from coffee_mlops.schemas import RAW_SCHEMAS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ValidatedSource:
+    artifact: RawArtifact  # where the frame came from, for lineage
+    frame: pl.DataFrame
 
 
 def read_raw(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
@@ -34,15 +41,16 @@ def check_contract(schema: pa.DataFrameSchema, df: pl.DataFrame) -> pl.DataFrame
     return schema.validate(df, lazy=True)
 
 
-def validate_raw(config: DomainConfig, raw_dir: Path) -> dict[str, pl.DataFrame]:
+def validate_raw(config: DomainConfig, raw_dir: Path) -> dict[str, ValidatedSource]:
     """Return each source validated and typed, or raise `SchemaErrors` listing every failure."""
-    frames = {}
+    validated = {}
     for name, source in config.sources.items():
         artifact = latest_ingestion(raw_dir, name)
         if artifact is None:
             raise FileNotFoundError(
                 f"No raw ingestion for '{name}' in {raw_dir}; run extract first"
             )
-        frames[name] = check_contract(RAW_SCHEMAS[name], read_raw(artifact, source))
-        logger.info("%s valid: %d rows (%s)", name, frames[name].height, artifact.partition.name)
-    return frames
+        frame = check_contract(RAW_SCHEMAS[name], read_raw(artifact, source))
+        validated[name] = ValidatedSource(artifact, frame)
+        logger.info("%s valid: %d rows (%s)", name, frame.height, artifact.partition.name)
+    return validated

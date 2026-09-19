@@ -22,3 +22,48 @@ sources:
     url: https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip
     filename: psd_coffee_csv.zip
     member: psd_coffee.csv
+
+# Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
+# stops the pipeline so it gets mapped deliberately instead of guessed.
+cleaning:
+  # Plausible arabica growing altitude; values outside become null (1 m, 190 km, unconverted feet).
+  altitude_m: [300, 3000]
+
+  # CQI name -> PSD name. Hawaii and Puerto Rico are the whole of US production in PSD.
+  country_aliases:
+    "United States (Hawaii)": United States
+    "United States (Puerto Rico)": United States
+    "Tanzania, United Republic Of": Tanzania
+    "Cote d?Ivoire": Cote d'Ivoire # already mis-encoded upstream
+
+  # Lower-cased label -> canonical method.
+  processing_methods:
+    washed / wet: washed
+    natural / dry: natural
+    pulped natural / honey: honey
+    honey,mossto: honey
+    semi-washed / semi-pulped: semi_washed
+    semi washed: semi_washed
+    semi-lavado: semi_washed
+    wet hulling: semi_washed
+    other: other
+    # Experimental fermentations: too few rows to stand as their own class.
+    double anaerobic washed: other
+    anaerobico 1000h: other
+    double carbonic maceration / natural: other
+
+  # Lower-cased label -> canonical green-bean color; null means "not recorded".
+  colors:
+    green: green
+    greenish: green
+    blue-green: blue-green
+    bluish-green: blue-green
+    yellow-green: yellow-green
+    yellow green: yellow-green
+    yellow- green: yellow-green
+    yello-green: yellow-green
+    yellowish: yellowish
+    pale yellow: yellowish
+    brownish: brownish
+    browish-green: brownish
+    none: null

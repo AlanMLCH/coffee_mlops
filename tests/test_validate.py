@@ -1,21 +1,14 @@
 from collections.abc import Callable
 from pathlib import Path
 
-import httpx
 import pandera.errors
 import polars as pl
 import pytest
 
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.extract import extract_all, latest_ingestion
+from coffee_mlops.extract import latest_ingestion
 from coffee_mlops.schemas import RAW_SCHEMAS
 from coffee_mlops.validate import check_contract, read_raw, validate_raw
-
-
-@pytest.fixture
-def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client) -> Path:
-    extract_all(coffee_config, tmp_path, client)
-    return tmp_path
 
 
 def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFrame:
@@ -31,7 +24,7 @@ def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> 
 def test_recorded_sources_pass_and_come_out_typed(
     coffee_config: DomainConfig, raw_dir: Path
 ) -> None:
-    frames = validate_raw(coffee_config, raw_dir)
+    frames = {name: s.frame for name, s in validate_raw(coffee_config, raw_dir).items()}
 
     assert {name: df.height for name, df in frames.items()} == {
         "cqi_2018": 14,

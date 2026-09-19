@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 
+from coffee_mlops.clean import build_clean
 from coffee_mlops.config import Settings, load_domain_config
 from coffee_mlops.extract import extract_all, http_client
 from coffee_mlops.validate import validate_raw
@@ -41,6 +42,14 @@ def extract(domain: Domain = "coffee") -> None:
 def validate(domain: Domain = "coffee") -> None:
     """Check the latest raw ingestion of every source against its contract."""
     config = load_domain_config(domain)
-    frames = validate_raw(config, Settings().data_dir / config.name / "raw")
-    for name, frame in frames.items():
-        typer.echo(f"{name}: {frame.height:,} rows valid")
+    validated = validate_raw(config, Settings().data_dir / config.name / "raw")
+    for name, source in validated.items():
+        typer.echo(f"{name}: {source.frame.height:,} rows valid ({source.artifact.partition.name})")
+
+
+@app.command()
+def clean(domain: Domain = "coffee") -> None:
+    """Build the clean layer from the latest validated raw data."""
+    config = load_domain_config(domain)
+    for table, path in build_clean(config, Settings().data_dir / config.name).items():
+        typer.echo(f"{table}: {path}")

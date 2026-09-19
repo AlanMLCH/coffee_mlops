@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from coffee_mlops.config import DomainConfig, load_domain_config
-from coffee_mlops.extract import http_client
+from coffee_mlops.extract import extract_all, http_client
 from tests.fakes import RecordedServer
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -53,3 +53,11 @@ def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedS
 def client(server: RecordedServer) -> Iterator[httpx.Client]:
     with http_client(httpx.MockTransport(server.handler)) as c:
         yield c
+
+
+@pytest.fixture
+def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client) -> Path:
+    """A raw layer populated from the recorded payloads."""
+    raw = tmp_path / "raw"
+    extract_all(coffee_config, raw, client)
+    return raw

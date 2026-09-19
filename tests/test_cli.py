@@ -44,6 +44,17 @@ def test_validate_runs_after_extract(data_dir: Path) -> None:
     assert "psd_coffee: 114 rows valid" in result.output
 
 
+def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
+    runner = CliRunner()
+    runner.invoke(cli.app, ["extract"])
+
+    result = runner.invoke(cli.app, ["clean", "--domain", "coffee"])
+
+    assert result.exit_code == 0, result.output
+    clean = data_dir / "coffee" / "clean"
+    assert {p.name for p in clean.iterdir()} == {"coffee_reviews", "market_context"}
+
+
 def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Signed URLs (and, from stage 2, API tokens) travel in URLs; they must not hit logs."""
     caplog.set_level(logging.DEBUG)

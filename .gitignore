@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.venv
 *.pem
 *.key
 kaggle.json

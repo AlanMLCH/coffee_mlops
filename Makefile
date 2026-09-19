@@ -1,6 +1,6 @@
 DOMAIN ?= coffee
 
-.PHONY: help install lint format typecheck test test-network check extract validate
+.PHONY: help install lint format typecheck test test-network check extract validate clean-layer
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -12,6 +12,7 @@ help:
 	@echo "test-network  check upstream URLs still answer (hits the internet)"
 	@echo "extract    download DOMAIN sources to the raw layer (DOMAIN=$(DOMAIN))"
 	@echo "validate   check the latest raw ingestion against its Pandera contracts"
+	@echo "clean-layer  build the clean layer (coffee_reviews, market_context)"
 
 install:
 	uv sync
@@ -41,3 +42,6 @@ extract:
 
 validate:
 	uv run coffee-mlops validate --domain $(DOMAIN)
+
+clean-layer:
+	uv run coffee-mlops clean --domain $(DOMAIN)
