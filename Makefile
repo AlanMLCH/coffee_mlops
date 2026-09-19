@@ -1,6 +1,6 @@
 DOMAIN ?= coffee
 
-.PHONY: help install lint format typecheck test check
+.PHONY: help install lint format typecheck test test-network check extract
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -9,6 +9,8 @@ help:
 	@echo "typecheck  mypy --strict"
 	@echo "test       pytest (offline tests only)"
 	@echo "check      lint + typecheck + test (what CI runs)"
+	@echo "test-network  check upstream URLs still answer (hits the internet)"
+	@echo "extract    download DOMAIN sources to the raw layer (DOMAIN=$(DOMAIN))"
 
 install:
 	uv sync
@@ -28,4 +30,10 @@ typecheck:
 test:
 	uv run pytest --cov=coffee_mlops --cov-report=term-missing
 
+test-network:
+	uv run pytest -m network
+
 check: lint typecheck test
+
+extract:
+	uv run coffee-mlops extract --domain $(DOMAIN)

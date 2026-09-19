@@ -1,0 +1,21 @@
+# Domain config for coffee. Everything domain-specific that is data, not code, lives here.
+name: coffee
+
+sources:
+  # CQI snapshot scraped in 2018 (1,311 arabica reviews, graded 2010-2018). MIT license.
+  # Pinned to a commit so the download is reproducible.
+  cqi_2018:
+    url: https://raw.githubusercontent.com/jldbc/coffee-quality-database/e3b22b2b1e597887188b97c2ada7f745e1914ec7/data/arabica_data_cleaned.csv
+    filename: arabica_data_cleaned.csv
+
+  # CQI snapshot re-scraped in May 2023 (207 arabica reviews, graded 2022-2023).
+  # Public Kaggle download: no token needed, 302 to a signed GCS URL.
+  cqi_2023:
+    url: https://www.kaggle.com/api/v1/datasets/download/fatihb/coffee-quality-data-cqi
+    filename: coffee-quality-data-cqi.zip
+
+  # USDA PSD coffee: production, trade and stocks by country and market year.
+  # Republished with each circular (June and December).
+  psd_coffee:
+    url: https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip
+    filename: psd_coffee_csv.zip
