@@ -1,13 +1,17 @@
 """Command-line entry point. Every command is parameterized by domain."""
 
 import logging
+import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from coffee_mlops.catalog import connect
 from coffee_mlops.clean import build_clean
-from coffee_mlops.config import Settings, load_domain_config
+from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from coffee_mlops.extract import extract_all, http_client
+from coffee_mlops.features import build_features
 from coffee_mlops.validate import validate_raw
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -17,8 +21,17 @@ Domain = Annotated[
 ]
 
 
+def _data_dir(config: DomainConfig) -> Path:
+    return Settings().data_dir / config.name
+
+
 @app.callback()
 def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> None:
+    # Windows consoles default to cp1252: table borders and accented names need UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -31,9 +44,8 @@ def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> N
 def extract(domain: Domain = "coffee") -> None:
     """Download every source of the domain to the raw layer."""
     config = load_domain_config(domain)
-    raw_dir = Settings().data_dir / config.name / "raw"
     with http_client() as client:
-        artifacts = extract_all(config, raw_dir, client)
+        artifacts = extract_all(config, _data_dir(config) / "raw", client)
     for name, artifact in artifacts.items():
         typer.echo(f"{name}: {artifact.path} ({artifact.manifest.size_bytes:,} bytes)")
 
@@ -42,8 +54,7 @@ def extract(domain: Domain = "coffee") -> None:
 def validate(domain: Domain = "coffee") -> None:
     """Check the latest raw ingestion of every source against its contract."""
     config = load_domain_config(domain)
-    validated = validate_raw(config, Settings().data_dir / config.name / "raw")
-    for name, source in validated.items():
+    for name, source in validate_raw(config, _data_dir(config) / "raw").items():
         typer.echo(f"{name}: {source.frame.height:,} rows valid ({source.artifact.partition.name})")
 
 
@@ -51,5 +62,22 @@ def validate(domain: Domain = "coffee") -> None:
 def clean(domain: Domain = "coffee") -> None:
     """Build the clean layer from the latest validated raw data."""
     config = load_domain_config(domain)
-    for table, path in build_clean(config, Settings().data_dir / config.name).items():
+    for table, path in build_clean(config, _data_dir(config)).items():
         typer.echo(f"{table}: {path}")
+
+
+@app.command()
+def features(domain: Domain = "coffee") -> None:
+    """Build the model-ready feature table from the latest clean layer."""
+    config = load_domain_config(domain)
+    typer.echo(f"review_features: {build_features(config, _data_dir(config))}")
+
+
+@app.command()
+def sql(
+    query: Annotated[str, typer.Argument(help="e.g. 'SELECT * FROM clean.coffee_reviews'")],
+    domain: Domain = "coffee",
+) -> None:
+    """Run SQL over the latest partition of every layer."""
+    config = load_domain_config(domain)
+    typer.echo(connect(_data_dir(config)).sql(query))

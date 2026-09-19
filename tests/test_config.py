@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from coffee_mlops.config import Settings, load_domain_config
+from coffee_mlops.config import ModelSpec, Settings, load_domain_config
 
 
 def test_coffee_config_declares_the_stage_1_sources() -> None:
@@ -38,3 +38,12 @@ def test_zip_source_must_name_its_member(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="member"):
         load_domain_config("bad", configs_dir=tmp_path)
+
+
+@pytest.mark.parametrize("leaked", ["aroma", "total_cup_points"])
+def test_leaking_columns_cannot_be_declared_as_features(leaked: str) -> None:
+    model = load_domain_config("coffee").model.model_dump()
+    model["numeric"] = [*model["numeric"], leaked]
+
+    with pytest.raises(ValidationError, match=leaked):
+        ModelSpec.model_validate(model)

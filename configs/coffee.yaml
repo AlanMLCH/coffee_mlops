@@ -67,3 +67,23 @@ cleaning:
     brownish: brownish
     browish-green: brownish
     none: null
+
+# What the model sees. Fitted transforms (encoding, rare-category grouping) live in
+# the model pipeline, learned on the training split only.
+model:
+  target: total_cup_points
+  categorical: [country, variety, processing_method, color]
+  numeric:
+    - altitude_m
+    - moisture_pct
+    - category_one_defects
+    - category_two_defects
+    - quakers
+    # Market context of the origin country, market year = grading year - 1 (point in time).
+    - ctx_production
+    - ctx_arabica_share
+    - ctx_export_share
+    - ctx_domestic_consumption
+  # Never features: the target is literally their sum (verified on both snapshots).
+  leakage:
+    [aroma, flavor, aftertaste, acidity, body, balance, uniformity, clean_cup, sweetness, overall]

@@ -55,6 +55,17 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
     assert {p.name for p in clean.iterdir()} == {"coffee_reviews", "market_context"}
 
 
+def test_features_and_sql_run_on_the_built_layers(data_dir: Path) -> None:
+    runner = CliRunner()
+    for step in ("extract", "clean", "features"):
+        assert runner.invoke(cli.app, [step]).exit_code == 0
+
+    result = runner.invoke(cli.app, ["sql", "SELECT count(*) AS n FROM features.review_features"])
+
+    assert result.exit_code == 0, result.output
+    assert "25" in result.output
+
+
 def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Signed URLs (and, from stage 2, API tokens) travel in URLs; they must not hit logs."""
     caplog.set_level(logging.DEBUG)

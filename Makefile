@@ -1,6 +1,6 @@
 DOMAIN ?= coffee
 
-.PHONY: help install lint format typecheck test test-network check extract validate clean-layer
+.PHONY: help install lint format typecheck test test-network check extract validate clean-layer features sql
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -13,6 +13,8 @@ help:
 	@echo "extract    download DOMAIN sources to the raw layer (DOMAIN=$(DOMAIN))"
 	@echo "validate   check the latest raw ingestion against its Pandera contracts"
 	@echo "clean-layer  build the clean layer (coffee_reviews, market_context)"
+	@echo "features   build the model-ready feature table"
+	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
 install:
 	uv sync
@@ -45,3 +47,9 @@ validate:
 
 clean-layer:
 	uv run coffee-mlops clean --domain $(DOMAIN)
+
+features:
+	uv run coffee-mlops features --domain $(DOMAIN)
+
+sql:
+	uv run coffee-mlops sql "$(Q)" --domain $(DOMAIN)

@@ -124,6 +124,7 @@ def clean_reviews(frames: Mapping[str, pl.DataFrame], rules: CleaningConfig) -> 
     altitude_low, altitude_high = rules.altitude_m
     df = df.with_columns(
         pl.col("country").replace(rules.country_aliases),
+        pl.col("variety").str.to_lowercase(),
         parse_grading_date(pl.col("grading_date")),
         pl.when(pl.col("altitude_m").is_between(altitude_low, altitude_high)).then("altitude_m"),
         # 0% moisture is physically impossible for green coffee: it means "not measured".

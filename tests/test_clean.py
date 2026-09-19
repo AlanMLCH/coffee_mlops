@@ -130,6 +130,16 @@ def test_labels_are_mapped_to_closed_vocabularies(
     assert first["processing_method"].item() == "semi_washed"
 
 
+def test_variety_is_case_normalized(coffee_config: DomainConfig, frames: Frames) -> None:
+    frames["cqi_2023"] = set_first(frames["cqi_2023"], "Variety", "Gesha")
+
+    first = clean_reviews(frames, coffee_config.cleaning).filter(
+        pl.col("review_id") == "cqi_2023-0"
+    )
+
+    assert first["variety"].item() == "gesha"
+
+
 def test_blank_text_becomes_null(coffee_config: DomainConfig, frames: Frames) -> None:
     frames["cqi_2023"] = set_first(frames["cqi_2023"], "Variety", "   ")
 

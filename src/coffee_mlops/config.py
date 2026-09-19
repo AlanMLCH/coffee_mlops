@@ -44,12 +44,34 @@ class CleaningConfig(BaseModel):
     colors: dict[str, str | None]
 
 
+class ModelSpec(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    target: str
+    categorical: list[str]
+    numeric: list[str]
+    # Columns that must never be features (target leakage).
+    leakage: list[str]
+
+    @property
+    def features(self) -> list[str]:
+        return [*self.categorical, *self.numeric]
+
+    @model_validator(mode="after")
+    def _no_leakage(self) -> Self:
+        leaked = set(self.features) & {*self.leakage, self.target}
+        if leaked:
+            raise ValueError(f"Leaking columns declared as features: {sorted(leaked)}")
+        return self
+
+
 class DomainConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     sources: dict[str, SourceConfig]
     cleaning: CleaningConfig
+    model: ModelSpec
 
 
 def load_domain_config(domain: str, configs_dir: Path = CONFIGS_DIR) -> DomainConfig:
