@@ -87,3 +87,13 @@ model:
   # Never features: the target is literally their sum (verified on both snapshots).
   leakage:
     [aroma, flavor, aftertaste, acidity, body, balance, uniformity, clean_cup, sweetness, overall]
+
+training:
+  # Temporal split: train on gradings up to 2018, evaluate on 2022-2023 (the 2023 snapshot).
+  test_from: 2019-01-01
+  cv_folds: 5 # time-ordered folds inside the training period, for tuning
+  trials: 40
+  seed: 42
+  # The model must beat predicting each group's training mean to be promoted.
+  baseline_group: country
+  registered_model: coffee-total-cup-points

@@ -1,0 +1,38 @@
+# Local services. The pipeline itself runs natively with uv (see the Makefile).
+name: coffee-mlops
+
+services:
+  mlflow:
+    # Same version as the client pinned in uv.lock.
+    image: ghcr.io/mlflow/mlflow:v3.16.1
+    # One web worker and no async job runner (GenAI scorers, not used until stage 3):
+    # the defaults spawn ~10 Python processes and ~2 GB of RAM on this laptop.
+    environment:
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --workers 1
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+    ports:
+      - "127.0.0.1:5000:5000" # this machine only, never the LAN
+    volumes:
+      # Named volume, not a bind mount: SQLite locking is unreliable over Windows bind mounts.
+      # Experiment history is not rebuildable from the pipeline, so it outlives `down`.
+      - mlflow:/mlflow
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  mlflow:

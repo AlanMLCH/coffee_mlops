@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from coffee_mlops import cli
 from coffee_mlops.extract import http_client
+from coffee_mlops.train import TrainResult
 from tests.fakes import RecordedServer
 
 
@@ -64,6 +65,25 @@ def test_features_and_sql_run_on_the_built_layers(data_dir: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "25" in result.output
+
+
+def test_train_reports_version_and_gate_decision(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    def fake_train_model(config: object, data: Path, tracking_uri: str) -> TrainResult:
+        calls.append((data, tracking_uri))
+        return TrainResult("run-1", "3", True, {"test_mae": 1.5})
+
+    monkeypatch.setattr("coffee_mlops.train.train_model", fake_train_model)
+    monkeypatch.setenv("COFFEE_MLFLOW_TRACKING_URI", "sqlite:///somewhere.db")
+
+    result = CliRunner().invoke(cli.app, ["train"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [(data_dir / "coffee", "sqlite:///somewhere.db")]
+    assert "v3: promoted to champion" in result.output
 
 
 def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFixture) -> None:

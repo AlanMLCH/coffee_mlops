@@ -1,5 +1,6 @@
 """Runtime settings (environment) and domain config (YAML), both validated with pydantic."""
 
+from datetime import date
 from pathlib import Path
 from typing import Self
 
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="COFFEE_", env_file=".env", extra="ignore")
 
     data_dir: Path = Path("data")
+    # The MLflow server from docker-compose. Tests point it at a throwaway SQLite file.
+    mlflow_tracking_uri: str = "http://localhost:5000"
 
 
 class SourceConfig(BaseModel):
@@ -65,6 +68,17 @@ class ModelSpec(BaseModel):
         return self
 
 
+class TrainingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    test_from: date
+    cv_folds: int
+    trials: int
+    seed: int
+    baseline_group: str
+    registered_model: str
+
+
 class DomainConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -72,6 +86,7 @@ class DomainConfig(BaseModel):
     sources: dict[str, SourceConfig]
     cleaning: CleaningConfig
     model: ModelSpec
+    training: TrainingConfig
 
 
 def load_domain_config(domain: str, configs_dir: Path = CONFIGS_DIR) -> DomainConfig:

@@ -81,3 +81,17 @@ def sql(
     """Run SQL over the latest partition of every layer."""
     config = load_domain_config(domain)
     typer.echo(connect(_data_dir(config)).sql(query))
+
+
+@app.command()
+def train(domain: Domain = "coffee") -> None:
+    """Tune and train a model, track it in MLflow, promote it if it passes the quality gate."""
+    # Imported here: MLflow and LightGBM take seconds to import and no other command needs them.
+    from coffee_mlops.train import train_model
+
+    config = load_domain_config(domain)
+    result = train_model(config, _data_dir(config), Settings().mlflow_tracking_uri)
+    metrics = ", ".join(f"{k}={v:.3f}" for k, v in sorted(result.metrics.items()))
+    status = "promoted to champion" if result.promoted else "not promoted"
+    typer.echo(f"{config.training.registered_model} v{result.model_version}: {status}")
+    typer.echo(f"run {result.run_id}: {metrics}")
