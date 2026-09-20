@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, HttpUrl, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIGS_DIR = Path(__file__).resolve().parents[2] / "configs"
@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     model_cache_dir: Path | None = None
     # Complete partitions kept per table when pruning; history explains past predictions.
     keep_partitions: int = 3
+
+    # Credentials for the stage 2 sources. SecretStr so the value cannot leak through a
+    # repr, a log line or a traceback: printing one shows `SecretStr('**********')`, and
+    # reading it takes an explicit `.get_secret_value()`. They live in `.env`, which is
+    # gitignored; `.env.example` documents them.
+    denue_token: SecretStr | None = None  # INEGI, free
+    usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
 
 
 class SourceConfig(BaseModel):

@@ -47,3 +47,27 @@ def test_leaking_columns_cannot_be_declared_as_features(leaked: str) -> None:
 
     with pytest.raises(ValidationError, match=leaked):
         ModelSpec.model_validate(model)
+
+
+def test_credentials_are_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COFFEE_DENUE_TOKEN", "abc-123")
+    monkeypatch.setenv("COFFEE_USDA_FAS_API_KEY", "key-456")
+
+    settings = Settings()
+
+    assert settings.denue_token is not None
+    assert settings.denue_token.get_secret_value() == "abc-123"
+    assert settings.usda_fas_api_key is not None
+    assert settings.usda_fas_api_key.get_secret_value() == "key-456"
+
+
+def test_a_credential_never_shows_up_by_accident(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The DENUE token travels in the URL path, so anything that prints a Settings
+    object, logs a traceback or repr's the config must not carry it."""
+    monkeypatch.setenv("COFFEE_DENUE_TOKEN", "super-secret-token")
+
+    settings = Settings()
+
+    assert "super-secret-token" not in repr(settings)
+    assert "super-secret-token" not in str(settings.denue_token)
+    assert "super-secret-token" not in str(settings.model_dump())

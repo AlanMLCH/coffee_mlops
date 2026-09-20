@@ -190,6 +190,20 @@ def dashboard(domain: Domain = "coffee", port: int = 8501) -> None:
 
 
 @app.command()
+def secrets() -> None:
+    """Say which credentials are configured, without revealing any of them."""
+    settings = Settings()
+    configured = {
+        "DENUE token (COFFEE_DENUE_TOKEN)": settings.denue_token,
+        "USDA FAS key (COFFEE_USDA_FAS_API_KEY)": settings.usda_fas_api_key,
+    }
+    for label, secret in configured.items():
+        # Length only: enough to confirm the right value was pasted, useless if seen.
+        state = f"set ({len(secret.get_secret_value())} characters)" if secret else "missing"
+        typer.echo(f"{label}: {state}")
+
+
+@app.command()
 def sql(
     query: Annotated[str, typer.Argument(help="e.g. 'SELECT * FROM clean.coffee_reviews'")],
     domain: Domain = "coffee",

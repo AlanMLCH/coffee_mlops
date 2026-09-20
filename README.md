@@ -158,7 +158,11 @@ The evaluation is built to survive a small test set:
   was dirty: a run from uncommitted code is not reproducible and should not pretend to be.
 - `ruff` (lint + format), `mypy --strict`, `pytest`.
 - `pre-commit` runs ruff and **gitleaks** on every commit, so credentials never reach history.
-- Secrets live in `.env` (gitignored); `.env.example` documents the variables.
+- Secrets live in `.env` (gitignored); `.env.example` documents each variable and where
+  to get it. Copy it to `.env`, paste the values, and check them with
+  `uv run coffee-mlops secrets`, which reports what is configured without printing it.
+  Credentials are typed as `SecretStr`, so a repr, a log line or a traceback shows
+  `**********` and reading one takes an explicit `.get_secret_value()`.
 - `data/` is gitignored: every dataset is rebuilt by running the pipeline.
 - CI runs lint, types and tests, scans the whole history for secrets, and builds the API
   image so a broken Dockerfile fails here instead of during a demo. A weekly job checks

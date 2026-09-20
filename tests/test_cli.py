@@ -200,3 +200,17 @@ def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.M
     assert "--server.headless" in launched["argv"]  # type: ignore[operator]
     assert "9999" in launched["argv"]  # type: ignore[operator]
     assert os.environ["COFFEE_DOMAIN"] == "coffee"
+
+
+def test_secrets_reports_what_is_configured_without_printing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("COFFEE_DENUE_TOKEN", "super-secret-token")
+    monkeypatch.delenv("COFFEE_USDA_FAS_API_KEY", raising=False)
+
+    result = CliRunner().invoke(cli.app, ["secrets"])
+
+    assert result.exit_code == 0, result.output
+    assert "set (18 characters)" in result.output
+    assert "super-secret-token" not in result.output
+    assert "USDA FAS key (COFFEE_USDA_FAS_API_KEY): missing" in result.output
