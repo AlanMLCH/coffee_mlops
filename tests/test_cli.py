@@ -219,6 +219,9 @@ def test_prune_says_so_when_there_is_nothing_to_drop(
 def test_analysis_run_writes_studies_and_publishes_figures(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The repo root is redirected on purpose: the command publishes figures into
+    `docs/figures/`, so without this the suite overwrites the documentation with
+    pictures of the 25-row fixture -- committed, and rendered in the README."""
     runner = CliRunner()
     runner.invoke(cli.app, ["data", "run"])
     runner.invoke(cli.app, ["ml", "features"])
@@ -226,12 +229,20 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "coffee_mlops.analysis.pipeline.load_champion",
         lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "cache"),
     )
+    monkeypatch.setattr(cli, "REPO_ROOT", data_dir / "checkout")
+    (data_dir / "checkout" / "docs").mkdir(parents=True)
 
     result = runner.invoke(cli.app, ["analysis", "run"])
 
     assert result.exit_code == 0, result.output
     assert "feature_recommendation:" in result.output
     assert (data_dir / "coffee" / "analysis" / "feature_recommendation").is_dir()
+    published = data_dir / "checkout" / "docs" / "figures"
+    assert {path.name for path in published.iterdir()} == {
+        "target_distribution.png",
+        "feature_importance.png",
+        "market_history.png",  # residual_bias needs predictions, which this run has none of
+    }
 
 
 def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.MonkeyPatch) -> None:
