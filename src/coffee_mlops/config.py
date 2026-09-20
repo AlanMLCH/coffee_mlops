@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     # Where the API keeps its copy of the champion. Set it outside data_dir when the
     # data is mounted read-only. Defaults to <data_dir>/<domain>/model_cache.
     model_cache_dir: Path | None = None
+    # Complete partitions kept per table when pruning; history explains past predictions.
+    keep_partitions: int = 3
 
 
 class SourceConfig(BaseModel):

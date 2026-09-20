@@ -1,9 +1,11 @@
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import polars as pl
 import pytest
 import typer
 from typer.testing import CliRunner
@@ -12,6 +14,7 @@ from coffee_mlops import cli
 from coffee_mlops.data.extract import http_client
 from coffee_mlops.ml.registry import ServedModel
 from coffee_mlops.ml.train import TrainResult
+from coffee_mlops.storage import write_table
 from tests.fakes import RecordedServer
 
 
@@ -140,3 +143,27 @@ def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFi
     CliRunner().invoke(cli.app, ["data", "extract"])
 
     assert "Signature" not in caplog.text
+
+
+def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    table = tmp_path / "coffee" / "clean" / "coffee_reviews"
+    for day in (1, 2, 3):
+        frame = pl.DataFrame({"v": [day]})
+        write_table(frame, table, inputs={}, at=datetime(2026, 9, day, tzinfo=UTC))
+
+    result = CliRunner().invoke(cli.app, ["prune", "--keep", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "clean/coffee_reviews: 2 partitions removed" in result.output
+
+
+def test_prune_says_so_when_there_is_nothing_to_drop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    (tmp_path / "coffee").mkdir(parents=True)
+
+    result = CliRunner().invoke(cli.app, ["prune"])
+
+    assert "nothing to prune" in result.output

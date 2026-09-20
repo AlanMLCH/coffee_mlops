@@ -14,11 +14,11 @@ from typing import Annotated
 
 import typer
 
-from coffee_mlops.catalog import connect
 from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from coffee_mlops.data.clean import build_clean
 from coffee_mlops.data.extract import extract_all, http_client
 from coffee_mlops.data.validate import validate_raw
+from coffee_mlops.storage import prune_layers
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
@@ -148,5 +148,23 @@ def sql(
     domain: Domain = "coffee",
 ) -> None:
     """Run SQL over the latest partition of every layer."""
+    with _needs_extra("data"):
+        from coffee_mlops.catalog import connect
+
     config = load_domain_config(domain)
     typer.echo(connect(_data_dir(config)).sql(query))
+
+
+@app.command()
+def prune(
+    domain: Domain = "coffee",
+    keep: Annotated[int | None, typer.Option(help="Complete partitions to keep per table")] = None,
+) -> None:
+    """Delete old partitions of every layer, keeping the newest ones."""
+    config = load_domain_config(domain)
+    settings = Settings()
+    pruned = prune_layers(_data_dir(config), keep if keep is not None else settings.keep_partitions)
+    for table, count in pruned.items():
+        typer.echo(f"{table}: {count} partitions removed")
+    if not pruned:
+        typer.echo("nothing to prune")

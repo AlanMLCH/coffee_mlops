@@ -125,6 +125,11 @@ The evaluation is built to survive a small test set:
   that the upstream sources still answer.
 - `.vscode/settings.json` keeps the editor's watcher and indexer out of `.venv`, `data/`
   and `.dagster/`; watching them costs CPU for nothing.
+- Layers keep their history (that is how a past prediction stays explainable) but not
+  forever: `make prune` keeps the newest partitions per table and drops builds that
+  crashed long ago.
+- The API image installs `mlflow-skinny`, not full MLflow: a client only loads models,
+  while the full package ships the tracking server (1.48 GB instead of 2.26 GB).
 
 ## Roadmap
 

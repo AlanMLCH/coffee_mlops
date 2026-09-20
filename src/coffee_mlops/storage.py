@@ -7,12 +7,16 @@ a partition without one is incomplete and ignored. Readers always take the newes
 complete partition: a writer never blocks or corrupts a reader.
 """
 
+import logging
+import shutil
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
 TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
@@ -56,3 +60,44 @@ def read_table(table_dir: Path) -> pl.DataFrame:
     if partition is None:
         raise FileNotFoundError(f"No complete partition of '{table_dir.name}' in {table_dir}")
     return pl.read_parquet(partition / f"{table_dir.name}.parquet")
+
+
+def prune_partitions(
+    table_dir: Path,
+    keep: int,
+    now: datetime | None = None,
+    stale_after: timedelta = timedelta(days=1),
+) -> list[Path]:
+    """Delete old partitions of one table, keeping the newest `keep` complete ones.
+
+    History is worth keeping (it is how a past prediction stays explainable) but not
+    forever. Incomplete partitions are only removed once they are older than
+    `stale_after`: a younger one may belong to a writer that is still running.
+    """
+    partitions = sorted(table_dir.glob("*=*"))
+    complete = [p for p in partitions if (p / MANIFEST_NAME).is_file()]
+    abandoned = [
+        p for p in partitions if p not in complete and _age(p, now) >= stale_after
+    ]  # a writer that crashed long enough ago that nobody is filling it
+    superseded = complete[: max(len(complete) - keep, 0)]  # sorted oldest first
+    deleted = abandoned + superseded
+    for partition in deleted:
+        shutil.rmtree(partition)
+        logger.info("pruned %s", partition)
+    return deleted
+
+
+def prune_layers(data_dir: Path, keep: int, now: datetime | None = None) -> dict[str, int]:
+    """Prune every table of every layer under a domain's data dir."""
+    pruned = {}
+    for layer in sorted(p for p in data_dir.iterdir() if p.is_dir()):
+        for table_dir in sorted(p for p in layer.iterdir() if p.is_dir()):
+            removed = prune_partitions(table_dir, keep, now)
+            if removed:
+                pruned[f"{layer.name}/{table_dir.name}"] = len(removed)
+    return pruned
+
+
+def _age(partition: Path, now: datetime | None) -> timedelta:
+    modified = datetime.fromtimestamp(partition.stat().st_mtime, tz=UTC)
+    return (now or datetime.now(UTC)) - modified
