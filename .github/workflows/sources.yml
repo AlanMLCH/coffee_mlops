@@ -1,0 +1,22 @@
+# The upstream sources are outside our control: USDA republishes with every circular
+# and Kaggle URLs move. This job fails loudly on a schedule instead of during a demo.
+name: Sources
+
+on:
+  schedule:
+    - cron: "0 12 * * 1" # Mondays, 12:00 UTC
+  workflow_dispatch: # and on demand
+
+permissions:
+  contents: read
+
+jobs:
+  reachable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - run: uv run pytest -m network -q

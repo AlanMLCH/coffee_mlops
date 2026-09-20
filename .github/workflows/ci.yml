@@ -32,3 +32,12 @@ jobs:
       - run: make lint
       - run: make typecheck
       - run: make test
+
+  # A broken Dockerfile or compose file only shows up when someone tries to run it,
+  # which is exactly when it is most annoying.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker compose config --quiet
+      - run: docker build --tag coffee-mlops-api:ci .
