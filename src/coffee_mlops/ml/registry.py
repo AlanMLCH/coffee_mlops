@@ -1,8 +1,8 @@
-"""Champion model loading.
+"""Champion model loading, shared by the API and the batch job.
 
-MLflow is the source of truth, but the API keeps a local copy of what it loaded: a
-restart while the tracking server is down should keep serving the last known model
-instead of failing. `source` always says which one is in memory.
+MLflow is the source of truth, but whoever loads a model keeps a local copy: a restart
+while the tracking server is down should keep serving the last known model instead of
+failing. `source` always says which one is in memory.
 """
 
 import json

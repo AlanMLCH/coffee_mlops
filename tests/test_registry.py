@@ -7,7 +7,7 @@ import pytest
 from mlflow import MlflowClient
 from sklearn.dummy import DummyRegressor
 
-from coffee_mlops.serving.model import CACHED_METADATA, load_champion
+from coffee_mlops.ml.registry import CACHED_METADATA, load_champion
 
 UNREACHABLE = "http://127.0.0.1:1"  # nothing listens here
 

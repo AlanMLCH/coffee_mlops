@@ -123,11 +123,23 @@ def train(domain: Domain = "coffee") -> None:
     typer.echo(f"run {result.run_id}: {metrics}")
 
 
+@ml_app.command()
+def predict(domain: Domain = "coffee") -> None:
+    """Score the whole feature table with the champion and write the predictions."""
+    with _needs_extra("ml"):
+        from coffee_mlops.ml.predict import batch_predict
+
+    config = load_domain_config(domain)
+    path = batch_predict(config, _data_dir(config), Settings().mlflow_tracking_uri)
+    typer.echo(f"review_predictions: {path}")
+
+
 @ml_app.command("run")
 def ml_run(domain: Domain = "coffee") -> None:
-    """Whole model pipeline: features, then train."""
+    """Whole model pipeline: features, train, then batch predictions."""
     features(domain)
     train(domain)
+    predict(domain)
 
 
 @app.command()

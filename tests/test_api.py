@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from coffee_mlops.config import DomainConfig, Settings
+from coffee_mlops.ml.registry import ServedModel
 from coffee_mlops.serving import api
-from coffee_mlops.serving.model import ServedModel
 from coffee_mlops.storage import write_table
 
 LOT = {

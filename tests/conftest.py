@@ -57,7 +57,8 @@ def client(server: RecordedServer) -> Iterator[httpx.Client]:
 
 @pytest.fixture
 def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client) -> Path:
-    """A raw layer populated from the recorded payloads."""
-    raw = tmp_path / "raw"
+    """A raw layer populated from the recorded payloads, in the real directory layout
+    (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir."""
+    raw = tmp_path / coffee_config.name / "raw"
     extract_all(coffee_config, raw, client)
     return raw

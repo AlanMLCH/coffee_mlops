@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from coffee_mlops.ml.features import add_market_context
-from coffee_mlops.serving.model import ServedModel, load_champion
+from coffee_mlops.ml.registry import ServedModel, load_champion
 from coffee_mlops.storage import read_table
 
 logger = logging.getLogger(__name__)

@@ -47,7 +47,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
 | **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context` |
-| **ml** | `features`, `train`, `run` | the clean tables | tracked runs, a registered `champion` model |
+| **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **ai** (stage 3) | `index`, `ask` | clean tables + documents | RAG index, agent |
 
@@ -69,10 +69,11 @@ make check                    # lint + typecheck + tests
 
 make data                     # ETL: download, validate, clean
 make services-up PROFILE=ml   # MLflow at http://localhost:5000
-make ml                       # features + tuned training, tracked and gated
+make ml                       # features + tuned training + batch predictions
 
-make sql Q="SELECT country, round(avg(total_cup_points), 2) AS points \
-  FROM clean.coffee_reviews GROUP BY 1 ORDER BY 2 DESC LIMIT 5"
+make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) AS bias \
+  FROM predictions.review_predictions p JOIN features.review_features f USING (review_id) \
+  GROUP BY 1"
 ```
 
 Run `make help` for every target, or `uv run coffee-mlops --help` for the CLI.

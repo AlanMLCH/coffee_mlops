@@ -38,6 +38,7 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("ml", "coffee_mlops.data"),
         ("data", "coffee_mlops.ml"),
         ("serving", "coffee_mlops.data"),
+        ("ml", "coffee_mlops.serving"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:

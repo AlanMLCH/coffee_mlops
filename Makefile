@@ -2,7 +2,7 @@ DOMAIN ?= coffee
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train sql services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict sql services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -19,6 +19,7 @@ help:
 	@echo "ml         whole model pipeline: features + train"
 	@echo "features   build the model-ready feature table"
 	@echo "train      tune, train, track in MLflow and promote if it passes the quality gate"
+	@echo "predict    score the feature table with the champion (batch)"
 	@echo "services-up / services-down  start / stop services (PROFILE=$(PROFILE))"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
@@ -68,6 +69,9 @@ sql:
 
 train:
 	uv run coffee-mlops ml train --domain $(DOMAIN)
+
+predict:
+	uv run coffee-mlops ml predict --domain $(DOMAIN)
 
 services-up:
 	docker compose --profile $(PROFILE) up -d --wait
