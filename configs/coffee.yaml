@@ -37,6 +37,21 @@ denue:
   # A free public service: one request every second is plenty for 99 pages.
   rate_limit_seconds: 1.0
 
+# Stage 2, no credential. Verified against the live API on 2026-09-20: 1,125 elements
+# tagged amenity=cafe in Mexico City (1,031 nodes, 94 ways, 0 relations).
+overpass:
+  name: osm_cafes
+  base_url: https://overpass-api.de/api/interpreter
+  area_iso: MX-CMX # ISO 3166-2 code of Mexico City
+  amenity: cafe
+  filename: osm_cafes.json
+  # Overpass' own budget, deliberately under the client's 60 s read timeout: when the
+  # query is too big we want the server's explanation, not a bare client timeout.
+  timeout_s: 50
+  # A volunteer-run instance with a fair-use policy (it answered 429 twice while this
+  # source was being verified). One query per run, and the client retries a 429.
+  rate_limit_seconds: 2.0
+
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
 cleaning:

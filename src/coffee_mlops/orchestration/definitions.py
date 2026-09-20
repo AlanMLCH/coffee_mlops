@@ -26,6 +26,7 @@ from dagster import (
 from coffee_mlops.config import CONFIGS_DIR, DomainConfig, Settings, load_domain_config
 from coffee_mlops.data.clean import build_clean
 from coffee_mlops.data.extract import extract_all, http_client
+from coffee_mlops.data.sources import extract_api_sources
 from coffee_mlops.data.validate import validate_raw
 from coffee_mlops.ml.features import build_features
 from coffee_mlops.ml.predict import batch_predict
@@ -46,13 +47,21 @@ def domain_assets(config: DomainConfig, settings: Settings) -> list[AssetsDefini
 
     @asset(name="raw_sources", key_prefix=prefix, group_name=group)
     def raw_sources() -> Materialized:
-        """Every source downloaded untransformed, with an ingestion manifest."""
+        """Every source downloaded untransformed, with an ingestion manifest.
+
+        Files and APIs alike: the orchestrator runs the same extraction the CLI runs,
+        so a source cannot be one that only arrives when a human types the command.
+        """
         with http_client() as client:
             artifacts = extract_all(config, data_dir / "raw", client)
+            api = extract_api_sources(config, settings, data_dir, client)
+        artifacts |= api.artifacts
         return MaterializeResult(
             metadata={
                 "sources": len(artifacts),
                 "bytes": sum(a.manifest.size_bytes for a in artifacts.values()),
+                # A skipped source is a shorter run, not a failed one; say which and why.
+                "skipped": ", ".join(f"{n} ({w})" for n, w in api.skipped.items()),
             }
         )
 

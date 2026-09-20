@@ -28,9 +28,15 @@ def denue_response(path: str) -> httpx.Response | None:
 class RecordedServer:
     """Replays payloads by URL. Mutate `payloads` to simulate an upstream change."""
 
-    def __init__(self, payloads: dict[str, bytes], redirects: dict[str, str]) -> None:
+    def __init__(
+        self,
+        payloads: dict[str, bytes],
+        redirects: dict[str, str],
+        overpass: bytes | None = None,
+    ) -> None:
         self.payloads = payloads
         self.redirects = redirects
+        self.overpass = overpass
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -39,6 +45,10 @@ class RecordedServer:
         denue = denue_response(request.url.path)
         if denue is not None:
             return denue
+        # Overpass carries the whole query in the query string, so this matches on the
+        # path: a change to the query must not silently turn into a 404.
+        if self.overpass is not None and request.url.path.endswith("/api/interpreter"):
+            return httpx.Response(200, content=self.overpass)
         if url in self.payloads:
             return httpx.Response(
                 200,

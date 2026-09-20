@@ -10,6 +10,7 @@ import pytest
 from dagster import AssetSelection, materialize
 
 from coffee_mlops.config import Settings
+from coffee_mlops.data.sources import ApiExtraction
 from coffee_mlops.ml.train import TrainResult
 from coffee_mlops.orchestration import definitions
 from coffee_mlops.orchestration.definitions import build_definitions
@@ -94,6 +95,11 @@ def test_every_asset_runs_its_own_pipeline_step(
     artifact = SimpleNamespace(manifest=SimpleNamespace(size_bytes=10))
     stubs = {
         "extract_all": Stub({"cqi_2018": artifact}),
+        # The orchestrator pulls the API sources too, or DENUE and OSM would arrive
+        # only when someone typed the command.
+        "extract_api_sources": Stub(
+            ApiExtraction(artifacts={"osm_cafes": artifact}, skipped={"denue_cafes": "no token"})
+        ),
         "build_clean": Stub({"coffee_reviews": Path("reviews.parquet")}),
         "build_features": Stub(Path("features.parquet")),
         "train_model": Stub(TrainResult("run-1", "3", True, {"test_mae": 1.5})),
@@ -112,3 +118,6 @@ def test_every_asset_runs_its_own_pipeline_step(
     model = result.asset_materializations_for_node("coffee__trained_model")[0]
     assert model.metadata["version"].value == "3"
     assert model.metadata["promoted"].value == "True"
+    raw = result.asset_materializations_for_node("coffee__raw_sources")[0]
+    assert raw.metadata["sources"].value == 2  # one file source, one API source
+    assert raw.metadata["skipped"].value == "denue_cafes (no token)"

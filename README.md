@@ -29,12 +29,19 @@ Everything runs locally. No cloud, no recurring costs.
 | [CQI 2023 snapshot](https://www.kaggle.com/datasets/fatihb/coffee-quality-data-cqi) | Same entity, re-scraped, different schema | 207 | Kaggle public download |
 | [USDA PSD coffee](https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip) | Production, trade, consumption, stocks by country and market year | 87,704 | Direct download |
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
+| [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` in Mexico City, with a point for each | 1,125 | Overpass API, no credential |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
 > version exists (the original database requires a login). CQI is a *bootstrap*
 > dataset for the modelling pipeline, not a source of recency. Recency comes in
 > stage 3, from scraping 2026 Mexican specialty roasters with the same schema.
+
+> **Two sources for the same shops, on purpose.** DENUE is the official register, but
+> its SCIAN class 722515 also counts soda fountains and ice-cream parlours; OSM carries
+> what people actually mapped, with richer tags and no licence friction. Crossing them
+> is what stage 2 needs to tell a cafe from a neveria. OSM data is ODbL: the licence
+> notice is stored inside every ingestion, and `data/` is never committed.
 
 > **Target leakage.** `Total Cup Points` is the exact sum of the ten sensory
 > scores (aroma, flavor, aftertaste, …). Those columns are excluded from the
@@ -170,8 +177,11 @@ The evaluation is built to survive a small test set:
   never reach a cache key, a manifest or a log line — DENUE carries its token in the URL
   path, so request URLs are never logged, and that safeguard lives with the client
   rather than in one entry point.
-- `make extract` runs the file sources always and an API source only when its credential
-  is configured, saying so when it skips one: a fresh clone still builds all of stage 1.
+- `make extract` runs the file sources always and an API source when it can: Overpass
+  needs no credential, DENUE is skipped out loud without its token, so a fresh clone
+  still builds all of stage 1. Which sources exist and what each one needs lives in one
+  function that both the CLI and Dagster call -- a step that only runs when a human
+  types the command is a step the orchestrator silently skips.
 - CI runs lint, types and tests, scans the whole history for secrets, and builds the API
   image so a broken Dockerfile fails here instead of during a demo. A weekly job checks
   that the upstream sources still answer.

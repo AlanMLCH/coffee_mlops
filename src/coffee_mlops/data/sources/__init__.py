@@ -2,4 +2,69 @@
 
 They share the polite client in `data/api.py`; the contract they have in common is
 extracted at the end of stage 2, once three of them exist.
+
+`extract_api_sources` is the one place that knows which sources exist and what each
+needs. It lives here, not in the CLI, for the reason the DENUE token leak taught: a
+step that only runs when you came through one entry point is a step the orchestrator,
+a notebook or a script quietly skips.
 """
+
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+import httpx
+
+from coffee_mlops.config import DomainConfig, Settings
+from coffee_mlops.data.api import ApiClient
+from coffee_mlops.data.extract import RawArtifact
+from coffee_mlops.data.sources.denue import ingest_establishments
+from coffee_mlops.data.sources.overpass import ingest_places
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ApiExtraction:
+    """What came back, and what did not: a missing credential is reported, not raised.
+
+    A fresh clone has no `.env`, and the whole of stage 1 must still build. Skipping
+    has to be loud, though, or an empty layer looks like an upstream with no rows.
+    """
+
+    artifacts: dict[str, RawArtifact] = field(default_factory=dict)
+    skipped: dict[str, str] = field(default_factory=dict)  # source name -> why
+
+
+def extract_api_sources(
+    config: DomainConfig,
+    settings: Settings,
+    data_dir: Path,
+    client: httpx.Client,
+    now: datetime | None = None,
+) -> ApiExtraction:
+    """Pull every API source the domain declares, into `<data_dir>/raw`."""
+    result = ApiExtraction()
+    raw_dir = data_dir / "raw"
+
+    if (denue := config.denue) is not None:
+        if settings.denue_token is None:
+            result.skipped[denue.name] = "COFFEE_DENUE_TOKEN is not set"
+        else:
+            api = _client(client, data_dir, denue.name, denue.rate_limit_seconds)
+            token = settings.denue_token.get_secret_value()
+            result.artifacts[denue.name] = ingest_establishments(api, denue, token, raw_dir, now)
+
+    if (overpass := config.overpass) is not None:
+        api = _client(client, data_dir, overpass.name, overpass.rate_limit_seconds)
+        result.artifacts[overpass.name] = ingest_places(api, overpass, raw_dir, now)
+
+    for name, reason in result.skipped.items():
+        logger.warning("%s skipped: %s", name, reason)
+    return result
+
+
+def _client(client: httpx.Client, data_dir: Path, name: str, interval_s: float) -> ApiClient:
+    """One cache directory per source, so one service's answers never shadow another's."""
+    return ApiClient(client=client, cache_dir=data_dir / "cache" / name, min_interval_s=interval_s)

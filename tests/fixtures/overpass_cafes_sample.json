@@ -1,0 +1,99 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-20T22:03:44Z",
+    "timestamp_areas_base": "2026-09-19T05:38:29Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 319644388,
+      "lat": 19.3495012,
+      "lon": -99.1969644,
+      "tags": {
+        "amenity": "cafe",
+        "brand": "Starbucks",
+        "brand:wikidata": "Q37158",
+        "brand:wikipedia": "en:Starbucks",
+        "cuisine": "coffee_shop",
+        "name": "Starbucks",
+        "official_name": "Starbucks Coffee",
+        "takeaway": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 381148591,
+      "lat": 19.3512139,
+      "lon": -99.1618279,
+      "tags": {
+        "addr:street": "Calle Cuauhtémoc",
+        "amenity": "cafe",
+        "check_date": "2025-08-22",
+        "name": "El Jarocho",
+        "takeaway": "only"
+      }
+    },
+    {
+      "type": "node",
+      "id": 473826898,
+      "lat": 19.3862741,
+      "lon": -99.1770297,
+      "tags": {
+        "addr:city": "Ciudad de México",
+        "addr:housenumber": "255",
+        "addr:postcode": "03810",
+        "addr:street": "Calle Pennsylvania",
+        "amenity": "cafe",
+        "cuisine": "ice_cream;coffee_shop",
+        "name": "Chiandoni",
+        "opening_hours": "Mo-Su 11:00-21:00",
+        "outdoor_seating": "yes",
+        "phone": "+52 55 7592 0839",
+        "website": "https://m.facebook.com/Chiandoni-oficial-305938346257345/"
+      }
+    },
+    {
+      "type": "way",
+      "id": 30910897,
+      "center": {
+        "lat": 19.3591079,
+        "lon": -99.1840026
+      },
+      "tags": {
+        "addr:housenumber": "1743",
+        "addr:street": "Avenida Insurgentes Sur",
+        "amenity": "cafe",
+        "brand": "Starbucks",
+        "brand:wikidata": "Q37158",
+        "brand:wikipedia": "en:Starbucks",
+        "building": "yes",
+        "cuisine": "coffee_shop",
+        "internet_access": "wlan",
+        "name": "Starbucks",
+        "official_name": "Starbucks Coffee",
+        "takeaway": "yes"
+      }
+    },
+    {
+      "type": "way",
+      "id": 54580360,
+      "center": {
+        "lat": 19.3048187,
+        "lon": -99.1022689
+      },
+      "tags": {
+        "addr:city": "Coyoacán, México, D.F.",
+        "addr:housenumber": "1100",
+        "addr:postcode": "04960",
+        "addr:street": "Calzada del Hueso",
+        "amenity": "cafe",
+        "building": "yes",
+        "internet_access": "wlan",
+        "name": "Cafetería de la UAM Xochimilco"
+      }
+    }
+  ]
+}

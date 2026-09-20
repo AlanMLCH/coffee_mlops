@@ -62,7 +62,11 @@ def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedS
     urls = {name: str(source.url) for name, source in coffee_config.sources.items()}
     payloads = {urls[name]: body for name, body in recorded.items() if name != "cqi_2023"}
     payloads[SIGNED_URL] = recorded["cqi_2023"]
-    return RecordedServer(payloads, redirects={urls["cqi_2023"]: SIGNED_URL})
+    return RecordedServer(
+        payloads,
+        redirects={urls["cqi_2023"]: SIGNED_URL},
+        overpass=(FIXTURES / "overpass_cafes_sample.json").read_bytes(),
+    )
 
 
 @pytest.fixture

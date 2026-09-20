@@ -65,6 +65,22 @@ class DenueConfig(BaseModel):
     rate_limit_seconds: float
 
 
+class OverpassConfig(BaseModel):
+    """The OpenStreetMap inventory to pull: one amenity tag inside one administrative area."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # the raw source name, and therefore its folder
+    base_url: str
+    area_iso: str  # ISO 3166-2 code of the area; "MX-CMX" is Mexico City
+    amenity: str  # OSM `amenity` value, e.g. "cafe"
+    filename: str
+    # Overpass' own budget for the query. Must stay under the HTTP read timeout so the
+    # server's explanation arrives before the client gives up without one.
+    timeout_s: int
+    rate_limit_seconds: float
+
+
 class CleaningConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -129,9 +145,11 @@ class DomainConfig(BaseModel):
 
     name: str
     sources: dict[str, SourceConfig]
-    # API sources need a credential and arrive paginated, so they are configured apart
-    # from the plain file downloads until the contract is extracted (end of stage 2).
+    # API sources are not plain downloads -- they page, they carry credentials, they
+    # speak their own query language -- so each is configured apart from the file
+    # sources until the contract is extracted (end of stage 2).
     denue: DenueConfig | None = None
+    overpass: OverpassConfig | None = None
     cleaning: CleaningConfig
     model: ModelSpec
     training: TrainingConfig

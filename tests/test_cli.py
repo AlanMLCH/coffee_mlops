@@ -41,7 +41,8 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
 
     assert result.exit_code == 0, result.output
     raw = data_dir / "coffee" / "raw"
-    assert {p.name for p in raw.iterdir()} == {"cqi_2018", "cqi_2023", "psd_coffee"}
+    # The file sources and the API sources that need no credential.
+    assert {p.name for p in raw.iterdir()} == {"cqi_2018", "cqi_2023", "psd_coffee", "osm_cafes"}
 
 
 def test_validate_runs_after_extract(data_dir: Path) -> None:
@@ -155,6 +156,26 @@ def test_extract_pulls_denue_when_the_token_is_there(
     assert inventory.is_dir()
     stored = json.loads(next(inventory.rglob("denue_cafes.json")).read_text(encoding="utf-8"))
     assert len(stored) == 3
+
+
+def test_extract_pulls_openstreetmap_without_any_credential(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OSM is the geolocated source a public repository can actually keep: no key to
+    configure, and a licence that allows storing what comes back."""
+    monkeypatch.delenv("COFFEE_DENUE_TOKEN", raising=False)
+
+    result = CliRunner().invoke(cli.app, ["data", "extract"])
+
+    assert result.exit_code == 0, result.output
+    assert "osm_cafes:" in result.output
+    stored = json.loads(
+        next((data_dir / "coffee" / "raw" / "osm_cafes").rglob("osm_cafes.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert len(stored["elements"]) == 5
+    assert "ODbL" in stored["license"]
 
 
 def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
