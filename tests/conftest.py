@@ -1,15 +1,20 @@
-"""Shared fixtures. HTTP is replayed from recorded payloads in tests/fixtures/."""
+"""Shared fixtures. HTTP is replayed from recorded payloads in tests/fixtures/.
+
+`httpx` and the ETL package are imported inside the fixtures that need them, so the
+serving tests can run in an environment that installed only the `serving` extra. That
+is how CI proves the API's dependency list is complete instead of relying on packages
+another pipeline happens to pull in.
+"""
 
 import io
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
-import httpx
 import pytest
 
 from coffee_mlops.config import DomainConfig, load_domain_config
-from coffee_mlops.data.extract import extract_all, http_client
 from tests.fakes import RecordedServer
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -59,15 +64,21 @@ def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedS
 
 
 @pytest.fixture
-def client(server: RecordedServer) -> Iterator[httpx.Client]:
+def client(server: RecordedServer) -> Iterator[Any]:
+    import httpx
+
+    from coffee_mlops.data.extract import http_client
+
     with http_client(httpx.MockTransport(server.handler)) as c:
         yield c
 
 
 @pytest.fixture
-def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client) -> Path:
+def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
     """A raw layer populated from the recorded payloads, in the real directory layout
     (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir."""
+    from coffee_mlops.data.extract import extract_all
+
     raw = tmp_path / coffee_config.name / "raw"
     extract_all(coffee_config, raw, client)
     return raw

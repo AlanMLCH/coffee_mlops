@@ -1,4 +1,7 @@
-"""Test doubles shared across test modules."""
+"""Test doubles shared across test modules.
+
+`httpx` is imported lazily: the serving tests must run without the `data` extra.
+"""
 
 import httpx
 

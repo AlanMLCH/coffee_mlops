@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
+import pandas as pd
 import polars as pl
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -97,7 +98,13 @@ class Service:
         features = add_market_context(pl.DataFrame([item]), self.context).with_columns(
             pl.col(c).cast(pl.Float64) for c in spec.numeric
         )
-        prediction = served.model.predict(features.select(spec.features).to_pandas())
+        # Built from rows rather than polars.to_pandas(), which needs pyarrow: 156 MB in
+        # the image for one conversion. The casts keep the dtypes the model trained on,
+        # since pandas cannot infer a numeric column from a single missing value.
+        model_input = pd.DataFrame(features.select(spec.features).to_dicts()).astype(
+            {column: "float64" for column in spec.numeric}
+        )
+        prediction = served.model.predict(model_input)
         context = {c: features[c].item() for c in spec.numeric if c.startswith("ctx_")}
         return Prediction(
             total_cup_points=float(prediction[0]),

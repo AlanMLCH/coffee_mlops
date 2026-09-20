@@ -80,6 +80,8 @@ def test_the_api_reproduces_the_batch_feature_row(
         .select(coffee_config.model.features)
         .to_pandas()
     )
+    # dtypes included: the API builds its frame differently from the batch path, and a
+    # silent dtype difference is exactly how online and batch drift apart.
     pd.testing.assert_frame_equal(
-        model.seen.reset_index(drop=True), expected.reset_index(drop=True), check_dtype=False
+        model.seen.reset_index(drop=True), expected.reset_index(drop=True)
     )

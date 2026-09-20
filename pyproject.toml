@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 # Shared foundation only: config, storage layout, contracts and SQL access.
 dependencies = [
-    "duckdb>=1.5.5",
     "pandera[polars]>=0.33.1",
     "polars>=1.44.2",
     "pydantic>=2.13.5",
@@ -20,8 +19,11 @@ dependencies = [
 #   uv sync --extra ml     -> model pipeline only
 #   uv sync --all-extras   -> development
 [project.optional-dependencies]
-data = ["httpx>=0.28.1"]
+# duckdb is the SQL window onto the layers: the pipelines and the analysis need it,
+# the prediction API does not (and it is 58 MB in that image).
+data = ["duckdb>=1.5.5", "httpx>=0.28.1"]
 ml = [
+    "duckdb>=1.5.5",
     "lightgbm>=4.7.0",
     "mlflow>=3.16.1",
     "optuna>=5.0.0",
@@ -30,8 +32,12 @@ ml = [
 serving = [
     "fastapi>=0.141.1",
     "lightgbm>=4.7.0",
-    "mlflow>=3.16.1",
+    # Skinny, not full MLflow: the API only *loads* a model. The full package ships the
+    # tracking server (flask, alembic, graphene, matplotlib, docker) that no client runs.
+    "mlflow-skinny>=3.16.1",
+    "pandas>=3.0.6",
     "scikit-learn>=1.9.1",
+    "skops>=0.15.0", # the format MLflow stores sklearn models in
     "uvicorn>=0.53.0",
 ]
 # Dagster orchestrates both pipelines, so it needs both.
@@ -87,6 +93,7 @@ dev = [
     "mypy>=2.3.1",
     "pandas-stubs>=3.0.5.260914",
     "pre-commit>=4.6.2",
+    "pyarrow>=25.0.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.8",

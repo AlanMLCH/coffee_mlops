@@ -304,7 +304,6 @@ name = "coffee-mlops"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "duckdb" },
     { name = "pandera", extra = ["polars"] },
     { name = "polars" },
     { name = "pydantic" },
@@ -315,9 +314,11 @@ dependencies = [
 
 [package.optional-dependencies]
 data = [
+    { name = "duckdb" },
     { name = "httpx" },
 ]
 ml = [
+    { name = "duckdb" },
     { name = "lightgbm" },
     { name = "mlflow" },
     { name = "optuna" },
@@ -326,6 +327,7 @@ ml = [
 orchestration = [
     { name = "dagster" },
     { name = "dagster-webserver" },
+    { name = "duckdb" },
     { name = "httpx" },
     { name = "lightgbm" },
     { name = "mlflow" },
@@ -335,8 +337,10 @@ orchestration = [
 serving = [
     { name = "fastapi" },
     { name = "lightgbm" },
-    { name = "mlflow" },
+    { name = "mlflow-skinny" },
+    { name = "pandas" },
     { name = "scikit-learn" },
+    { name = "skops" },
     { name = "uvicorn" },
 ]
 
@@ -346,6 +350,7 @@ dev = [
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -357,14 +362,16 @@ requires-dist = [
     { name = "coffee-mlops", extras = ["data", "ml"], marker = "extra == 'orchestration'" },
     { name = "dagster", marker = "extra == 'orchestration'", specifier = ">=1.13.23" },
     { name = "dagster-webserver", marker = "extra == 'orchestration'", specifier = ">=1.13.23" },
-    { name = "duckdb", specifier = ">=1.5.5" },
+    { name = "duckdb", marker = "extra == 'data'", specifier = ">=1.5.5" },
+    { name = "duckdb", marker = "extra == 'ml'", specifier = ">=1.5.5" },
     { name = "fastapi", marker = "extra == 'serving'", specifier = ">=0.141.1" },
     { name = "httpx", marker = "extra == 'data'", specifier = ">=0.28.1" },
     { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.7.0" },
     { name = "lightgbm", marker = "extra == 'serving'", specifier = ">=4.7.0" },
     { name = "mlflow", marker = "extra == 'ml'", specifier = ">=3.16.1" },
-    { name = "mlflow", marker = "extra == 'serving'", specifier = ">=3.16.1" },
+    { name = "mlflow-skinny", marker = "extra == 'serving'", specifier = ">=3.16.1" },
     { name = "optuna", marker = "extra == 'ml'", specifier = ">=5.0.0" },
+    { name = "pandas", marker = "extra == 'serving'", specifier = ">=3.0.6" },
     { name = "pandera", extras = ["polars"], specifier = ">=0.33.1" },
     { name = "polars", specifier = ">=1.44.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
@@ -372,6 +379,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.9.1" },
     { name = "scikit-learn", marker = "extra == 'serving'", specifier = ">=1.9.1" },
+    { name = "skops", marker = "extra == 'serving'", specifier = ">=0.15.0" },
     { name = "typer", specifier = ">=0.27.2" },
     { name = "uvicorn", marker = "extra == 'serving'", specifier = ">=0.53.0" },
 ]
@@ -383,6 +391,7 @@ dev = [
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pandas-stubs", specifier = ">=3.0.5.260914" },
     { name = "pre-commit", specifier = ">=4.6.2" },
+    { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.16.8" },
