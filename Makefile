@@ -1,8 +1,11 @@
 DOMAIN ?= coffee
+# Dagster keeps its run history here instead of a throwaway temp dir.
+export DAGSTER_HOME := $(CURDIR)/.dagster
+
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict sql services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict sql dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -20,6 +23,7 @@ help:
 	@echo "features   build the model-ready feature table"
 	@echo "train      tune, train, track in MLflow and promote if it passes the quality gate"
 	@echo "predict    score the feature table with the champion (batch)"
+	@echo "dagster    open the asset graph UI (http://localhost:3000)"
 	@echo "services-up / services-down  start / stop services (PROFILE=$(PROFILE))"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
@@ -78,3 +82,7 @@ services-up:
 
 services-down:
 	docker compose down
+
+dagster:
+	uv run python -c "import pathlib; pathlib.Path('.dagster').mkdir(exist_ok=True)"
+	uv run dagster dev -m coffee_mlops.orchestration.definitions

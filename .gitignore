@@ -20,6 +20,8 @@ data/
 mlruns/
 mlartifacts/
 mlflow.db
+.dagster/
+.tmp_dagster_home*/
 
 # --- Python ------------------------------------------------------------------
 __pycache__/

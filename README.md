@@ -58,6 +58,11 @@ them is Parquet on disk plus an HTTP call to the prediction API.
 Layers are immutable Parquet partitions; DuckDB exposes each one as a view over the
 newest complete partition, so a writer never blocks the readers.
 
+**Orchestration** (Dagster) is a thin layer over the same functions: every layer is an
+asset, the Pandera contracts run as asset checks, and each `configs/<domain>.yaml`
+generates its own graph and its own `<domain>_data` / `<domain>_ml` jobs. Nothing needs
+it — the CLI runs every step on its own.
+
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make
