@@ -33,6 +33,7 @@ from coffee_mlops.ml.evaluation import (
     regression_metrics,
     stratified_metrics,
 )
+from coffee_mlops.provenance import code_version
 from coffee_mlops.storage import latest_partition, read_table
 
 logger = logging.getLogger(__name__)
@@ -192,7 +193,13 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(config.name)
     with mlflow.start_run(run_name=f"{spec.target}-lightgbm") as run:
-        mlflow.set_tags({"features_partition": partition.name if partition else ""})
+        # Provenance: MLflow records the entry point but not the revision, and a run
+        # made from a dirty tree cannot be reproduced.
+        version_tags = code_version()
+        mlflow.set_tags(
+            {"features_partition": partition.name if partition else ""}
+            | (version_tags.as_tags() if version_tags else {})
+        )
         mlflow.log_params(
             {
                 "target": spec.target,

@@ -114,10 +114,17 @@ The evaluation is built to survive a small test set:
 ## Development
 
 - Python 3.12, dependencies managed with `uv` (`uv.lock` is committed).
+- Every MLflow run is tagged with the git commit that produced it, and whether the tree
+  was dirty: a run from uncommitted code is not reproducible and should not pretend to be.
 - `ruff` (lint + format), `mypy --strict`, `pytest`.
 - `pre-commit` runs ruff and **gitleaks** on every commit, so credentials never reach history.
 - Secrets live in `.env` (gitignored); `.env.example` documents the variables.
 - `data/` is gitignored: every dataset is rebuilt by running the pipeline.
+- CI runs lint, types and tests, scans the whole history for secrets, and builds the API
+  image so a broken Dockerfile fails here instead of during a demo. A weekly job checks
+  that the upstream sources still answer.
+- `.vscode/settings.json` keeps the editor's watcher and indexer out of `.venv`, `data/`
+  and `.dagster/`; watching them costs CPU for nothing.
 
 ## Roadmap
 
