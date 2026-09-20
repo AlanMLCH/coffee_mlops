@@ -22,6 +22,7 @@ import httpx
 from pydantic import BaseModel
 
 from coffee_mlops.config import DomainConfig, SourceConfig
+from coffee_mlops.data.api import silence_request_urls
 from coffee_mlops.storage import MANIFEST_NAME, latest_partition, new_partition
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class RawArtifact:
 
 @contextmanager
 def http_client(transport: httpx.BaseTransport | None = None) -> Iterator[httpx.Client]:
+    silence_request_urls()  # a redirect can land on a signed URL; never log one
     with httpx.Client(
         headers={"User-Agent": USER_AGENT},
         timeout=httpx.Timeout(60.0, connect=10.0),
@@ -81,7 +83,44 @@ def ingest(
     part_file = source_dir / f".{source.filename}.part"
 
     sha256, size, last_modified = _download(client, str(source.url), part_file)
+    return _store(
+        name, source.filename, part_file, raw_dir, str(source.url), sha256, size, last_modified, now
+    )
 
+
+def store_payload(
+    name: str,
+    filename: str,
+    payload: bytes,
+    raw_dir: Path,
+    source_url: str,
+    now: datetime | None = None,
+) -> RawArtifact:
+    """Write bytes that were assembled rather than downloaded (an API's pages, joined)
+    as a raw ingestion, with the same manifest, de-duplication and atomicity.
+
+    `source_url` is the documented endpoint, never a URL carrying a credential.
+    """
+    source_dir = raw_dir / name
+    source_dir.mkdir(parents=True, exist_ok=True)
+    part_file = source_dir / f".{filename}.part"
+    part_file.write_bytes(payload)
+    sha256 = hashlib.sha256(payload).hexdigest()
+    return _store(name, filename, part_file, raw_dir, source_url, sha256, len(payload), None, now)
+
+
+def _store(
+    name: str,
+    filename: str,
+    part_file: Path,
+    raw_dir: Path,
+    source_url: str,
+    sha256: str,
+    size: int,
+    last_modified: str | None,
+    now: datetime | None,
+) -> RawArtifact:
+    """The one place a raw partition is created, whatever produced the bytes."""
     previous = latest_ingestion(raw_dir, name)
     if previous is not None and previous.manifest.sha256 == sha256:
         part_file.unlink()
@@ -89,12 +128,12 @@ def ingest(
         return previous
 
     ingested_at = now or datetime.now(UTC)
-    partition = new_partition(source_dir, "ingested_at", ingested_at)
-    part_file.replace(partition / source.filename)
+    partition = new_partition(raw_dir / name, "ingested_at", ingested_at)
+    part_file.replace(partition / filename)
     manifest = Manifest(
         source=name,
-        url=str(source.url),
-        filename=source.filename,
+        url=source_url,
+        filename=filename,
         sha256=sha256,
         size_bytes=size,
         ingested_at=ingested_at,

@@ -28,6 +28,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [CQI 2018 snapshot](https://github.com/jldbc/coffee-quality-database) | Arabica quality reviews (origin, altitude, variety, process, cup scores) | 1,311 | GitHub raw, MIT |
 | [CQI 2023 snapshot](https://www.kaggle.com/datasets/fatihb/coffee-quality-data-cqi) | Same entity, re-scraped, different schema | 207 | Kaggle public download |
 | [USDA PSD coffee](https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip) | Production, trade, consumption, stocks by country and market year | 87,704 | Direct download |
+| [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
@@ -164,6 +165,13 @@ The evaluation is built to survive a small test set:
   Credentials are typed as `SecretStr`, so a repr, a log line or a traceback shows
   `**********` and reading one takes an explicit `.get_secret_value()`.
 - `data/` is gitignored: every dataset is rebuilt by running the pipeline.
+- API sources go through one polite client: a rate limit, retries that tell a 503 from
+  a 404, and an on-disk cache so a re-run does not fetch 99 pages again. Credentials
+  never reach a cache key, a manifest or a log line — DENUE carries its token in the URL
+  path, so request URLs are never logged, and that safeguard lives with the client
+  rather than in one entry point.
+- `make extract` runs the file sources always and an API source only when its credential
+  is configured, saying so when it skips one: a fresh clone still builds all of stage 1.
 - CI runs lint, types and tests, scans the whole history for secrets, and builds the API
   image so a broken Dockerfile fails here instead of during a demo. A weekly job checks
   that the upstream sources still answer.

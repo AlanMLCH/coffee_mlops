@@ -19,7 +19,9 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
-TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
+# Microseconds, not seconds: two builds inside the same second are rare but real (a
+# test, a retry, a fast loop), and colliding on a partition name crashed the run.
+TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
 
 
 class TableManifest(BaseModel):

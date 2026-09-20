@@ -13,11 +13,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 
 from coffee_mlops.config import DomainConfig, Settings, load_domain_config
+from coffee_mlops.data.api import ApiClient, silence_request_urls
 from coffee_mlops.data.clean import build_clean
-from coffee_mlops.data.extract import extract_all, http_client
+from coffee_mlops.data.extract import RawArtifact, extract_all, http_client
+from coffee_mlops.data.sources.denue import ingest_establishments
 from coffee_mlops.data.validate import validate_raw
 from coffee_mlops.provenance import REPO_ROOT
 from coffee_mlops.storage import prune_layers
@@ -65,18 +68,46 @@ def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> N
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    # httpx logs full request URLs at INFO: signed URLs and API tokens in query strings.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Credentials travel inside URLs (DENUE's token is a path segment), and the
+    # safeguard lives with the client so every entry point gets it, not just this one.
+    silence_request_urls()
 
 
 @data_app.command()
 def extract(domain: Domain = "coffee") -> None:
-    """Download every source of the domain to the raw layer."""
+    """Download every source of the domain to the raw layer.
+
+    File sources always run. An API source runs when its credential is configured and is
+    skipped out loud when it is not, so a fresh clone still builds the whole stage 1.
+    """
     config = load_domain_config(domain)
+    settings = Settings()
+    data_dir = _data_dir(config)
     with http_client() as client:
-        artifacts = extract_all(config, _data_dir(config) / "raw", client)
+        artifacts = extract_all(config, data_dir / "raw", client)
+        if config.denue is not None:
+            artifacts |= _extract_denue(config, settings, data_dir, client)
     for name, artifact in artifacts.items():
         typer.echo(f"{name}: {artifact.path} ({artifact.manifest.size_bytes:,} bytes)")
+
+
+def _extract_denue(
+    config: DomainConfig, settings: Settings, data_dir: Path, client: httpx.Client
+) -> dict[str, RawArtifact]:
+    denue = config.denue
+    assert denue is not None  # the caller checked; this keeps the type checker happy
+    if settings.denue_token is None:
+        typer.echo(f"{denue.name}: skipped, COFFEE_DENUE_TOKEN is not set", err=True)
+        return {}
+    api = ApiClient(
+        client=client,
+        cache_dir=data_dir / "cache" / denue.name,
+        min_interval_s=denue.rate_limit_seconds,
+    )
+    artifact = ingest_establishments(
+        api, denue, settings.denue_token.get_secret_value(), data_dir / "raw"
+    )
+    return {denue.name: artifact}
 
 
 @data_app.command()

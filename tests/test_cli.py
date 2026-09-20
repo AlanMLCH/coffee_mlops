@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -139,6 +140,35 @@ def test_request_urls_are_not_logged(data_dir: Path, caplog: pytest.LogCaptureFi
     CliRunner().invoke(cli.app, ["data", "extract"])
 
     assert "Signature" not in caplog.text
+
+
+def test_extract_pulls_denue_when_the_token_is_there(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COFFEE_DENUE_TOKEN", "super-secret-token")
+
+    result = CliRunner().invoke(cli.app, ["data", "extract"])
+
+    assert result.exit_code == 0, result.output
+    assert "denue_cafes:" in result.output
+    inventory = data_dir / "coffee" / "raw" / "denue_cafes"
+    assert inventory.is_dir()
+    stored = json.loads(next(inventory.rglob("denue_cafes.json")).read_text(encoding="utf-8"))
+    assert len(stored) == 3
+
+
+def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh clone with no credentials must still build the whole of stage 1."""
+    monkeypatch.delenv("COFFEE_DENUE_TOKEN", raising=False)
+
+    result = CliRunner().invoke(cli.app, ["data", "extract"])
+
+    assert result.exit_code == 0, result.output
+    assert "denue_cafes: skipped, COFFEE_DENUE_TOKEN is not set" in result.output
+    assert not (data_dir / "coffee" / "raw" / "denue_cafes").exists()
+    assert "cqi_2018:" in result.output  # the file sources still ran
 
 
 def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

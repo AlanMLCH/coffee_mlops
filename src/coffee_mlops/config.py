@@ -51,6 +51,20 @@ class SourceConfig(BaseModel):
         return self
 
 
+class DenueConfig(BaseModel):
+    """The DENUE inventory to pull: one activity class in one state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # the raw source name, and therefore its folder
+    base_url: str
+    entity: str  # INEGI state code; "09" is Mexico City
+    activity_class: str  # SCIAN class
+    page_size: int
+    filename: str
+    rate_limit_seconds: float
+
+
 class CleaningConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -115,6 +129,9 @@ class DomainConfig(BaseModel):
 
     name: str
     sources: dict[str, SourceConfig]
+    # API sources need a credential and arrive paginated, so they are configured apart
+    # from the plain file downloads until the contract is extracted (end of stage 2).
+    denue: DenueConfig | None = None
     cleaning: CleaningConfig
     model: ModelSpec
     training: TrainingConfig

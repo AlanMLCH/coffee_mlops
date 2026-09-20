@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from coffee_mlops.config import DomainConfig, load_domain_config
+from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from tests.fakes import RecordedServer
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -32,12 +32,14 @@ def zip_fixture(fixture: str, member: str) -> bytes:
 
 
 @pytest.fixture(autouse=True)
-def never_reach_a_real_mlflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A developer running a local MLflow must not change what the tests exercise:
-    point every test at an empty throwaway registry unless it sets its own."""
+def isolate_from_the_developers_machine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """What is installed or configured on this machine must not change what the tests
+    exercise: no local MLflow, and no reading the developer's `.env`, which holds real
+    credentials and would make a test about a missing one pass or fail by accident."""
     monkeypatch.setenv(
         "COFFEE_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'unused-mlflow.db').as_posix()}"
     )
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
 
 
 @pytest.fixture

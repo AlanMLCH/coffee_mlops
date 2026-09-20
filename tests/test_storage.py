@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 
 from coffee_mlops.storage import (
+    TIMESTAMP_FORMAT,
     latest_partition,
     prune_layers,
     prune_partitions,
@@ -35,9 +36,9 @@ def test_partitions_are_never_overwritten(tmp_path: Path) -> None:
 def test_partition_without_manifest_is_invisible(tmp_path: Path) -> None:
     table = tmp_path / "reviews"
     write_table(pl.DataFrame({"v": [1]}), table, inputs={}, at=T0)
-    (table / "built_at=20260920T120000Z").mkdir()  # a writer crashed mid-way
+    partition_of(table, T1).mkdir()  # a writer crashed mid-way
 
-    assert latest_partition(table) == table / "built_at=20260919T120000Z"
+    assert latest_partition(table) == partition_of(table, T0)
 
 
 def test_reading_a_table_never_built_fails_clearly(tmp_path: Path) -> None:
@@ -46,7 +47,9 @@ def test_reading_a_table_never_built_fails_clearly(tmp_path: Path) -> None:
 
 
 def partition_of(table: Path, at: datetime) -> Path:
-    return table / f"built_at={at.strftime('%Y%m%dT%H%M%SZ')}"
+    """The name `write_table` gives a partition, derived from the module's own format
+    so these tests never pin a timestamp layout the code is free to change."""
+    return table / f"built_at={at.strftime(TIMESTAMP_FORMAT)}"
 
 
 def test_pruning_keeps_the_newest_partitions(tmp_path: Path) -> None:

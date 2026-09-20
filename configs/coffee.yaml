@@ -23,6 +23,20 @@ sources:
     filename: psd_coffee_csv.zip
     member: psd_coffee.csv
 
+# Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
+# 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
+denue:
+  name: denue_cafes
+  base_url: https://www.inegi.org.mx/app/api/denue/v1/consulta
+  entity: "09" # Mexico City
+  # "Cafeterías, fuentes de sodas, neverías, refresquerías y similares": the class is
+  # wider than coffee, so the whole class is kept and flagged during cleaning.
+  activity_class: "722515"
+  page_size: 100 # the service's own page size
+  filename: denue_cafes.json
+  # A free public service: one request every second is plenty for 99 pages.
+  rate_limit_seconds: 1.0
+
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
 cleaning:
