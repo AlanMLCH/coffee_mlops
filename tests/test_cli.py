@@ -10,8 +10,16 @@ from typer.testing import CliRunner
 
 from coffee_mlops import cli
 from coffee_mlops.data.extract import http_client
+from coffee_mlops.ml.registry import ServedModel
 from coffee_mlops.ml.train import TrainResult
 from tests.fakes import RecordedServer
+
+
+class ConstantModel:
+    """A stand-in champion for the chained-run test."""
+
+    def predict(self, x: object) -> list[float]:
+        return [82.0] * len(x)  # type: ignore[arg-type]
 
 
 @pytest.fixture
@@ -86,11 +94,16 @@ def test_ml_run_chains_features_and_training(
         "coffee_mlops.ml.train.train_model",
         lambda config, data, uri: TrainResult("run-1", "1", False, {"test_mae": 2.0}),
     )
+    monkeypatch.setattr(
+        "coffee_mlops.ml.predict.load_champion",
+        lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "registry"),
+    )
 
     result = CliRunner().invoke(cli.app, ["ml", "run"])
 
     assert result.exit_code == 0, result.output
     assert (data_dir / "coffee" / "features" / "review_features").is_dir()
+    assert (data_dir / "coffee" / "predictions" / "review_predictions").is_dir()
     assert "not promoted" in result.output
 
 

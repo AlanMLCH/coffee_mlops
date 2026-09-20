@@ -26,6 +26,15 @@ def zip_fixture(fixture: str, member: str) -> bytes:
     return buffer.getvalue()
 
 
+@pytest.fixture(autouse=True)
+def never_reach_a_real_mlflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A developer running a local MLflow must not change what the tests exercise:
+    point every test at an empty throwaway registry unless it sets its own."""
+    monkeypatch.setenv(
+        "COFFEE_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'unused-mlflow.db').as_posix()}"
+    )
+
+
 @pytest.fixture
 def coffee_config() -> DomainConfig:
     return load_domain_config("coffee")
