@@ -17,15 +17,22 @@ import polars as pl
 from lightgbm import LGBMRegressor
 from mlflow import MlflowClient
 from mlflow.data.pandas_dataset import from_pandas
-from mlflow.exceptions import MlflowException
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
-from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
 
 from coffee_mlops.config import DomainConfig, ModelSpec, TrainingConfig
+from coffee_mlops.ml.evaluation import (
+    Comparison,
+    absolute_errors,
+    compare,
+    mae_interval,
+    recalibration_gain,
+    regression_metrics,
+    stratified_metrics,
+)
 from coffee_mlops.storage import latest_partition, read_table
 
 logger = logging.getLogger(__name__)
@@ -86,16 +93,6 @@ def xy(df: pl.DataFrame, spec: ModelSpec) -> tuple[pd.DataFrame, np.ndarray]:
     return df.select(spec.features).to_pandas(), df[spec.target].to_numpy()
 
 
-def regression_metrics(y: np.ndarray, pred: np.ndarray) -> dict[str, float]:
-    return {
-        "mae": float(mean_absolute_error(y, pred)),
-        "rmse": float(root_mean_squared_error(y, pred)),
-        "r2": float(r2_score(y, pred)),
-        # Mean over- (+) or under- (-) prediction: the level shift the model cannot see.
-        "bias": float(np.mean(pred - y)),
-    }
-
-
 def baseline_predictions(
     train: pl.DataFrame, test: pl.DataFrame, spec: ModelSpec, group: str
 ) -> dict[str, np.ndarray]:
@@ -146,30 +143,41 @@ def tune(train: pl.DataFrame, spec: ModelSpec, cfg: TrainingConfig) -> tuple[dic
 
 
 def promote_if_better(
-    client: MlflowClient, name: str, version: str, test_mae: float, gate_mae: float
+    client: MlflowClient,
+    name: str,
+    version: str,
+    baseline: Comparison,
+    champion: Comparison | None,
+    threshold: float,
 ) -> bool:
-    """Quality gate: beat the best baseline, then beat the current champion.
+    """Quality gate: beat the best baseline, then the current champion, with evidence.
 
-    Champions are compared on test MAE; valid while the test split stays fixed
-    (stage 1). Drift-aware comparison arrives with monitoring in stage 4.
+    Both comparisons are paired bootstraps on the same test rows, so a candidate is
+    promoted only when it wins in at least `threshold` of the resamples. A better point
+    estimate is not enough: on a small test split that is often noise.
     """
-    if test_mae >= gate_mae:
-        client.set_model_version_tag(name, version, "gate", "rejected: not better than baseline")
-        logger.warning("v%s rejected: test MAE %.3f >= baseline %.3f", version, test_mae, gate_mae)
-        return False
-    champion_mae = float("inf")
-    try:
-        champion = client.get_model_version_by_alias(name, CHAMPION)
-    except MlflowException:
-        champion = None  # first model ever registered
-    if champion is not None and champion.run_id is not None:
-        champion_mae = client.get_run(champion.run_id).data.metrics["test_mae"]
-    if test_mae >= champion_mae:
-        client.set_model_version_tag(name, version, "gate", "rejected: not better than champion")
-        return False
+    for reason, comparison in (("baseline", baseline), ("champion", champion)):
+        if comparison is None:
+            continue  # nothing registered to compare against yet
+        if comparison.probability_better < threshold:
+            note = f"rejected: only {comparison.probability_better:.0%} sure it beats the {reason}"
+            client.set_model_version_tag(name, version, "gate", note)
+            logger.warning("v%s %s", version, note)
+            return False
     client.set_registered_model_alias(name, CHAMPION, version)
     client.set_model_version_tag(name, version, "gate", "promoted")
     return True
+
+
+def champion_errors(name: str, x_test: pd.DataFrame, y_test: np.ndarray) -> np.ndarray | None:
+    """Absolute errors of the current champion on the same rows, or None if there is
+    no champion yet (or the registry cannot serve it right now)."""
+    try:
+        champion = mlflow.sklearn.load_model(f"models:/{name}@{CHAMPION}")
+    except Exception as unavailable:  # no alias yet, or registry unreachable
+        logger.info("No champion to compare against (%s)", unavailable)
+        return None
+    return absolute_errors(y_test, champion.predict(x_test))
 
 
 def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> TrainResult:
@@ -199,11 +207,15 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         mlflow.log_input(from_pandas(x_train, source=source, name="train"), "training")
         mlflow.log_input(from_pandas(x_test, source=source, name="test"), "testing")
 
-        baselines = {
-            name: regression_metrics(y_test, pred)["mae"]
+        baseline_errors = {
+            name: absolute_errors(y_test, pred)
             for name, pred in baseline_predictions(train, test, spec, cfg.baseline_group).items()
         }
-        mlflow.log_metrics({f"baseline_{name}_test_mae": mae for name, mae in baselines.items()})
+        mlflow.log_metrics(
+            {f"baseline_{name}_test_mae": float(e.mean()) for name, e in baseline_errors.items()}
+        )
+        # The gate compares against the strongest baseline, not the most flattering one.
+        best_baseline = min(baseline_errors.values(), key=lambda e: e.mean())
 
         best_params, cv_mae = tune(train, spec, cfg)
         mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
@@ -211,10 +223,31 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         pipeline = build_pipeline(spec, best_params, cfg.seed)
         pipeline.fit(x_train, y_train, **fit_params(spec))
         predictions = pipeline.predict(x_test)
-        metrics = {"cv_mae": cv_mae} | {
-            f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()
-        }
+        errors = absolute_errors(y_test, predictions)
+        ci_low, ci_high = mae_interval(errors, cfg.bootstrap_resamples, cfg.seed)
+        versus_baseline = compare(errors, best_baseline, cfg.bootstrap_resamples, cfg.seed)
+        champion = champion_errors(cfg.registered_model, x_test, y_test)
+        versus_champion = (
+            compare(errors, champion, cfg.bootstrap_resamples, cfg.seed)
+            if champion is not None
+            else None
+        )
+
+        metrics = (
+            {"cv_mae": cv_mae, "test_mae_ci_low": ci_low, "test_mae_ci_high": ci_high}
+            | {f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()}
+            | versus_baseline.as_metrics("versus_baseline")
+            | (versus_champion.as_metrics("versus_champion") if versus_champion else {})
+            | recalibration_gain(test, predictions, spec, cfg.recalibration_window)
+        )
         mlflow.log_metrics(metrics)
+        # Logged as a table, not as metrics: one row per group, and group names change.
+        mlflow.log_table(
+            stratified_metrics(
+                train, test, predictions, spec, cfg.stratify_by, cfg.min_group_size
+            ).to_pandas(),
+            artifact_file="stratified_metrics.json",
+        )
 
         info = mlflow.sklearn.log_model(
             pipeline,
@@ -229,8 +262,9 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
             MlflowClient(),
             cfg.registered_model,
             version,
-            metrics["test_mae"],
-            min(baselines.values()),
+            versus_baseline,
+            versus_champion,
+            cfg.min_probability_better,
         )
     logger.info(
         "run %s -> %s v%s promoted=%s", run.info.run_id, cfg.registered_model, version, promoted
@@ -239,5 +273,5 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         run.info.run_id,
         version,
         promoted,
-        metrics | {"best_baseline_test_mae": min(baselines.values())},
+        metrics | {"best_baseline_test_mae": float(best_baseline.mean())},
     )

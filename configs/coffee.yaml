@@ -96,4 +96,13 @@ training:
   seed: 42
   # The model must beat predicting each group's training mean to be promoted.
   baseline_group: country
+  # Promotion needs evidence, not a better point estimate: with ~200 test rows a gap of
+  # 0.1 MAE is noise. A candidate must win this share of paired bootstrap resamples.
+  bootstrap_resamples: 5000
+  min_probability_better: 0.95
+  # Per-group metrics and how each group's weight changed between train and test.
+  stratify_by: country
+  min_group_size: 5
+  # Lots used to estimate the level shift when simulating a deployed recalibration.
+  recalibration_window: 30
   registered_model: coffee-total-cup-points

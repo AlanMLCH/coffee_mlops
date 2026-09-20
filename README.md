@@ -88,17 +88,28 @@ Run `make help` for every target, or `uv run coffee-mlops --help` for the CLI.
 Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
 country's market context, trained on gradings up to 2018 and evaluated on 2022-2023:
 
-| Test (2023 snapshot) | Value |
+| Test (2023 snapshot, n=207) | Value |
 |---|---|
-| Model MAE | **1.648** |
+| Model MAE | **1.648** (95% CI 1.496 - 1.806) |
 | Best baseline MAE (training mean) | 1.894 |
+| Paired difference vs baseline | -0.246 (95% CI -0.346 to -0.147), certain |
 | Bias | -1.19 |
-| R² | -0.36 |
+| **MAE after recalibration** | **1.359** (from 1.710 on the same rows) |
 
-The model beats the baseline by 13%, and the rest of the error is a level shift: the
-2023 lots were graded ~1.5 points higher on average than the 2010-2018 ones. No feature
-can anticipate that, which is exactly the drift that stage 4 exists to detect. A version
-is promoted to `champion` only if it beats both the baseline and the current champion.
+The model beats the baseline, and the paired bootstrap says so with certainty. But the
+error is dominated by a level shift: the 2023 lots were graded ~1.5 points higher than
+the 2010-2018 ones, and no feature can anticipate that. Estimating a single offset from
+the first 30 lots of the new period and applying it to the remaining 177 cuts the error
+by 21% — more than any feature work did. That is the case for stage 4 in one number.
+
+The evaluation is built to survive a small test set:
+
+- **Every comparison is a paired bootstrap** on the same rows. A version is promoted to
+  `champion` only if it wins in at least 95% of resamples against both the best baseline
+  and the current champion, so a better average alone never ships a model.
+- **Metrics are stratified** by country and logged with each group's weight in train vs
+  test. That is how the real story surfaced: Taiwan went from 5.7% of training to 29.5%
+  of test, so the temporal split mixes drift with a different population.
 
 ## Development
 

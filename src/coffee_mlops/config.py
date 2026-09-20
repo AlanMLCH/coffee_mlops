@@ -80,6 +80,11 @@ class TrainingConfig(BaseModel):
     trials: int
     seed: int
     baseline_group: str
+    bootstrap_resamples: int
+    min_probability_better: float
+    stratify_by: str
+    min_group_size: int
+    recalibration_window: int
     registered_model: str
 
 

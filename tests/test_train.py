@@ -1,22 +1,24 @@
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any
 
 import mlflow
 import numpy as np
+import pandas as pd
 import polars as pl
 import pytest
 from mlflow import MlflowClient
-from mlflow.exceptions import MlflowException
+from sklearn.dummy import DummyRegressor
 
 from coffee_mlops.config import DomainConfig
 from coffee_mlops.data.clean import build_clean
+from coffee_mlops.ml.evaluation import Comparison
 from coffee_mlops.ml.features import build_features
 from coffee_mlops.ml.train import (
     CHAMPION,
     baseline_predictions,
     build_pipeline,
+    champion_errors,
     fit_params,
     promote_if_better,
     temporal_split,
@@ -106,18 +108,8 @@ def test_pipeline_serves_unseen_and_missing_categories(fast_config: DomainConfig
 class FakeRegistry:
     """Just the registry calls the promotion gate makes."""
 
-    champion_mae: float | None = None
     aliases: dict[str, str] = field(default_factory=dict)
     tags: dict[str, str] = field(default_factory=dict)
-
-    def get_model_version_by_alias(self, name: str, alias: str) -> Any:
-        if self.champion_mae is None:
-            raise MlflowException("no alias")
-        return type("Version", (), {"run_id": "champion-run"})()
-
-    def get_run(self, run_id: str) -> Any:
-        metrics = {"test_mae": self.champion_mae}
-        return type("Run", (), {"data": type("Data", (), {"metrics": metrics})()})()
 
     def set_registered_model_alias(self, name: str, alias: str, version: str) -> None:
         self.aliases[alias] = version
@@ -127,18 +119,28 @@ class FakeRegistry:
 
 
 @pytest.mark.parametrize(
-    ("champion_mae", "test_mae", "promoted"),
+    ("baseline_certainty", "champion_certainty", "promoted"),
     [
-        pytest.param(None, 1.9, False, id="not-better-than-baseline"),
-        pytest.param(None, 1.5, True, id="first-model-beating-baseline"),
-        pytest.param(1.4, 1.5, False, id="worse-than-champion"),
-        pytest.param(1.6, 1.5, True, id="better-than-champion"),
+        pytest.param(0.80, None, False, id="better-but-not-sure-vs-baseline"),
+        pytest.param(0.99, None, True, id="first-model-clearly-beating-baseline"),
+        pytest.param(0.99, 0.60, False, id="not-clearly-better-than-champion"),
+        pytest.param(0.99, 0.97, True, id="clearly-better-than-champion"),
     ],
 )
-def test_quality_gate(champion_mae: float | None, test_mae: float, promoted: bool) -> None:
-    registry = FakeRegistry(champion_mae=champion_mae)
+def test_quality_gate_needs_evidence_not_just_a_better_average(
+    baseline_certainty: float, champion_certainty: float | None, promoted: bool
+) -> None:
+    registry = FakeRegistry()
+    comparison = Comparison(
+        difference=-0.2, ci_low=-0.4, ci_high=0.1, probability_better=baseline_certainty
+    )
+    champion = (
+        Comparison(difference=-0.1, ci_low=-0.3, ci_high=0.1, probability_better=champion_certainty)
+        if champion_certainty is not None
+        else None
+    )
 
-    result = promote_if_better(registry, "m", "7", test_mae=test_mae, gate_mae=1.8)  # type: ignore[arg-type]
+    result = promote_if_better(registry, "m", "7", comparison, champion, threshold=0.95)  # type: ignore[arg-type]
 
     assert result is promoted
     assert (registry.aliases.get(CHAMPION) == "7") is promoted
@@ -178,3 +180,40 @@ def test_training_is_tracked_registered_and_servable(
     assert len(model.predict(x_test)) == 12
     if result.promoted:
         assert client.get_model_version_by_alias(name, CHAMPION).version == result.model_version
+
+
+def register_champion(tracking_uri: str, name: str, constant: float) -> None:
+    """Put a model behind the champion alias, the way a promoted training run does."""
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment("champions")
+    with mlflow.start_run():
+        info = mlflow.sklearn.log_model(
+            DummyRegressor(strategy="constant", constant=constant).fit([[0.0]], [constant]),
+            name="model",
+            registered_model_name=name,
+            pip_requirements=["scikit-learn"],  # skip slow environment inference
+        )
+    MlflowClient(tracking_uri).set_registered_model_alias(
+        name, CHAMPION, info.registered_model_version
+    )
+
+
+def test_the_champion_is_scored_on_the_very_same_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    register_champion(f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", constant=82.0)
+
+    errors = champion_errors("m", pd.DataFrame({"a": [0.0, 0.0]}), np.array([80.0, 84.0]))
+
+    assert errors is not None
+    assert errors.tolist() == [2.0, 2.0]
+
+
+def test_without_a_champion_there_is_nothing_to_compare(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
+
+    assert champion_errors("never-trained", pd.DataFrame({"a": [0.0]}), np.array([80.0])) is None
