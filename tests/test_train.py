@@ -8,6 +8,7 @@ import pandas as pd
 import polars as pl
 import pytest
 from mlflow import MlflowClient
+from mlflow.models import infer_signature
 from sklearn.dummy import DummyRegressor
 
 from coffee_mlops.config import DomainConfig
@@ -182,15 +183,21 @@ def test_training_is_tracked_registered_and_servable(
         assert client.get_model_version_by_alias(name, CHAMPION).version == result.model_version
 
 
-def register_champion(tracking_uri: str, name: str, constant: float) -> None:
-    """Put a model behind the champion alias, the way a promoted training run does."""
+def register_champion(
+    tracking_uri: str, name: str, constant: float, columns: list[str] | None = None
+) -> None:
+    """Put a model behind the champion alias, the way a promoted training run does:
+    with the input signature that says which columns it expects."""
+    frame = pd.DataFrame({column: [0.0] for column in columns or ["a"]})
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment("champions")
     with mlflow.start_run():
+        model = DummyRegressor(strategy="constant", constant=constant).fit(frame, [constant])
         info = mlflow.sklearn.log_model(
-            DummyRegressor(strategy="constant", constant=constant).fit([[0.0]], [constant]),
+            model,
             name="model",
             registered_model_name=name,
+            signature=infer_signature(frame, model.predict(frame)),
             pip_requirements=["scikit-learn"],  # skip slow environment inference
         )
     MlflowClient(tracking_uri).set_registered_model_alias(
@@ -204,10 +211,67 @@ def test_the_champion_is_scored_on_the_very_same_rows(
     monkeypatch.chdir(tmp_path)
     register_champion(f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", constant=82.0)
 
-    errors = champion_errors("m", pd.DataFrame({"a": [0.0, 0.0]}), np.array([80.0, 84.0]))
+    errors = champion_errors("m", pl.DataFrame({"a": [0.0, 0.0]}), np.array([80.0, 84.0]))
 
     assert errors is not None
     assert errors.tolist() == [2.0, 2.0]
+
+
+def test_the_champion_is_fed_the_columns_it_was_trained_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A feature spec changes over time. The champion must still be scored on the rows,
+    using its own inputs, or every candidate would look incomparable after a change."""
+    monkeypatch.chdir(tmp_path)
+    register_champion(
+        f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", 82.0, columns=["old_feature"]
+    )
+    # Today's table has a new feature, and keeps the old column the champion needs.
+    test = pl.DataFrame({"old_feature": [0.0, 0.0], "new_feature": [1.0, 2.0]})
+
+    errors = champion_errors("m", test, np.array([80.0, 84.0]))
+
+    assert errors is not None
+    assert errors.tolist() == [2.0, 2.0]
+
+
+def test_a_champion_whose_columns_are_gone_is_not_compared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    register_champion(
+        f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", 82.0, columns=["retired_feature"]
+    )
+
+    errors = champion_errors("m", pl.DataFrame({"new_feature": [0.0]}), np.array([80.0]))
+
+    assert errors is None
+    assert "retired_feature" in caplog.text
+
+
+def test_a_champion_logged_without_a_signature_is_not_compared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Older registries hold models logged without one; they cannot say what they need."""
+    monkeypatch.chdir(tmp_path)
+    uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    mlflow.set_tracking_uri(uri)
+    mlflow.set_experiment("champions")
+    with mlflow.start_run():
+        info = mlflow.sklearn.log_model(
+            DummyRegressor(strategy="constant", constant=82.0).fit([[0.0]], [82.0]),
+            name="model",
+            registered_model_name="unsigned",
+            pip_requirements=["scikit-learn"],
+        )
+    MlflowClient(uri).set_registered_model_alias(
+        "unsigned", CHAMPION, info.registered_model_version
+    )
+
+    errors = champion_errors("unsigned", pl.DataFrame({"a": [0.0]}), np.array([80.0]))
+
+    assert errors is None
+    assert "no input signature" in caplog.text
 
 
 def test_without_a_champion_there_is_nothing_to_compare(
@@ -216,4 +280,4 @@ def test_without_a_champion_there_is_nothing_to_compare(
     monkeypatch.chdir(tmp_path)
     mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
 
-    assert champion_errors("never-trained", pd.DataFrame({"a": [0.0]}), np.array([80.0])) is None
+    assert champion_errors("never-trained", pl.DataFrame({"a": [0.0]}), np.array([80.0])) is None

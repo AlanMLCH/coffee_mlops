@@ -90,6 +90,22 @@ no level should rank better. It does not: Spearman on the 2023 lots is 0.277 aga
 0.264 for the points model. The ranking signal in these features is weak either way, so
 the level shift is not hiding a better model — there is simply little to extract.
 
+**Dropping `country` and `variety`** (`experiments/feature_ablation.py`). The analysis
+pipeline measures *negative* permutation importance for both: shuffling them makes the
+champion better on 2023 data. An ablation decided on time-ordered cross-validation
+inside the training period agreed, and on the test split the gap looked decisive —
+MAE 1.808 to 1.560, paired bootstrap certain.
+
+It did not survive tuning. Those numbers come from one fixed hyperparameter setting for
+every candidate; once the reduced model gets the same Optuna budget the champion had, it
+scores **1.656 against 1.648**, a difference of +0.008 with a 95% CI of -0.048 to +0.062
+and 38% confidence. The gate refused to promote it, and the features stayed.
+
+The lesson is about method, not coffee: **a fixed-hyperparameter ablation measures the
+features and the hyperparameters together**, and a tuner can absorb a noisy feature
+(here by grouping rare categories away). An ablation is a hypothesis; the gate is the
+test.
+
 **Dropping the market-context features.** They correlate ~0 with the score yet take 49%
 of the tree splits, which looked like the model memorising country-year identifiers.
 Removing them made it worse (test MAE 1.779 vs 1.648, paired bootstrap certain), so they

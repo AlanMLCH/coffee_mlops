@@ -103,9 +103,11 @@ predict.
 Permutation importance on the test split, not the tree's split counts. Altitude and the
 origin country's market context carry the model; shuffling `country`, `variety` or
 `moisture_pct` makes it **better**, so those three cost more than they contribute on
-2023 data. This is the table the model spec is revised from — after a look, never
-automatically: the market-context features have no correlation of their own and removing
-them still made the model worse.
+2023 data. This is the table the model spec is revised from — after a look, never automatically.
+Both times it has been followed up, the obvious reading was wrong: the market-context
+features have no correlation of their own yet removing them hurt, and dropping `country`
+and `variety` only helped until the reduced model was given the same tuning budget
+(1.656 vs 1.648, 38% confidence). Evidence starts an experiment; the gate ends it.
 
 ![Mexico through time](docs/figures/market_history.png)
 

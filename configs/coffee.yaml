@@ -72,6 +72,10 @@ cleaning:
 # the model pipeline, learned on the training split only.
 model:
   target: total_cup_points
+  # Dropping `country` and `variety` looked like a large win when every candidate used
+  # the same fixed hyperparameters (test MAE 1.808 -> 1.560). Tuned properly, the
+  # difference disappears: 1.656 against the champion's 1.648, 38% confidence. They stay.
+  # See experiments/feature_ablation.py and the model card.
   categorical: [country, variety, processing_method, color]
   numeric:
     - altitude_m

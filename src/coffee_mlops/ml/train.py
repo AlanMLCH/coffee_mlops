@@ -170,15 +170,36 @@ def promote_if_better(
     return True
 
 
-def champion_errors(name: str, x_test: pd.DataFrame, y_test: np.ndarray) -> np.ndarray | None:
-    """Absolute errors of the current champion on the same rows, or None if there is
-    no champion yet (or the registry cannot serve it right now)."""
+def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.ndarray | None:
+    """Absolute errors of the current champion on the same rows, or None if it cannot
+    be scored on them.
+
+    The champion is fed **its own** input columns, read from the signature it was logged
+    with, not today's feature list. Without that, changing the feature spec would make
+    every new model incomparable to the one in production, which is precisely when a
+    comparison matters most. Columns a champion needs survive in the feature table as
+    metadata; if one is truly gone, the comparison is skipped and said out loud.
+    """
+    uri = f"models:/{name}@{CHAMPION}"
     try:
-        champion = mlflow.sklearn.load_model(f"models:/{name}@{CHAMPION}")
+        champion = mlflow.sklearn.load_model(uri)
+        signature = mlflow.models.get_model_info(uri).signature
     except Exception as unavailable:  # no alias yet, or registry unreachable
         logger.info("No champion to compare against (%s)", unavailable)
         return None
-    return absolute_errors(y_test, champion.predict(x_test))
+    if signature is None:  # a model logged without one cannot say what it needs
+        logger.warning("The champion has no input signature: skipping the comparison")
+        return None
+    columns = [column.name for column in signature.inputs.inputs]
+    missing = [column for column in columns if column not in test.columns]
+    if missing:
+        logger.warning(
+            "The champion needs %s, which this feature table no longer has: "
+            "promoting on the baseline comparison alone",
+            missing,
+        )
+        return None
+    return absolute_errors(y_test, champion.predict(test.select(columns).to_pandas()))
 
 
 def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> TrainResult:
@@ -233,7 +254,7 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         errors = absolute_errors(y_test, predictions)
         ci_low, ci_high = mae_interval(errors, cfg.bootstrap_resamples, cfg.seed)
         versus_baseline = compare(errors, best_baseline, cfg.bootstrap_resamples, cfg.seed)
-        champion = champion_errors(cfg.registered_model, x_test, y_test)
+        champion = champion_errors(cfg.registered_model, test, y_test)
         versus_champion = (
             compare(errors, champion, cfg.bootstrap_resamples, cfg.seed)
             if champion is not None
