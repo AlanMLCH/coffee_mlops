@@ -13,15 +13,17 @@ CLAUDE.md
 .claude/
 
 # --- Data and artifacts: rebuilt by running the pipeline ---------------------
-data/
+# Anchored with a leading slash: a bare `data/` also matches src/coffee_mlops/data/,
+# which silently kept source files out of the repository until CI failed on them.
+/data/
 *.duckdb
 *.duckdb.wal
 *.parquet
-mlruns/
-mlartifacts/
-mlflow.db
-.dagster/
-.tmp_dagster_home*/
+/mlruns/
+/mlartifacts/
+/mlflow.db
+/.dagster/
+/.tmp_dagster_home*/
 
 # --- Python ------------------------------------------------------------------
 __pycache__/
