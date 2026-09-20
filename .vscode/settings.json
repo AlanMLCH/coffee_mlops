@@ -1,0 +1,29 @@
+{
+  // Generated trees are huge and change constantly: .venv alone holds ~26k files and
+  // the Dagster daemon rewrites .dagster every few seconds. Watching them keeps the
+  // extension host busy and makes Source Control refresh for nothing.
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/data/**": true,
+    "**/.dagster/**": true,
+    "**/mlruns/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true
+  },
+  "search.exclude": {
+    "**/.venv/**": true,
+    "**/data/**": true,
+    "**/.dagster/**": true,
+    "**/uv.lock": true
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.analysis.exclude": ["**/.venv/**", "**/data/**", "**/.dagster/**"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": { "source.organizeImports.ruff": "explicit" }
+  }
+}

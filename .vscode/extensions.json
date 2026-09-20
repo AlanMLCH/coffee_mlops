@@ -1,0 +1,4 @@
+{
+  // The two the project's tooling depends on: uv's interpreter and ruff for lint/format.
+  "recommendations": ["ms-python.python", "charliermarsh.ruff"]
+}
