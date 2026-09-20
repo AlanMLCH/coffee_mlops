@@ -16,7 +16,8 @@ from pathlib import Path
 import polars as pl
 
 from coffee_mlops.config import CleaningConfig, DomainConfig
-from coffee_mlops.schemas import (
+from coffee_mlops.contracts import check_contract
+from coffee_mlops.data.schemas import (
     MARKET_CONTEXT,
     PSD_ATTRIBUTES,
     SENSORY_COLUMNS,
@@ -24,8 +25,8 @@ from coffee_mlops.schemas import (
     SENSORY_SCORES_2018,
     coffee_reviews_schema,
 )
+from coffee_mlops.data.validate import validate_raw
 from coffee_mlops.storage import write_table
-from coffee_mlops.validate import check_contract, validate_raw
 
 logger = logging.getLogger(__name__)
 

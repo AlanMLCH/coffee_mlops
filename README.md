@@ -39,15 +39,59 @@ Everything runs locally. No cloud, no recurring costs.
 > scores (aroma, flavor, aftertaste, …). Those columns are excluded from the
 > features, and a test enforces it.
 
+## Architecture
+
+Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
+ask it to: every step is its own command, reading the previous step's output from disk.
+
+| Pipeline | Commands | Reads | Produces |
+|---|---|---|---|
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context` |
+| **ml** | `features`, `train`, `run` | the clean tables | tracked runs, a registered `champion` model |
+| **ai** (stage 3) | `index`, `ask` | clean tables + documents | RAG index, agent |
+
+The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
+if it does), each installs on its own (`uv sync --extra data`), and the coupling between
+them is Parquet on disk plus an HTTP call to the prediction API.
+
+Layers are immutable Parquet partitions; DuckDB exposes each one as a view over the
+newest complete partition, so a writer never blocks the readers.
+
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make
-(Windows: `winget install ezwinports.make`), Docker (for services, later stages).
+(Windows: `winget install ezwinports.make`), Docker (for services).
 
 ```bash
-make install   # venv + dependencies + git hooks
-make check     # lint + typecheck + tests
+make install                  # venv + all extras + git hooks
+make check                    # lint + typecheck + tests
+
+make data                     # ETL: download, validate, clean
+make services-up PROFILE=ml   # MLflow at http://localhost:5000
+make ml                       # features + tuned training, tracked and gated
+
+make sql Q="SELECT country, round(avg(total_cup_points), 2) AS points \
+  FROM clean.coffee_reviews GROUP BY 1 ORDER BY 2 DESC LIMIT 5"
 ```
+
+Run `make help` for every target, or `uv run coffee-mlops --help` for the CLI.
+
+## Results (stage 1)
+
+Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
+country's market context, trained on gradings up to 2018 and evaluated on 2022-2023:
+
+| Test (2023 snapshot) | Value |
+|---|---|
+| Model MAE | **1.648** |
+| Best baseline MAE (training mean) | 1.894 |
+| Bias | -1.19 |
+| R² | -0.36 |
+
+The model beats the baseline by 13%, and the rest of the error is a level shift: the
+2023 lots were graded ~1.5 points higher on average than the 2010-2018 ones. No feature
+can anticipate that, which is exactly the drift that stage 4 exists to detect. A version
+is promoted to `champion` only if it beats both the baseline and the current champion.
 
 ## Development
 

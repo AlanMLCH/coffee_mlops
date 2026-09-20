@@ -5,15 +5,15 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from coffee_mlops.clean import build_clean
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.features import (
+from coffee_mlops.data.clean import build_clean
+from coffee_mlops.data.schemas import SENSORY_COLUMNS
+from coffee_mlops.ml.features import (
     add_market_context,
     build_features,
     build_review_features,
     review_features_schema,
 )
-from coffee_mlops.schemas import SENSORY_COLUMNS
 from coffee_mlops.storage import MANIFEST_NAME, read_table
 
 

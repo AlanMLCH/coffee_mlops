@@ -1,6 +1,8 @@
 DOMAIN ?= coffee
+# Compose profile to start: ml | api | ai | all
+PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check extract validate clean-layer features sql train services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train sql services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -10,16 +12,18 @@ help:
 	@echo "test       pytest (offline tests only)"
 	@echo "check      lint + typecheck + test (what CI runs)"
 	@echo "test-network  check upstream URLs still answer (hits the internet)"
-	@echo "extract    download DOMAIN sources to the raw layer (DOMAIN=$(DOMAIN))"
+	@echo "data       whole ETL: extract + validate + clean (DOMAIN=$(DOMAIN))"
+	@echo "extract    download DOMAIN sources to the raw layer"
 	@echo "validate   check the latest raw ingestion against its Pandera contracts"
 	@echo "clean-layer  build the clean layer (coffee_reviews, market_context)"
+	@echo "ml         whole model pipeline: features + train"
 	@echo "features   build the model-ready feature table"
 	@echo "train      tune, train, track in MLflow and promote if it passes the quality gate"
-	@echo "services-up / services-down  start / stop MLflow (docker compose)"
+	@echo "services-up / services-down  start / stop services (PROFILE=$(PROFILE))"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
 install:
-	uv sync
+	uv sync --all-extras
 	uv run pre-commit install
 
 lint:
@@ -41,26 +45,32 @@ test-network:
 
 check: lint typecheck test
 
+data:
+	uv run coffee-mlops data run --domain $(DOMAIN)
+
 extract:
-	uv run coffee-mlops extract --domain $(DOMAIN)
+	uv run coffee-mlops data extract --domain $(DOMAIN)
 
 validate:
-	uv run coffee-mlops validate --domain $(DOMAIN)
+	uv run coffee-mlops data validate --domain $(DOMAIN)
 
 clean-layer:
-	uv run coffee-mlops clean --domain $(DOMAIN)
+	uv run coffee-mlops data clean --domain $(DOMAIN)
+
+ml:
+	uv run coffee-mlops ml run --domain $(DOMAIN)
 
 features:
-	uv run coffee-mlops features --domain $(DOMAIN)
+	uv run coffee-mlops ml features --domain $(DOMAIN)
 
 sql:
 	uv run coffee-mlops sql "$(Q)" --domain $(DOMAIN)
 
 train:
-	uv run coffee-mlops train --domain $(DOMAIN)
+	uv run coffee-mlops ml train --domain $(DOMAIN)
 
 services-up:
-	docker compose up -d --wait
+	docker compose --profile $(PROFILE) up -d --wait
 
 services-down:
 	docker compose down

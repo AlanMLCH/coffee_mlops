@@ -5,17 +5,17 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from coffee_mlops.clean import (
+from coffee_mlops.config import DomainConfig
+from coffee_mlops.data.clean import (
     altitude_from_text,
     build_clean,
     clean_market_context,
     clean_reviews,
     parse_grading_date,
 )
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.schemas import MARKET_CONTEXT, PSD_ATTRIBUTES, coffee_reviews_schema
+from coffee_mlops.data.schemas import MARKET_CONTEXT, PSD_ATTRIBUTES, coffee_reviews_schema
+from coffee_mlops.data.validate import validate_raw
 from coffee_mlops.storage import MANIFEST_NAME, read_table
-from coffee_mlops.validate import validate_raw
 
 Frames = dict[str, pl.DataFrame]
 

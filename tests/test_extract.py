@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.extract import MANIFEST_NAME, extract_all, ingest, latest_ingestion
+from coffee_mlops.data.extract import MANIFEST_NAME, extract_all, ingest, latest_ingestion
 from tests.fakes import RecordedServer
 
 T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)

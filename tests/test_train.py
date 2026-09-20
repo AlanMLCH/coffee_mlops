@@ -10,10 +10,10 @@ import pytest
 from mlflow import MlflowClient
 from mlflow.exceptions import MlflowException
 
-from coffee_mlops.clean import build_clean
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.features import build_features
-from coffee_mlops.train import (
+from coffee_mlops.data.clean import build_clean
+from coffee_mlops.ml.features import build_features
+from coffee_mlops.ml.train import (
     CHAMPION,
     baseline_predictions,
     build_pipeline,

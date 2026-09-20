@@ -6,7 +6,7 @@ Excluded by default; run with `uv run pytest -m network`.
 import pytest
 
 from coffee_mlops.config import load_domain_config
-from coffee_mlops.extract import http_client
+from coffee_mlops.data.extract import http_client
 
 SOURCES = load_domain_config("coffee").sources
 

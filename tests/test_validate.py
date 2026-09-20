@@ -6,9 +6,9 @@ import polars as pl
 import pytest
 
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.extract import latest_ingestion
-from coffee_mlops.schemas import RAW_SCHEMAS
-from coffee_mlops.validate import check_contract, read_raw, validate_raw
+from coffee_mlops.data.extract import latest_ingestion
+from coffee_mlops.data.schemas import RAW_SCHEMAS
+from coffee_mlops.data.validate import check_contract, read_raw, validate_raw
 
 
 def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFrame:

@@ -6,12 +6,12 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandera.polars as pa
 import polars as pl
 
 from coffee_mlops.config import DomainConfig, SourceConfig
-from coffee_mlops.extract import RawArtifact, latest_ingestion
-from coffee_mlops.schemas import RAW_SCHEMAS
+from coffee_mlops.contracts import check_contract
+from coffee_mlops.data.extract import RawArtifact, latest_ingestion
+from coffee_mlops.data.schemas import RAW_SCHEMAS
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +30,6 @@ def read_raw(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
         with zipfile.ZipFile(artifact.path) as archive:
             data = archive.read(source.member)
     return pl.read_csv(data, infer_schema_length=0, null_values=source.null_values or None)
-
-
-def check_contract(schema: pa.DataFrameSchema, df: pl.DataFrame) -> pl.DataFrame:
-    """Validate and type `df`, raising `SchemaErrors` with every failure at once."""
-    # pandera 0.33 (polars backend) crashes with a polars ColumnNotFoundError when it
-    # coerces a missing column. Check presence first so it is reported as a SchemaErrors.
-    presence = pa.DataFrameSchema({c: pa.Column(nullable=True) for c in schema.columns})
-    presence.validate(df, lazy=True)
-    return schema.validate(df, lazy=True)
 
 
 def validate_raw(config: DomainConfig, raw_dir: Path) -> dict[str, ValidatedSource]:

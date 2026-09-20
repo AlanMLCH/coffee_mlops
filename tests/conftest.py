@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from coffee_mlops.config import DomainConfig, load_domain_config
-from coffee_mlops.extract import extract_all, http_client
+from coffee_mlops.data.extract import extract_all, http_client
 from tests.fakes import RecordedServer
 
 FIXTURES = Path(__file__).parent / "fixtures"

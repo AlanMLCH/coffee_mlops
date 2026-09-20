@@ -1,8 +1,13 @@
-# Local services. The pipeline itself runs natively with uv (see the Makefile).
+# Local services, one profile per capability, so you start only what you need:
+#   docker compose --profile ml  up -d    # MLflow (tracking + registry)
+#   docker compose --profile api up -d    # prediction API
+#   docker compose --profile ai  up -d    # vector DB and agent (stage 3)
+# The pipelines themselves run natively with uv (see the Makefile).
 name: coffee-mlops
 
 services:
   mlflow:
+    profiles: [ml, all]
     # Same version as the client pinned in uv.lock.
     image: ghcr.io/mlflow/mlflow:v3.16.1
     # One web worker and no async job runner (GenAI scorers, not used until stage 3):

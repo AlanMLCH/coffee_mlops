@@ -287,17 +287,23 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
-    { name = "httpx" },
-    { name = "lightgbm" },
-    { name = "mlflow" },
-    { name = "optuna" },
     { name = "pandera", extra = ["polars"] },
     { name = "polars" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
-    { name = "scikit-learn" },
     { name = "typer" },
+]
+
+[package.optional-dependencies]
+data = [
+    { name = "httpx" },
+]
+ml = [
+    { name = "lightgbm" },
+    { name = "mlflow" },
+    { name = "optuna" },
+    { name = "scikit-learn" },
 ]
 
 [package.dev-dependencies]
@@ -314,18 +320,19 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "lightgbm", specifier = ">=4.7.0" },
-    { name = "mlflow", specifier = ">=3.16.1" },
-    { name = "optuna", specifier = ">=5.0.0" },
+    { name = "httpx", marker = "extra == 'data'", specifier = ">=0.28.1" },
+    { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.7.0" },
+    { name = "mlflow", marker = "extra == 'ml'", specifier = ">=3.16.1" },
+    { name = "optuna", marker = "extra == 'ml'", specifier = ">=5.0.0" },
     { name = "pandera", extras = ["polars"], specifier = ">=0.33.1" },
     { name = "polars", specifier = ">=1.44.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "scikit-learn", specifier = ">=1.9.1" },
+    { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.9.1" },
     { name = "typer", specifier = ">=0.27.2" },
 ]
+provides-extras = ["data", "ml"]
 
 [package.metadata.requires-dev]
 dev = [
