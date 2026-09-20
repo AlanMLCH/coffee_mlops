@@ -111,6 +111,13 @@ The evaluation is built to survive a small test set:
   test. That is how the real story surfaced: Taiwan went from 5.7% of training to 29.5%
   of test, so the temporal split mixes drift with a different population.
 
+## Documentation
+
+- [Model card](docs/model-card.md) — what the model is for, how it performs, where it
+  fails and what it must not be used for.
+- [Data dictionary](docs/data-dictionary.md) — every column of every layer, with units.
+  A test fails if a column stops being documented.
+
 ## Development
 
 - Python 3.12, dependencies managed with `uv` (`uv.lock` is committed).
