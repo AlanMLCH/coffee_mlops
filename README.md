@@ -115,6 +115,8 @@ The evaluation is built to survive a small test set:
 
 - [Model card](docs/model-card.md) — what the model is for, how it performs, where it
   fails and what it must not be used for.
+- `experiments/` — one-off studies that answer a question and get logged to MLflow, kept
+  out of the pipelines. See "Alternatives tried" in the model card.
 - [Data dictionary](docs/data-dictionary.md) — every column of every layer, with units.
   A test fails if a column stops being documented.
 

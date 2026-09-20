@@ -80,6 +80,19 @@ excellent coffees and over-rates poor ones.
 - Missing values are common (altitude 19.8%, moisture 16.7%, variety 13.6%) and are fed
   to LightGBM as missing rather than imputed.
 
+## Alternatives tried
+
+**Predicting a within-period percentile instead of points**
+(`experiments/percentile_target.py`). If the level shift is the problem, a target with
+no level should rank better. It does not: Spearman on the 2023 lots is 0.277 against
+0.264 for the points model. The ranking signal in these features is weak either way, so
+the level shift is not hiding a better model — there is simply little to extract.
+
+**Dropping the market-context features.** They correlate ~0 with the score yet take 49%
+of the tree splits, which looked like the model memorising country-year identifiers.
+Removing them made it worse (test MAE 1.779 vs 1.648, paired bootstrap certain), so they
+stay. Registered as version 2 and correctly refused by the gate.
+
 ## Promotion and monitoring
 
 A new version replaces the champion only if a paired bootstrap says it beats both the

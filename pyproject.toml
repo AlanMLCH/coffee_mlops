@@ -74,10 +74,11 @@ select = [
 python_version = "3.12"
 strict = true
 mypy_path = "src"
-packages = ["coffee_mlops"]
+# Experiments are typed too: they are read as evidence, so they must be correct.
+files = ["src/coffee_mlops", "experiments"]
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*"] # ships no type information
+module = ["sklearn.*", "scipy.*"] # ship no type information
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
