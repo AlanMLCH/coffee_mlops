@@ -22,6 +22,7 @@ services:
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --artifacts-destination /mlflow/artifacts
       --serve-artifacts
+      --allowed-hosts localhost,127.0.0.1,mlflow,mlflow:5000
     ports:
       - "127.0.0.1:5000:5000" # this machine only, never the LAN
     volumes:
@@ -39,5 +40,30 @@ services:
       retries: 6
     restart: unless-stopped
 
+  api:
+    profiles: [api, all]
+    build: .
+    environment:
+      COFFEE_DATA_DIR: /data
+      # The data mount is read-only, so the champion copy lives in its own volume.
+      COFFEE_MODEL_CACHE_DIR: /cache
+      COFFEE_MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./data:/data:ro
+      - model-cache:/cache
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
 volumes:
   mlflow:
+  model-cache:

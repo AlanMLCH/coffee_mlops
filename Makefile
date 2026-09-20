@@ -1,5 +1,5 @@
 DOMAIN ?= coffee
-# Compose profile to start: ml | api | ai | all
+# Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
 .PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train sql services-up services-down

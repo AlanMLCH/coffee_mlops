@@ -48,6 +48,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 |---|---|---|---|
 | **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context` |
 | **ml** | `features`, `train`, `run` | the clean tables | tracked runs, a registered `champion` model |
+| **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **ai** (stage 3) | `index`, `ask` | clean tables + documents | RAG index, agent |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails

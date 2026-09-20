@@ -305,9 +305,17 @@ ml = [
     { name = "optuna" },
     { name = "scikit-learn" },
 ]
+serving = [
+    { name = "fastapi" },
+    { name = "lightgbm" },
+    { name = "mlflow" },
+    { name = "scikit-learn" },
+    { name = "uvicorn" },
+]
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
@@ -320,9 +328,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
+    { name = "fastapi", marker = "extra == 'serving'", specifier = ">=0.141.1" },
     { name = "httpx", marker = "extra == 'data'", specifier = ">=0.28.1" },
     { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.7.0" },
+    { name = "lightgbm", marker = "extra == 'serving'", specifier = ">=4.7.0" },
     { name = "mlflow", marker = "extra == 'ml'", specifier = ">=3.16.1" },
+    { name = "mlflow", marker = "extra == 'serving'", specifier = ">=3.16.1" },
     { name = "optuna", marker = "extra == 'ml'", specifier = ">=5.0.0" },
     { name = "pandera", extras = ["polars"], specifier = ">=0.33.1" },
     { name = "polars", specifier = ">=1.44.2" },
@@ -330,12 +341,15 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.9.1" },
+    { name = "scikit-learn", marker = "extra == 'serving'", specifier = ">=1.9.1" },
     { name = "typer", specifier = ">=0.27.2" },
+    { name = "uvicorn", marker = "extra == 'serving'", specifier = ">=0.53.0" },
 ]
-provides-extras = ["data", "ml"]
+provides-extras = ["data", "ml", "serving"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pandas-stubs", specifier = ">=3.0.5.260914" },
     { name = "pre-commit", specifier = ">=4.6.2" },

@@ -1,0 +1,13 @@
+.git
+.venv
+data
+mlruns
+mlartifacts
+*.duckdb
+.pytest_cache
+.mypy_cache
+.ruff_cache
+tests
+notebooks
+CLAUDE.md
+.claude

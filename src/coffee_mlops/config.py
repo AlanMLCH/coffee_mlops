@@ -16,9 +16,13 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="COFFEE_", env_file=".env", extra="ignore")
 
+    domain: str = "coffee"
     data_dir: Path = Path("data")
     # The MLflow server from docker-compose. Tests point it at a throwaway SQLite file.
     mlflow_tracking_uri: str = "http://localhost:5000"
+    # Where the API keeps its copy of the champion. Set it outside data_dir when the
+    # data is mounted read-only. Defaults to <data_dir>/<domain>/model_cache.
+    model_cache_dir: Path | None = None
 
 
 class SourceConfig(BaseModel):

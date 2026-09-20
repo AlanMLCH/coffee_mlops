@@ -34,9 +34,13 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
 
 @pytest.mark.parametrize(
     ("package", "forbidden"),
-    [("ml", "coffee_mlops.data"), ("data", "coffee_mlops.ml")],
+    [
+        ("ml", "coffee_mlops.data"),
+        ("data", "coffee_mlops.ml"),
+        ("serving", "coffee_mlops.data"),
+    ],
 )
-def test_pipelines_do_not_import_each_other(package: str, forbidden: str) -> None:
+def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:
     assert offenders(list((SRC / package).rglob("*.py")), forbidden) == []
 
 
