@@ -38,6 +38,8 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("ml", "coffee_mlops.data"),
         ("data", "coffee_mlops.ml"),
         ("serving", "coffee_mlops.data"),
+        ("data", "coffee_mlops.analysis"),
+        ("ml", "coffee_mlops.analysis"),
         ("ml", "coffee_mlops.serving"),
     ],
 )

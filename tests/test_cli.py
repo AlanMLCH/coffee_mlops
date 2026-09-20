@@ -1,4 +1,7 @@
 import logging
+import os
+import sys
+import types
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -15,14 +18,7 @@ from coffee_mlops.data.extract import http_client
 from coffee_mlops.ml.registry import ServedModel
 from coffee_mlops.ml.train import TrainResult
 from coffee_mlops.storage import write_table
-from tests.fakes import RecordedServer
-
-
-class ConstantModel:
-    """A stand-in champion for the chained-run test."""
-
-    def predict(self, x: object) -> list[float]:
-        return [82.0] * len(x)  # type: ignore[arg-type]
+from tests.fakes import ConstantModel, RecordedServer
 
 
 @pytest.fixture
@@ -167,3 +163,40 @@ def test_prune_says_so_when_there_is_nothing_to_drop(
     result = CliRunner().invoke(cli.app, ["prune"])
 
     assert "nothing to prune" in result.output
+
+
+def test_analysis_run_writes_studies_and_publishes_figures(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = CliRunner()
+    runner.invoke(cli.app, ["data", "run"])
+    runner.invoke(cli.app, ["ml", "features"])
+    monkeypatch.setattr(
+        "coffee_mlops.analysis.pipeline.load_champion",
+        lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "cache"),
+    )
+
+    result = runner.invoke(cli.app, ["analysis", "run"])
+
+    assert result.exit_code == 0, result.output
+    assert "feature_recommendation:" in result.output
+    assert (data_dir / "coffee" / "analysis" / "feature_recommendation").is_dir()
+
+
+def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Started through us, not through a raw `streamlit run`, so the domain and the
+    headless flag are always set: otherwise it blocks asking for an email."""
+    launched: dict[str, object] = {}
+    monkeypatch.setitem(
+        sys.modules,
+        "streamlit.web",
+        types.SimpleNamespace(
+            cli=types.SimpleNamespace(main=lambda: launched.update(argv=sys.argv))
+        ),
+    )
+
+    CliRunner().invoke(cli.app, ["analysis", "dashboard", "--port", "9999"])
+
+    assert "--server.headless" in launched["argv"]  # type: ignore[operator]
+    assert "9999" in launched["argv"]  # type: ignore[operator]
+    assert os.environ["COFFEE_DOMAIN"] == "coffee"

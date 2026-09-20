@@ -90,6 +90,19 @@ class TrainingConfig(BaseModel):
     registered_model: str
 
 
+class AnalysisConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    period_column: str
+    min_rows: int
+    market_year: int
+    top_countries: int
+    spotlight_country: str
+    history_since: int
+    permutation_repeats: int
+    published_figures: list[str]
+
+
 class DomainConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -98,6 +111,7 @@ class DomainConfig(BaseModel):
     cleaning: CleaningConfig
     model: ModelSpec
     training: TrainingConfig
+    analysis: AnalysisConfig
 
 
 def load_domain_config(domain: str, configs_dir: Path = CONFIGS_DIR) -> DomainConfig:

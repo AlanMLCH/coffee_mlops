@@ -40,6 +40,13 @@ serving = [
     "skops>=0.15.0", # the format MLflow stores sklearn models in
     "uvicorn>=0.53.0",
 ]
+# Reads every layer and scores the champion, so it needs the model pipeline.
+analysis = [
+    "coffee-mlops[ml]",
+    "matplotlib>=3.11.2",
+    "streamlit>=1.52.0",
+]
+
 # Dagster orchestrates both pipelines, so it needs both.
 orchestration = [
     "coffee-mlops[data,ml]",
@@ -80,6 +87,15 @@ files = ["src/coffee_mlops", "experiments"]
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "scipy.*"] # ship no type information
 ignore_missing_imports = true
+
+[tool.coverage.run]
+# The dashboard is exercised through Streamlit's AppTest, which runs the file as its
+# own script: the tests do cover it, coverage just cannot attribute the lines.
+omit = ["*/analysis/dashboard.py"]
+
+[tool.coverage.report]
+# The project keeps full coverage; a drop should fail rather than be noticed later.
+fail_under = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

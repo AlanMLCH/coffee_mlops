@@ -49,6 +49,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
+| **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
 | **ai** (stage 3) | `index`, `ask` | clean tables + documents | RAG index, agent |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
@@ -82,6 +83,34 @@ make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) 
 ```
 
 Run `make help` for every target, or `uv run coffee-mlops --help` for the CLI.
+
+## What the data says
+
+`make analysis` rebuilds every table and figure below from the layers, writing each one
+as Parquet (queryable: `SELECT * FROM analysis.feature_recommendation`) and as CSV, next
+to the figure drawn from it. `make dashboard` opens them with the partition they came
+from stamped on screen.
+
+![Total cup points by period](docs/figures/target_distribution.png)
+
+The two CQI snapshots are not the same experiment. The 2023 sample is **truncated**:
+nothing below 78 points, while 2010-2018 reaches 59.8. The later lots are not better
+coffee so much as a narrower selection — which is what the model is then asked to
+predict.
+
+![What the champion relies on](docs/figures/feature_importance.png)
+
+Permutation importance on the test split, not the tree's split counts. Altitude and the
+origin country's market context carry the model; shuffling `country`, `variety` or
+`moisture_pct` makes it **better**, so those three cost more than they contribute on
+2023 data. This is the table the model spec is revised from — after a look, never
+automatically: the market-context features have no correlation of their own and removing
+them still made the model worse.
+
+![Mexico through time](docs/figures/market_history.png)
+
+The domestic-market story behind the Mexico City thesis: Mexico exports most of what it
+grows and imports the equivalent of 77-85% of what it drinks.
 
 ## Results (stage 1)
 

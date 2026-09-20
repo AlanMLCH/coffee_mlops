@@ -42,12 +42,20 @@ def latest_partition(table_dir: Path) -> Path | None:
 
 
 def write_table(
-    df: pl.DataFrame, table_dir: Path, inputs: Mapping[str, str], at: datetime | None = None
+    df: pl.DataFrame,
+    table_dir: Path,
+    inputs: Mapping[str, str],
+    at: datetime | None = None,
+    also_csv: bool = False,
 ) -> Path:
+    """Write one partition. `also_csv` adds a CSV copy for tables a human opens in a
+    spreadsheet; Parquet stays the one readers and the catalog use."""
     built_at = at or datetime.now(UTC)
     partition = new_partition(table_dir, "built_at", built_at)
     path = partition / f"{table_dir.name}.parquet"
     df.write_parquet(path)
+    if also_csv:
+        df.write_csv(partition / f"{table_dir.name}.csv")  # before the manifest, like the Parquet
     manifest = TableManifest(
         table=table_dir.name, rows=df.height, built_at=built_at, inputs=dict(inputs)
     )

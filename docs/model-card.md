@@ -58,6 +58,8 @@ Read those numbers together, not separately:
 
 ### Where the error concentrates
 
+![Bias by quality band](figures/residual_bias.png)
+
 | Group | n | Bias |
 |---|---|---|
 | Lots scoring ≥85 | 48 | -2.98 |
@@ -101,6 +103,13 @@ same configuration produces a tie and is correctly rejected.
 
 Nothing monitors drift in production yet: that is stage 4. The recalibration metric
 logged with every run is the measurement that justifies building it.
+
+## Keeping this honest
+
+`make analysis` recomputes the evidence behind every number here, including the
+per-feature recommendation used to revise the model spec. Residuals are reported per
+period on purpose: the batch job scores training rows too, and error on data the model
+learned from flatters it.
 
 ## Reproducing
 

@@ -6,6 +6,7 @@ chains the steps of one pipeline when that is what you want.
 """
 
 import logging
+import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -18,13 +19,16 @@ from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from coffee_mlops.data.clean import build_clean
 from coffee_mlops.data.extract import extract_all, http_client
 from coffee_mlops.data.validate import validate_raw
+from coffee_mlops.provenance import REPO_ROOT
 from coffee_mlops.storage import prune_layers
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
 ml_app = typer.Typer(no_args_is_help=True, help="Model pipeline: clean tables -> model.")
+analysis_app = typer.Typer(no_args_is_help=True, help="Analysis: layers -> tables and figures.")
 app.add_typer(data_app, name="data")
 app.add_typer(ml_app, name="ml")
+app.add_typer(analysis_app, name="analysis")
 
 Domain = Annotated[
     str, typer.Option("--domain", "-d", help="Domain config in configs/<domain>.yaml")
@@ -140,6 +144,49 @@ def ml_run(domain: Domain = "coffee") -> None:
     features(domain)
     train(domain)
     predict(domain)
+
+
+@analysis_app.command("run")
+def analysis_run(domain: Domain = "coffee") -> None:
+    """Compute every study from the latest layers, as Parquet and CSV."""
+    with _needs_extra("analysis"):
+        from coffee_mlops.analysis.pipeline import build_analysis
+
+    config = load_domain_config(domain)
+    # Figures are published into the repo's docs only when running from a checkout.
+    docs = REPO_ROOT / "docs" / "figures"
+    output = build_analysis(
+        config,
+        _data_dir(config),
+        Settings().mlflow_tracking_uri,
+        publish_to=docs if docs.parent.is_dir() else None,
+    )
+    for name, path in (output.tables | output.figures).items():
+        typer.echo(f"{name}: {path}")
+    for path in output.published:
+        typer.echo(f"published: {path}")
+
+
+@analysis_app.command()
+def dashboard(domain: Domain = "coffee", port: int = 8501) -> None:
+    """Open the analysis dashboard over whatever the pipeline last wrote."""
+    with _needs_extra("analysis"):
+        from streamlit.web import cli as streamlit_cli
+
+    app_path = Path(__file__).resolve().parent / "analysis" / "dashboard.py"
+    # Streamlit reads the domain from the environment, like every other setting.
+    os.environ["COFFEE_DOMAIN"] = domain
+    # Headless also on the command line, in case the repo's .streamlit/ is not the cwd.
+    sys.argv = [
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.port",
+        str(port),
+        "--server.headless",
+        "true",
+    ]
+    streamlit_cli.main()
 
 
 @app.command()

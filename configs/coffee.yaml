@@ -106,3 +106,23 @@ training:
   # Lots used to estimate the level shift when simulating a deployed recalibration.
   recalibration_window: 30
   registered_model: coffee-total-cup-points
+
+# The analysis pipeline: what to profile and which slice of the market to summarise.
+analysis:
+  # Column that separates periods; drift and composition are measured across it.
+  period_column: snapshot
+  # Groups and levels smaller than this are not reported: the numbers would be noise.
+  min_rows: 5
+  market_year: 2025
+  top_countries: 10
+  # The country the domestic-market view follows through time.
+  spotlight_country: Mexico
+  history_since: 2015
+  permutation_repeats: 10
+  # Figures copied into docs/figures/ (committed, rendered on GitHub). The rest stay
+  # in data/, rebuildable and untracked.
+  published_figures:
+    - target_distribution
+    - feature_importance
+    - residual_bias
+    - market_history

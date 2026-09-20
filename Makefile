@@ -6,7 +6,7 @@ export DAGSTER_HOME := $(CURDIR)/.dagster
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict sql prune dagster services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard sql prune dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -27,6 +27,8 @@ help:
 	@echo "dagster    open the asset graph UI (http://localhost:3000)"
 	@echo "services-up / services-down  start / stop services (PROFILE=$(PROFILE))"
 	@echo "prune      drop old partitions, keeping the newest (KEEP=$(KEEP))"
+	@echo "analysis   compute the studies (tables + figures) from the latest layers"
+	@echo "dashboard  open the analysis dashboard (http://localhost:8501)"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
 install:
@@ -91,3 +93,9 @@ dagster:
 
 prune:
 	uv run coffee-mlops prune --domain $(DOMAIN) --keep $(KEEP)
+
+analysis:
+	uv run coffee-mlops analysis run --domain $(DOMAIN)
+
+dashboard:
+	uv run coffee-mlops analysis dashboard --domain $(DOMAIN)
