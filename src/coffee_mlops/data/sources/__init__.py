@@ -20,6 +20,7 @@ from coffee_mlops.config import DomainConfig, Settings
 from coffee_mlops.data.api import ApiClient
 from coffee_mlops.data.extract import RawArtifact
 from coffee_mlops.data.sources.denue import ingest_establishments
+from coffee_mlops.data.sources.fas import ingest_balance
 from coffee_mlops.data.sources.overpass import ingest_places
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,14 @@ def extract_api_sources(
             client, data_dir, overpass.name, overpass.rate_limit_seconds, overpass.cache_hours
         )
         result.artifacts[overpass.name] = ingest_places(api, overpass, raw_dir, now)
+
+    if (fas := config.fas) is not None:
+        if settings.usda_fas_api_key is None:
+            result.skipped[fas.name] = "COFFEE_USDA_FAS_API_KEY is not set"
+        else:
+            api = _client(client, data_dir, fas.name, fas.rate_limit_seconds, fas.cache_hours)
+            key = settings.usda_fas_api_key.get_secret_value()
+            result.artifacts[fas.name] = ingest_balance(api, fas, key, raw_dir, now)
 
     for name, reason in result.skipped.items():
         logger.warning("%s skipped: %s", name, reason)

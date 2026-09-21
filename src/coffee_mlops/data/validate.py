@@ -24,7 +24,7 @@ from coffee_mlops.contracts import check_contract
 from coffee_mlops.data.extract import RawArtifact, latest_ingestion
 from coffee_mlops.data.geo import read_areas
 from coffee_mlops.data.schemas import RAW_SCHEMAS
-from coffee_mlops.data.sources import denue, overpass
+from coffee_mlops.data.sources import denue, fas, overpass
 
 logger = logging.getLogger(__name__)
 
@@ -91,3 +91,5 @@ def _json_sources(config: DomainConfig) -> Iterator[tuple[str, JsonReader]]:
         yield config.denue.name, denue.to_frame
     if config.overpass is not None:
         yield config.overpass.name, overpass.to_frame
+    if config.fas is not None:
+        yield config.fas.name, fas.to_frame

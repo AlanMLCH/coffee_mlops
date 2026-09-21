@@ -16,7 +16,7 @@ import pytest
 from pydantic import SecretStr
 
 from coffee_mlops.config import DomainConfig, Settings, load_domain_config
-from tests.fakes import RecordedServer
+from tests.fakes import RecordedServer, fas_recording, without_rate_limits
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -70,6 +70,7 @@ def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedS
         payloads,
         redirects={urls["cqi_2023"]: SIGNED_URL},
         overpass=(FIXTURES / "overpass_cafes_sample.json").read_bytes(),
+        fas=fas_recording(),
     )
 
 
@@ -96,7 +97,8 @@ def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
 
     data_dir = tmp_path / coffee_config.name
     extract_all(coffee_config, data_dir / "raw", client)
-    extract_api_sources(
-        coffee_config, Settings(denue_token=SecretStr("fixture-token")), data_dir, client
+    credentials = Settings(
+        denue_token=SecretStr("fixture-token"), usda_fas_api_key=SecretStr("fixture-key")
     )
+    extract_api_sources(without_rate_limits(coffee_config), credentials, data_dir, client)
     return data_dir / "raw"

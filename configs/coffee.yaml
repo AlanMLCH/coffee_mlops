@@ -74,6 +74,21 @@ overpass:
   rate_limit_seconds: 2.0
   cache_hours: 24 # OSM changes by the minute; a day is fresh enough for a density
 
+# Stage 2, key required (COFFEE_USDA_FAS_API_KEY, sent as the X-Api-Key header). The
+# same PSD balance as `psd_coffee`, reached through an API: verified on 2026-09-21 to
+# return the same 87,704 rows, key for key and value for value. The file stays the
+# source of `market_context` (no key, one request); this one is audited against it.
+fas:
+  name: fas_psd_coffee
+  base_url: https://api.fas.usda.gov/api/psd
+  commodity_code: "0711100" # Coffee, Green
+  first_year: 1960 # the first market year PSD has for coffee
+  filename: fas_psd_coffee.json
+  # 1,000 requests per hour per key; a full pull is ~70, so a second apart is generous.
+  rate_limit_seconds: 1.0
+  # Recent market years are revised with each circular; a day keeps up with that.
+  cache_hours: 24
+
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
 cleaning:

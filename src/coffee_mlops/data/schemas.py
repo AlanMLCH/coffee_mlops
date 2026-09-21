@@ -196,6 +196,8 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cdmx_boroughs": AREAS,
     "denue_cafes": DENUE_ESTABLISHMENTS,
     "osm_cafes": OSM_PLACES,
+    # The API is held to the file's contract: one table, two ways to reach it.
+    "fas_psd_coffee": PSD_COFFEE,
 }
 
 

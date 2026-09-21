@@ -20,7 +20,8 @@ def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFram
 
 def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> None:
     """Including the API sources, which are configured apart from the file downloads."""
-    api = {source.name for source in (coffee_config.denue, coffee_config.overpass) if source}
+    apis = (coffee_config.denue, coffee_config.overpass, coffee_config.fas)
+    api = {source.name for source in apis if source}
 
     assert coffee_config.sources.keys() | api == RAW_SCHEMAS.keys()
 
@@ -37,6 +38,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "cdmx_boroughs": 16,
         "denue_cafes": 3,
         "osm_cafes": 5,
+        "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
     }
     assert frames["cdmx_boroughs"]["area_km2"].dtype == pl.Float64
     assert frames["denue_cafes"]["Latitud"].dtype == pl.Float64  # text upstream

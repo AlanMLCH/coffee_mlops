@@ -16,6 +16,7 @@ from coffee_mlops.data.clean import (
     clean_market_context,
     clean_reviews,
     parse_grading_date,
+    reconcile_market_sources,
 )
 from coffee_mlops.data.schemas import (
     BOROUGHS,
@@ -290,3 +291,44 @@ def test_boroughs_keep_their_polygon_and_their_official_key(frames: Frames) -> N
     assert "Cuauhtémoc" in table["borough"].to_list()
     # The geometry travels as WKB, so reading the table needs no spatial extension.
     assert table["boundary"].dtype == pl.Binary
+
+
+def test_the_api_and_the_file_agree_on_every_row(frames: Frames) -> None:
+    result = reconcile_market_sources(frames["psd_coffee"], frames["fas_psd_coffee"])
+
+    assert result.agree
+    assert result.rows == 114
+
+
+def test_a_revised_value_is_reported_not_absorbed(
+    frames: Frames, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The day a circular lands in one road before the other, the build says so."""
+    caplog.set_level(logging.WARNING)
+    revised = set_first(frames["fas_psd_coffee"], "Value", 1.0)
+
+    result = reconcile_market_sources(frames["psd_coffee"], revised)
+
+    assert (result.only_file, result.only_api, result.different) == (0, 0, 1)
+    assert "1 with different values" in caplog.text
+
+
+def test_a_row_on_only_one_side_is_counted_on_that_side(frames: Frames) -> None:
+    file, api = frames["psd_coffee"], frames["fas_psd_coffee"]
+
+    assert reconcile_market_sources(file, api.slice(1)).only_file == 1
+    assert reconcile_market_sources(file.slice(1), api).only_api == 1
+
+
+def test_market_context_is_built_from_the_file_whatever_the_api_says(
+    coffee_config: DomainConfig, raw_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The keyless source feeds the table, so every clone builds the same one; the API
+    is audited against it."""
+    caplog.set_level(logging.INFO)
+
+    paths = build_clean(coffee_config, raw_dir.parent)
+
+    manifest = json.loads((paths["market_context"].parent / MANIFEST_NAME).read_text())
+    assert set(manifest["inputs"]) == {"psd_coffee"}
+    assert "The FAS API and the PSD file agree on all 114 rows" in caplog.text

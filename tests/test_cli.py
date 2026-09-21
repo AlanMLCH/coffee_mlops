@@ -15,11 +15,12 @@ import typer
 from typer.testing import CliRunner
 
 from coffee_mlops import cli
+from coffee_mlops.config import load_domain_config
 from coffee_mlops.data.extract import http_client
 from coffee_mlops.ml.registry import ServedModel
 from coffee_mlops.ml.train import TrainResult
 from coffee_mlops.storage import write_table
-from tests.fakes import ConstantModel, RecordedServer
+from tests.fakes import ConstantModel, RecordedServer, without_rate_limits
 
 
 @pytest.fixture
@@ -32,6 +33,8 @@ def data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, server: RecordedSe
             yield client
 
     monkeypatch.setattr(cli, "http_client", recorded_client)
+    fast = without_rate_limits(load_domain_config("coffee"))
+    monkeypatch.setattr(cli, "load_domain_config", lambda domain: fast)
     monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
     return tmp_path
 
@@ -191,16 +194,33 @@ def test_extract_pulls_openstreetmap_without_any_credential(
     assert "ODbL" in stored["license"]
 
 
+def test_extract_pulls_the_fas_balance_when_the_key_is_there(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COFFEE_USDA_FAS_API_KEY", "super-secret-key")
+
+    result = CliRunner().invoke(cli.app, ["data", "extract"])
+
+    assert result.exit_code == 0, result.output
+    stored = next((data_dir / "coffee" / "raw" / "fas_psd_coffee").rglob("fas_psd_coffee.json"))
+    assert len(json.loads(stored.read_text(encoding="utf-8"))["rows"]) == 114
+    # A header, not a URL: the key reaches neither the manifest nor a cache file name.
+    assert "super-secret-key" not in (stored.parent / "manifest.json").read_text()
+    assert all("super-secret-key" not in p.name for p in (data_dir / "coffee").rglob("*"))
+
+
 def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A fresh clone with no credentials must still build the whole of stage 1."""
     monkeypatch.delenv("COFFEE_DENUE_TOKEN", raising=False)
+    monkeypatch.delenv("COFFEE_USDA_FAS_API_KEY", raising=False)
 
     result = CliRunner().invoke(cli.app, ["data", "extract"])
 
     assert result.exit_code == 0, result.output
     assert "denue_cafes: skipped, COFFEE_DENUE_TOKEN is not set" in result.output
+    assert "fas_psd_coffee: skipped, COFFEE_USDA_FAS_API_KEY is not set" in result.output
     assert not (data_dir / "coffee" / "raw" / "denue_cafes").exists()
     assert "cqi_2018:" in result.output  # the file sources still ran
 

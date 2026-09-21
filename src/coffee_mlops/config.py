@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
 
 
+class FasConfig(BaseModel):
+    """The USDA FAS balance to pull: one commodity, every market year from `first_year`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # the raw source name, and therefore its folder
+    base_url: str
+    commodity_code: str  # PSD commodity; "0711100" is "Coffee, Green"
+    first_year: int
+    filename: str
+    rate_limit_seconds: float
+    cache_hours: float  # see DenueConfig
+
+
 class SpatialConfig(BaseModel):
     """How to read a geospatial layer, for a source whose download is not a table.
 
@@ -175,6 +189,7 @@ class DomainConfig(BaseModel):
     # sources until the contract is extracted (end of stage 2).
     denue: DenueConfig | None = None
     overpass: OverpassConfig | None = None
+    fas: FasConfig | None = None
     cleaning: CleaningConfig
     model: ModelSpec
     training: TrainingConfig

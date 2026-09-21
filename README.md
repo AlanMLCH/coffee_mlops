@@ -30,6 +30,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [USDA PSD coffee](https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip) | Production, trade, consumption, stocks by country and market year | 87,704 | Direct download |
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
 | [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` in Mexico City, with a point for each | 1,125 | Overpass API, no credential |
+| [USDA FAS Open Data](https://apps.fas.usda.gov/opendataweb/) (stage 2) | The same PSD coffee balance, by market year, through an API | 87,704 | API key in a header, free |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
@@ -43,6 +44,13 @@ Everything runs locally. No cloud, no recurring costs.
 > what people actually mapped, with richer tags and no licence friction. Crossing them
 > is what stage 2 needs to tell a cafe from a neveria. OSM data is ODbL: the licence
 > notice is stored inside every ingestion, and `data/` is never committed.
+
+> **Two roads to the same balance, and a check between them.** The FAS API returns
+> exactly what the PSD file does: 87,704 rows, the same keys, not one value different.
+> `market_context` is still built from the file - one request, no key, so any clone
+> rebuilds the same table - and the API is reconciled against it on every build, the
+> way the spatial join is scored against DENUE. The API pays for itself in stage 4,
+> where refreshing only the market years a circular revises beats re-downloading all.
 
 > **Target leakage.** `Total Cup Points` is the exact sum of the ten sensory
 > scores (aroma, flavor, aftertaste, …). Those columns are excluded from the
@@ -224,7 +232,7 @@ The evaluation is built to survive a small test set:
   path, so request URLs are never logged, and that safeguard lives with the client
   rather than in one entry point.
 - `make extract` runs the file sources always and an API source when it can: Overpass
-  needs no credential, DENUE is skipped out loud without its token, so a fresh clone
+  needs no credential, DENUE and FAS are skipped out loud without theirs, so a fresh clone
   still builds all of stage 1. Which sources exist and what each one needs lives in one
   function that both the CLI and Dagster call -- a step that only runs when a human
   types the command is a step the orchestrator silently skips.

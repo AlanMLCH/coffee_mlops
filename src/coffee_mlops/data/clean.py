@@ -12,6 +12,7 @@ comes from the domain config, not from this module.
 
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -167,6 +168,52 @@ def clean_market_context(psd: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+@dataclass(frozen=True)
+class Reconciliation:
+    """How two sources of the same table compare, key by key."""
+
+    rows: int
+    only_file: int
+    only_api: int
+    different: int
+
+    @property
+    def agree(self) -> bool:
+        return self.only_file == self.only_api == self.different == 0
+
+
+def reconcile_market_sources(file: pl.DataFrame, api: pl.DataFrame) -> Reconciliation:
+    """Compare the PSD file with the FAS API, the way the join is compared with DENUE.
+
+    `market_context` is built from the file: it needs no key and is one request, so any
+    clone can rebuild it. The API is the same data by another road, and checking one
+    against the other on every build is what turns "the API is equivalent" from
+    something verified once into something that stays true - or says when it stops.
+    A difference is reported, not raised: the file is still a consistent source.
+    """
+    key = ["Country_Code", "Market_Year", "Attribute_ID"]
+    joined = file.select(*key, pl.col("Value").alias("file")).join(
+        api.select(*key, pl.col("Value").alias("api")), on=key, how="full", coalesce=True
+    )
+    result = Reconciliation(
+        rows=joined.height,
+        only_file=joined["api"].null_count(),
+        only_api=joined["file"].null_count(),
+        different=joined.filter(pl.col("file") != pl.col("api")).height,
+    )
+    if result.agree:
+        logger.info("The FAS API and the PSD file agree on all %d rows", result.rows)
+    else:
+        logger.warning(
+            "The FAS API and the PSD file disagree: %d rows only in the file, %d only in "
+            "the API, %d with different values (market_context is built from the file)",
+            result.only_file,
+            result.only_api,
+            result.different,
+        )
+    return result
+
+
 def clean_boroughs(areas: pl.DataFrame) -> pl.DataFrame:
     """The boundary layer as the domain's own table: alcaldias, with their polygons."""
     return areas.rename({"area_id": "borough_id", "area_name": "borough"}).select(
@@ -277,6 +324,8 @@ def build_clean(
         coffee_reviews_schema(config.cleaning), clean_reviews(frames, config.cleaning)
     )
     context = check_contract(MARKET_CONTEXT, clean_market_context(frames["psd_coffee"]))
+    if "fas_psd_coffee" in frames:  # absent without a key, and nothing depends on it
+        reconcile_market_sources(frames["psd_coffee"], frames["fas_psd_coffee"])
     areas = frames["cdmx_boroughs"]
     boroughs = check_contract(BOROUGHS, clean_boroughs(areas))
     shops = check_contract(COFFEE_SHOPS, clean_coffee_shops(frames, areas))
