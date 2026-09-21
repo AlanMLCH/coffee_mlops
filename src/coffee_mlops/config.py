@@ -84,6 +84,9 @@ class DenueConfig(BaseModel):
     page_size: int
     filename: str
     rate_limit_seconds: float
+    # How long a cached page stays true. Required on purpose: the default that needs no
+    # thought is "forever", which silently turns a live register into a snapshot.
+    cache_hours: float
 
 
 class OverpassConfig(BaseModel):
@@ -100,6 +103,7 @@ class OverpassConfig(BaseModel):
     # server's explanation arrives before the client gives up without one.
     timeout_s: int
     rate_limit_seconds: float
+    cache_hours: float  # see DenueConfig
 
 
 class CleaningConfig(BaseModel):

@@ -54,6 +54,9 @@ denue:
   filename: denue_cafes.json
   # A free public service: one request every second is plenty for 99 pages.
   rate_limit_seconds: 1.0
+  # Re-runs within a day replay from disk; the next day asks again. The register is
+  # updated a few times a year, so a day costs nothing and a forever cache costs truth.
+  cache_hours: 24
 
 # Stage 2, no credential. Verified against the live API on 2026-09-20: 1,125 elements
 # tagged amenity=cafe in Mexico City (1,031 nodes, 94 ways, 0 relations).
@@ -69,6 +72,7 @@ overpass:
   # A volunteer-run instance with a fair-use policy (it answered 429 twice while this
   # source was being verified). One query per run, and the client retries a 429.
   rate_limit_seconds: 2.0
+  cache_hours: 24 # OSM changes by the minute; a day is fresh enough for a density
 
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.

@@ -1,6 +1,7 @@
 """The client is what stands between this project and someone else's free service."""
 
 import logging
+import time
 from pathlib import Path
 
 import httpx
@@ -46,6 +47,21 @@ def test_a_second_identical_request_is_served_from_disk(tmp_path: Path) -> None:
 
     assert first == second == [{"id": 1}]
     assert recorder.calls == 1  # the service was asked once
+
+
+@pytest.mark.parametrize(("age_s", "requests"), [(30, 1), (120, 2)])
+def test_a_cached_answer_is_only_trusted_while_it_is_young(
+    tmp_path: Path, age_s: float, requests: int
+) -> None:
+    """A cache that never expires turns a live register into a snapshot that keeps calling
+    itself a fresh pull: re-runs reported 'unchanged' because nothing was ever asked."""
+    recorder = Recorder(httpx.Response(200, json=[{"id": 1}]))
+    client, _ = build(recorder, tmp_path, max_age_s=60.0, clock=lambda: time.time() + age_s)
+
+    client.get_json(URL, cache_key="page-1")
+    client.get_json(URL, cache_key="page-1")
+
+    assert recorder.calls == requests
 
 
 def test_the_cache_never_carries_the_credential(tmp_path: Path) -> None:

@@ -52,12 +52,14 @@ def extract_api_sources(
         if settings.denue_token is None:
             result.skipped[denue.name] = "COFFEE_DENUE_TOKEN is not set"
         else:
-            api = _client(client, data_dir, denue.name, denue.rate_limit_seconds)
+            api = _client(client, data_dir, denue.name, denue.rate_limit_seconds, denue.cache_hours)
             token = settings.denue_token.get_secret_value()
             result.artifacts[denue.name] = ingest_establishments(api, denue, token, raw_dir, now)
 
     if (overpass := config.overpass) is not None:
-        api = _client(client, data_dir, overpass.name, overpass.rate_limit_seconds)
+        api = _client(
+            client, data_dir, overpass.name, overpass.rate_limit_seconds, overpass.cache_hours
+        )
         result.artifacts[overpass.name] = ingest_places(api, overpass, raw_dir, now)
 
     for name, reason in result.skipped.items():
@@ -65,6 +67,13 @@ def extract_api_sources(
     return result
 
 
-def _client(client: httpx.Client, data_dir: Path, name: str, interval_s: float) -> ApiClient:
+def _client(
+    client: httpx.Client, data_dir: Path, name: str, interval_s: float, cache_hours: float
+) -> ApiClient:
     """One cache directory per source, so one service's answers never shadow another's."""
-    return ApiClient(client=client, cache_dir=data_dir / "cache" / name, min_interval_s=interval_s)
+    return ApiClient(
+        client=client,
+        cache_dir=data_dir / "cache" / name,
+        min_interval_s=interval_s,
+        max_age_s=cache_hours * 3600,
+    )

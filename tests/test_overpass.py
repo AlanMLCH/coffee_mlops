@@ -28,6 +28,7 @@ CONFIG = OverpassConfig(
     filename="osm_cafes.json",
     timeout_s=50,
     rate_limit_seconds=0.0,
+    cache_hours=24,
 )
 
 

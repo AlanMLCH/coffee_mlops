@@ -217,7 +217,9 @@ The evaluation is built to survive a small test set:
   plain Parquet with geometry as WKB, so nothing downstream has to load it to read a
   borough.
 - API sources go through one polite client: a rate limit, retries that tell a 503 from
-  a 404, and an on-disk cache so a re-run does not fetch 99 pages again. Credentials
+  a 404, and an on-disk cache so a re-run does not fetch 99 pages again. The cache
+  expires (`cache_hours`, required per source): cached forever, a live register becomes
+  a snapshot that keeps reporting "unchanged" because nothing was ever asked. Credentials
   never reach a cache key, a manifest or a log line — DENUE carries its token in the URL
   path, so request URLs are never logged, and that safeguard lives with the client
   rather than in one entry point.

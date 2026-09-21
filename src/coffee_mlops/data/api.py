@@ -10,7 +10,8 @@ that knows about coffee:
 - **A cache on disk.** Re-running a pipeline must not re-download 99 pages. The cache is
   keyed by a *sanitised* identity supplied by the caller, never by the raw URL: DENUE
   carries its token in the URL path, and a cache keyed on that would write the
-  credential into a file name.
+  credential into a file name. It also **expires**: a live register cached forever is a
+  snapshot that keeps reporting itself as a fresh pull.
 """
 
 import hashlib
@@ -49,9 +50,14 @@ class ApiClient:
     min_interval_s: float = 1.0
     max_attempts: int = 4
     backoff_s: float = 1.0
+    # How long a cached answer is still the truth. None keeps it forever, which is right
+    # only for an answer that cannot change; each source's config states its own.
+    max_age_s: float | None = None
     # Injected so tests do not spend real seconds proving that waiting happens.
     sleep: Callable[[float], None] = time.sleep
     now: Callable[[], float] = time.monotonic
+    # Wall-clock, unlike `now`: a cached file's age is measured against its mtime.
+    clock: Callable[[], float] = time.time
     _last_request_at: float | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -64,7 +70,7 @@ class ApiClient:
         which parts of the URL are secret, this class cannot.
         """
         cached = self._cache_path(cache_key)
-        if cached.is_file():
+        if self._is_fresh(cached):
             logger.debug("cache hit: %s", cache_key)
             return json.loads(cached.read_text(encoding="utf-8"))
 
@@ -107,6 +113,11 @@ class ApiClient:
             delay = self.backoff_s * 2 ** (attempt - 1)
             logger.warning("Retrying in %.1fs after %s (attempt %d)", delay, reason, attempt)
             self.sleep(delay)
+
+    def _is_fresh(self, cached: Path) -> bool:
+        if not cached.is_file():
+            return False
+        return self.max_age_s is None or self.clock() - cached.stat().st_mtime < self.max_age_s
 
     def _cache_path(self, cache_key: str) -> Path:
         digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()[:16]

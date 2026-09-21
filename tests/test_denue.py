@@ -30,6 +30,7 @@ CONFIG = DenueConfig(
     page_size=100,
     filename="denue_cafes.json",
     rate_limit_seconds=0.0,
+    cache_hours=24,
 )
 
 
