@@ -30,6 +30,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [USDA PSD coffee](https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip) | Production, trade, consumption, stocks by country and market year | 87,704 | Direct download |
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
 | [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` in Mexico City, with a point for each | 1,125 | Overpass API, no credential |
+| [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
@@ -54,7 +55,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
-| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context` |
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
@@ -122,6 +123,44 @@ and `variety` only helped until the reduced model was given the same tuning budg
 The domestic-market story behind the Mexico City thesis: Mexico exports most of what it
 grows and imports the equivalent of 77-85% of what it drinks.
 
+## Where the coffee is (stage 2)
+
+`clean.coffee_shops` puts both registers of Mexico City's coffee shops in one table and
+places every one of them in a borough, with a point-in-polygon join against INEGI's
+official boundaries (DuckDB's `spatial` extension, polygons reprojected once from the
+layer's Lambert conformal projection to WGS84).
+
+```sql
+SELECT b.borough, round(b.area_km2, 1) AS km2,
+       count(*) FILTER (s.source = 'denue') AS denue,
+       count(*) FILTER (s.source = 'osm')   AS osm,
+       round(count(*) FILTER (s.source = 'denue') / b.area_km2, 1) AS denue_per_km2
+FROM clean.boroughs b LEFT JOIN clean.coffee_shops s USING (borough_id)
+GROUP BY 1, 2 ORDER BY denue_per_km2 DESC;
+```
+
+| Borough | km² | DENUE | OSM | per km² |
+|---|---:|---:|---:|---:|
+| Cuauhtémoc | 32.3 | 1,577 | 388 | 48.8 |
+| Benito Juárez | 26.5 | 882 | 187 | 33.2 |
+| Venustiano Carranza | 33.7 | 691 | 29 | 20.5 |
+| … | | | | |
+| Milpa Alta | 296.7 | 73 | 2 | 0.2 |
+
+**The join is audited, not trusted.** A wrong projection or a swapped axis order does not
+crash: it quietly puts shops in the wrong borough. DENUE states each establishment's own
+borough code, so the join is scored against it — it agrees **9,860 times out of 9,860**.
+OpenStreetMap states no borough, which is precisely why it needs the join.
+
+**The two registers do not see the same city.** OSM holds 11% as many places as DENUE
+overall, but 25% in Cuauhtémoc against 3% in Iztapalapa: volunteers map the central and
+wealthier boroughs, while the official register covers all sixteen. Density from OSM
+alone would measure where mappers live. Both sources are kept side by side, unmerged,
+with a `source` column — deciding which one to believe is analysis, not cleaning.
+
+> DENUE's class 722515 is wider than coffee: it counts soda fountains and ice-cream
+> parlours too. Nothing is filtered by name yet, because no filter has been measured.
+
 ## Results (stage 1)
 
 Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
@@ -171,7 +210,12 @@ The evaluation is built to survive a small test set:
   `uv run coffee-mlops secrets`, which reports what is configured without printing it.
   Credentials are typed as `SecretStr`, so a repr, a log line or a traceback shows
   `**********` and reading one takes an explicit `.get_secret_value()`.
-- `data/` is gitignored: every dataset is rebuilt by running the pipeline.
+- `data/` is gitignored: every dataset is rebuilt by running the pipeline. The boundary
+  archive alone is 83 MB, so `make prune` matters more from stage 2 on.
+- The geospatial step needs DuckDB's `spatial` extension, which downloads once on first
+  use and is cached in `~/.duckdb`. It is confined to `data/geo.py`: the layers stay
+  plain Parquet with geometry as WKB, so nothing downstream has to load it to read a
+  borough.
 - API sources go through one polite client: a rate limit, retries that tell a 503 from
   a 404, and an on-disk cache so a re-run does not fetch 99 pages again. Credentials
   never reach a cache key, a manifest or a log line — DENUE carries its token in the URL

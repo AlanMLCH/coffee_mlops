@@ -23,6 +23,24 @@ sources:
     filename: psd_coffee_csv.zip
     member: psd_coffee.csv
 
+  # INEGI's 2020 geostatistical framework for Mexico City: the official borough
+  # polygons, and the only way to place a coordinate in an alcaldia. Verified
+  # 2026-09-20: 83 MB ZIP, layer 09mun has the 16 alcaldias, and their areas add up to
+  # 1,486 km2 against the 1,495 km2 the city publishes.
+  cdmx_boroughs:
+    url: https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/889463807469/09_ciudaddemexico.zip
+    filename: 09_ciudaddemexico.zip
+    member: conjunto_de_datos/09mun.shp
+    spatial:
+      # The DBF is Latin-1. Read as UTF-8 it does not come out wrong, it fails.
+      encoding: ISO-8859-1
+      # MEXICO_ITRF_2008_LCC, in metres. Points arrive in WGS84, so the polygons are
+      # reprojected once on the way in.
+      crs: EPSG:6372
+      id_column: CVEGEO # entity + municipality, e.g. 09015 is Cuauhtemoc
+      name_column: NOMGEO
+      expected_features: 16 # the 16 alcaldias
+
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
 denue:

@@ -42,7 +42,13 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
     assert result.exit_code == 0, result.output
     raw = data_dir / "coffee" / "raw"
     # The file sources and the API sources that need no credential.
-    assert {p.name for p in raw.iterdir()} == {"cqi_2018", "cqi_2023", "psd_coffee", "osm_cafes"}
+    assert {p.name for p in raw.iterdir()} == {
+        "cqi_2018",
+        "cqi_2023",
+        "psd_coffee",
+        "cdmx_boroughs",
+        "osm_cafes",
+    }
 
 
 def test_validate_runs_after_extract(data_dir: Path) -> None:
@@ -63,7 +69,12 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
 
     assert result.exit_code == 0, result.output
     clean = data_dir / "coffee" / "clean"
-    assert {p.name for p in clean.iterdir()} == {"coffee_reviews", "market_context"}
+    assert {p.name for p in clean.iterdir()} == {
+        "coffee_reviews",
+        "market_context",
+        "boroughs",
+        "coffee_shops",
+    }
 
 
 def test_features_and_sql_run_on_the_built_layers(data_dir: Path) -> None:
@@ -84,6 +95,8 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
     assert {p.name for p in (data_dir / "coffee" / "clean").iterdir()} == {
         "coffee_reviews",
         "market_context",
+        "boroughs",
+        "coffee_shops",
     }
 
 

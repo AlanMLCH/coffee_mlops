@@ -6,11 +6,16 @@ from pydantic import ValidationError
 from coffee_mlops.config import ModelSpec, Settings, load_domain_config
 
 
-def test_coffee_config_declares_the_stage_1_sources() -> None:
+def test_coffee_config_declares_its_file_sources() -> None:
     config = load_domain_config("coffee")
 
     assert config.name == "coffee"
-    assert set(config.sources) == {"cqi_2018", "cqi_2023", "psd_coffee"}
+    assert set(config.sources) == {"cqi_2018", "cqi_2023", "psd_coffee", "cdmx_boroughs"}
+    # The boundary layer is a map, not a table, and says how to read itself.
+    boundaries = config.sources["cdmx_boroughs"]
+    assert boundaries.spatial is not None
+    assert boundaries.spatial.expected_features == 16
+    assert config.sources["psd_coffee"].spatial is None
 
 
 def test_unknown_domain_fails_loudly() -> None:

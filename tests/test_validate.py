@@ -1,3 +1,4 @@
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,7 +19,10 @@ def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFram
 
 
 def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> None:
-    assert coffee_config.sources.keys() == RAW_SCHEMAS.keys()
+    """Including the API sources, which are configured apart from the file downloads."""
+    api = {source.name for source in (coffee_config.denue, coffee_config.overpass) if source}
+
+    assert coffee_config.sources.keys() | api == RAW_SCHEMAS.keys()
 
 
 def test_recorded_sources_pass_and_come_out_typed(
@@ -30,7 +34,13 @@ def test_recorded_sources_pass_and_come_out_typed(
         "cqi_2018": 14,
         "cqi_2023": 12,
         "psd_coffee": 114,
+        "cdmx_boroughs": 16,
+        "denue_cafes": 3,
+        "osm_cafes": 5,
     }
+    assert frames["cdmx_boroughs"]["area_km2"].dtype == pl.Float64
+    assert frames["denue_cafes"]["Latitud"].dtype == pl.Float64  # text upstream
+    assert frames["osm_cafes"]["id"].dtype == pl.Int64
     assert frames["cqi_2018"]["Total.Cup.Points"].dtype == pl.Float64
     assert frames["cqi_2023"]["Quakers"].dtype == pl.Int64
     assert frames["psd_coffee"]["Market_Year"].dtype == pl.Int64
@@ -116,3 +126,15 @@ def test_all_violations_are_reported_at_once(coffee_config: DomainConfig, raw_di
         check_contract(RAW_SCHEMAS["cqi_2023"], broken)
 
     assert {"Aroma", "Quakers"} <= set(exc.value.failure_cases["column"].to_list())
+
+
+def test_an_api_source_that_was_never_ingested_is_skipped_not_raised(
+    coffee_config: DomainConfig, raw_dir: Path
+) -> None:
+    """A clone with no DENUE token still validates everything else."""
+    shutil.rmtree(raw_dir / "denue_cafes")
+
+    validated = validate_raw(coffee_config, raw_dir)
+
+    assert "denue_cafes" not in validated
+    assert "osm_cafes" in validated

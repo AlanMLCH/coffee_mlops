@@ -16,6 +16,8 @@ from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
+import polars as pl
+
 from coffee_mlops.config import DenueConfig
 from coffee_mlops.data.api import ApiClient
 from coffee_mlops.data.extract import RawArtifact, store_payload
@@ -79,3 +81,14 @@ def ingest_establishments(
     records.sort(key=lambda record: record["Id"])
     payload = json.dumps(records, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return store_payload(config.name, config.filename, payload, raw_dir, DOCUMENTED_URL, now)
+
+
+def to_frame(records: list[dict[str, str]]) -> pl.DataFrame:
+    """The stored inventory as a frame, reshaped and not edited.
+
+    Every DENUE field arrives as a string, including the coordinates; the contract in
+    `schemas.py` is what types them and says which ones the pipeline depends on.
+    """
+    # infer_schema_length=None: a field that is empty in the first hundred records and
+    # filled later must not be typed from the sample.
+    return pl.DataFrame(records, infer_schema_length=None)

@@ -19,7 +19,9 @@ def test_every_built_table_is_queryable_by_layer(
         "SELECT table_schema || '.' || table_name FROM information_schema.tables ORDER BY 1"
     ).fetchall()
     assert [t[0] for t in tables] == [
+        "clean.boroughs",
         "clean.coffee_reviews",
+        "clean.coffee_shops",
         "clean.market_context",
         "features.review_features",
     ]

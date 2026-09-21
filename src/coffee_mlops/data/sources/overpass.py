@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import polars as pl
+
 from coffee_mlops.config import OverpassConfig
 from coffee_mlops.data.api import ApiClient
 from coffee_mlops.data.extract import RawArtifact, store_payload
@@ -107,3 +109,31 @@ def ingest_places(
     # The manifest's `ingested_at` already dates the pull.
     body = json.dumps(document, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return store_payload(config.name, config.filename, body, raw_dir, config.base_url, now)
+
+
+# The OSM tags this project reads. Everything else stays in the raw file: adding a
+# column here is a decision, not something a mapper's new tag should make for us.
+TAGS = ["name", "brand", "amenity", "cuisine"]
+
+
+def to_frame(document: dict[str, Any]) -> pl.DataFrame:
+    """The stored elements as one flat frame, reshaped and not edited.
+
+    OSM is a graph, not a table: a node carries its own `lat`/`lon`, while a way or a
+    relation carries the representative point Overpass computed under `center`. Both
+    become the same two columns, because a cafe is a cafe whichever way it was mapped.
+    """
+    rows = []
+    for element in document["elements"]:
+        centre = element.get("center", {})
+        tags = element.get("tags", {})
+        rows.append(
+            {
+                "type": element["type"],
+                "id": element["id"],
+                "latitude": element.get("lat", centre.get("lat")),
+                "longitude": element.get("lon", centre.get("lon")),
+                **{tag: tags.get(tag) for tag in TAGS},
+            }
+        )
+    return pl.DataFrame(rows, infer_schema_length=None)

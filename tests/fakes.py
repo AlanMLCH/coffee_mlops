@@ -10,8 +10,22 @@ import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 
 # A DENUE-shaped answer for the CLI tests: three establishments, and a count to match.
+# Every field the raw contract requires is here, with the shape the real service uses:
+# text for everything, and entity+municipality+locality packed into `AreaGeo`. The
+# coordinate sits inside the borough that `AreaGeo` declares in the recorded boundary
+# fixture, so the spatial join has something to agree with.
 DENUE_ESTABLISHMENTS = [
-    {"Id": str(i), "Nombre": f"CAFE {i}", "Latitud": "19.4", "Longitud": "-99.1"} for i in (1, 2, 3)
+    {
+        "Id": str(i),
+        "Nombre": f"CAFE {i}",
+        "Clase_actividad": "Cafeterías, fuentes de sodas, neverías, refresquerías y similares",
+        "CLASE_ACTIVIDAD_ID": "722515",
+        "AreaGeo": "090160001",
+        "Estrato": "0 a 5 personas",
+        "Latitud": "19.45",
+        "Longitud": "-99.15",
+    }
+    for i in (1, 2, 3)
 ]
 
 

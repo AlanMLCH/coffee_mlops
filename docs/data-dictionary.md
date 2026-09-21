@@ -46,6 +46,39 @@ null means "not reported", never zero.
 | `beginning_stocks`, `ending_stocks` | Float? | Inventories |
 | `total_supply`, `total_distribution` | Float? | PSD balance totals |
 
+## `clean.boroughs` — one alcaldia of Mexico City
+
+INEGI's 2020 geostatistical framework, layer `09mun`, reprojected to WGS84. 16 rows.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `borough_id` | String | Official CVEGEO: entity + municipality, e.g. `09015` is Cuauhtémoc |
+| `borough` | String | Name as INEGI spells it |
+| `area_km2` | Float | Area in the layer's own projection (conformal, so ~0.6% out: the 16 sum to 1,486 km² against the published 1,495) |
+| `boundary` | Binary | The polygon as WKB in WGS84. Readable with `ST_GeomFromWKB`, or any GIS |
+
+## `clean.coffee_shops` — one place that sells coffee
+
+DENUE and OpenStreetMap side by side, each row placed in a borough by a point-in-polygon
+join. 10,985 rows (9,860 from DENUE, 1,125 from OSM). The registers are **not**
+deduplicated against each other: they disagree about what exists, and choosing between
+them is analysis, not cleaning.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop_id` | String | `denue-<id>` or `osm-<type>-<id>`, unique |
+| `source` | String | `denue` (official register) or `osm` (crowd-sourced) |
+| `name` | String? | As the source records it. DENUE shouts in capitals |
+| `brand` | String? | OSM only: set when the place belongs to a chain |
+| `employees_band` | String? | DENUE only: size band of the workforce, e.g. `0 a 5 personas` |
+| `latitude`, `longitude` | Float | WGS84 |
+| `borough_id`, `borough` | String? | From the spatial join. Null if the point falls outside every borough |
+| `declared_borough_id` | String? | The borough the source itself claims (DENUE's `AreaGeo`); null for OSM. The column the join is audited against |
+
+> DENUE's activity class 722515 is **wider than coffee**: it covers soda fountains and
+> ice-cream parlours too. Every row is kept and labelled rather than filtered by name,
+> because no filter has been measured yet.
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**

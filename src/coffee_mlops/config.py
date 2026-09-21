@@ -34,15 +34,36 @@ class Settings(BaseSettings):
     usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
 
 
+class SpatialConfig(BaseModel):
+    """How to read a geospatial layer, for a source whose download is not a table.
+
+    Everything here is stated rather than discovered, because the file does not say it
+    reliably: a shapefile's DBF declares no character set, and its `.prj` is advisory.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    encoding: str  # character set of the attribute table (DBF)
+    crs: str  # the layer's own coordinate system; geometry is reprojected to WGS84
+    id_column: str
+    name_column: str
+    # How many features the layer must have. An official boundary set has a known
+    # number of areas, so a different count is a changed upstream, not a surprise.
+    expected_features: int
+
+
 class SourceConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: HttpUrl
     filename: str
-    # CSV inside the archive, when the download is a ZIP.
+    # The file inside the archive, when the download is a ZIP: a CSV, or the layer of
+    # a geospatial dataset when `spatial` is set.
     member: str | None = None
     # Literal strings the upstream uses for missing values (e.g. R writes "NA").
     null_values: list[str] = []
+    # Set when the member is a map layer rather than a table.
+    spatial: SpatialConfig | None = None
 
     @model_validator(mode="after")
     def _zip_needs_member(self) -> Self:

@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.schemas import MARKET_CONTEXT, coffee_reviews_schema
+from coffee_mlops.data.schemas import (
+    BOROUGHS,
+    COFFEE_SHOPS,
+    MARKET_CONTEXT,
+    coffee_reviews_schema,
+)
 from coffee_mlops.ml.features import review_features_schema
 from coffee_mlops.ml.predict import PREDICTIONS
 
@@ -22,6 +27,8 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
     return {
         "coffee_reviews": list(coffee_reviews_schema(coffee_config.cleaning).columns),
         "market_context": list(MARKET_CONTEXT.columns),
+        "boroughs": list(BOROUGHS.columns),
+        "coffee_shops": list(COFFEE_SHOPS.columns),
         "review_features": list(review_features_schema(coffee_config.model).columns),
         "review_predictions": list(PREDICTIONS.columns),
     }
@@ -38,7 +45,9 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
     assert missing == set()
 
 
-@pytest.mark.parametrize("table", ["coffee_reviews", "market_context", "review_features"])
+@pytest.mark.parametrize(
+    "table", ["coffee_reviews", "market_context", "boroughs", "coffee_shops", "review_features"]
+)
 def test_each_table_has_its_own_section(table: str) -> None:
     assert f"`{table}`" in DATA_DICTIONARY or f".{table}`" in DATA_DICTIONARY
 

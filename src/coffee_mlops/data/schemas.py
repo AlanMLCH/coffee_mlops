@@ -135,10 +135,67 @@ PSD_COFFEE = pa.DataFrameSchema(
     },
 )
 
+# INEGI's establishment register, one row per business. Every field arrives as text.
+DENUE_ESTABLISHMENTS = pa.DataFrameSchema(
+    name="denue_cafes",
+    coerce=True,
+    unique=["Id"],
+    columns={
+        "Id": _text(),
+        "Nombre": _text(nullable=True),
+        "Clase_actividad": _text(),
+        "CLASE_ACTIVIDAD_ID": pa.Column(pl.String, pa.Check.str_matches(r"^\d{6}$")),
+        # entity(2) + municipality(3) + locality(4). The first five characters are the
+        # borough's CVEGEO, which is what the spatial join is checked against.
+        "AreaGeo": pa.Column(pl.String, pa.Check.str_matches(r"^\d{9}$")),
+        "Latitud": pa.Column(pl.Float64, pa.Check.in_range(-90, 90)),
+        "Longitud": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
+        # Size band of the workforce ("0 a 5 personas"), the only size DENUE publishes.
+        "Estrato": _text(nullable=True),
+    },
+)
+
+# One row per OSM element, already flattened out of the element/tags shape.
+OSM_PLACES = pa.DataFrameSchema(
+    name="osm_cafes",
+    coerce=True,
+    unique=["type", "id"],
+    columns={
+        "type": pa.Column(pl.String, pa.Check.isin(["node", "way", "relation"])),
+        "id": pa.Column(pl.Int64),
+        # Nullable: a crowd-sourced element can arrive without a point, and one bad
+        # element must not stop the pipeline. `clean` drops them and says how many.
+        "latitude": pa.Column(pl.Float64, pa.Check.in_range(-90, 90), nullable=True),
+        "longitude": pa.Column(pl.Float64, pa.Check.in_range(-180, 180), nullable=True),
+        "name": _text(nullable=True),
+        "brand": _text(nullable=True),
+        "amenity": _text(),
+        "cuisine": _text(nullable=True),
+    },
+)
+
+# What `geo.read_areas` produces from a boundary layer, whatever the layer was.
+AREAS = pa.DataFrameSchema(
+    name="areas",
+    strict=True,
+    unique=["area_id"],
+    columns={
+        "area_id": _text(),
+        "area_name": _text(),
+        "area_km2": pa.Column(pl.Float64, pa.Check.gt(0)),
+        # The polygon as WKB in WGS84: readable with any GIS, and with DuckDB's
+        # ST_GeomFromWKB, without this project's code.
+        "boundary": pa.Column(pl.Binary),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
     "psd_coffee": PSD_COFFEE,
+    "cdmx_boroughs": AREAS,
+    "denue_cafes": DENUE_ESTABLISHMENTS,
+    "osm_cafes": OSM_PLACES,
 }
 
 
@@ -186,5 +243,42 @@ MARKET_CONTEXT = pa.DataFrameSchema(
         **{
             c: pa.Column(pl.Float64, pa.Check.ge(0), nullable=True) for c in PSD_ATTRIBUTES.values()
         },
+    },
+)
+
+
+BOROUGHS = pa.DataFrameSchema(
+    name="boroughs",
+    strict=True,
+    unique=["borough_id"],
+    columns={
+        "borough_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+        "borough": pa.Column(pl.String),
+        "area_km2": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "boundary": pa.Column(pl.Binary),
+    },
+)
+
+COFFEE_SHOPS = pa.DataFrameSchema(
+    name="coffee_shops",
+    strict=True,
+    unique=["shop_id"],
+    columns={
+        # "<source>-<the source's own id>": stable across runs, and it says where the
+        # row came from without reading another column.
+        "shop_id": pa.Column(pl.String),
+        "source": pa.Column(pl.String, pa.Check.isin(["denue", "osm"])),
+        "name": pa.Column(pl.String, nullable=True),
+        "brand": pa.Column(pl.String, nullable=True),
+        "employees_band": pa.Column(pl.String, nullable=True),
+        "latitude": pa.Column(pl.Float64, pa.Check.in_range(-90, 90)),
+        "longitude": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
+        # Null when the point lands outside every borough: a fact worth keeping, not a
+        # reason to drop the shop.
+        "borough_id": pa.Column(pl.String, nullable=True),
+        "borough": pa.Column(pl.String, nullable=True),
+        # What the source itself says the borough is. DENUE carries one, OSM does not,
+        # so this is the column the spatial join is audited against.
+        "declared_borough_id": pa.Column(pl.String, nullable=True),
     },
 )

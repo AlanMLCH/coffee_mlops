@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
 from coffee_mlops.config import DomainConfig, Settings, load_domain_config
 from tests.fakes import RecordedServer
@@ -54,6 +55,9 @@ def recorded() -> dict[str, bytes]:
         "cqi_2018": (FIXTURES / "cqi_2018_sample.csv").read_bytes(),
         "cqi_2023": zip_fixture("cqi_2023_sample.csv", "df_arabica_clean.csv"),
         "psd_coffee": zip_fixture("psd_coffee_sample.csv", "psd_coffee.csv"),
+        # Shaped like INEGI's download: a shapefile inside a ZIP, Latin-1 attributes,
+        # the layer's own projection. Two boroughs instead of sixteen.
+        "cdmx_boroughs": (FIXTURES / "cdmx_boroughs_sample.zip").read_bytes(),
     }
 
 
@@ -82,9 +86,17 @@ def client(server: RecordedServer) -> Iterator[Any]:
 @pytest.fixture
 def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
     """A raw layer populated from the recorded payloads, in the real directory layout
-    (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir."""
-    from coffee_mlops.data.extract import extract_all
+    (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir.
 
-    raw = tmp_path / coffee_config.name / "raw"
-    extract_all(coffee_config, raw, client)
-    return raw
+    The API sources are pulled too, with a token supplied: the clean layer's table of
+    places is built from them, so a fixture without them would test half a pipeline.
+    """
+    from coffee_mlops.data.extract import extract_all
+    from coffee_mlops.data.sources import extract_api_sources
+
+    data_dir = tmp_path / coffee_config.name
+    extract_all(coffee_config, data_dir / "raw", client)
+    extract_api_sources(
+        coffee_config, Settings(denue_token=SecretStr("fixture-token")), data_dir, client
+    )
+    return data_dir / "raw"

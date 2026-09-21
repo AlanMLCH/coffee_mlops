@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -6,14 +7,23 @@ import polars as pl
 import pytest
 
 from coffee_mlops.config import DomainConfig
+from coffee_mlops.contracts import check_contract
 from coffee_mlops.data.clean import (
     altitude_from_text,
     build_clean,
+    clean_boroughs,
+    clean_coffee_shops,
     clean_market_context,
     clean_reviews,
     parse_grading_date,
 )
-from coffee_mlops.data.schemas import MARKET_CONTEXT, PSD_ATTRIBUTES, coffee_reviews_schema
+from coffee_mlops.data.schemas import (
+    BOROUGHS,
+    COFFEE_SHOPS,
+    MARKET_CONTEXT,
+    PSD_ATTRIBUTES,
+    coffee_reviews_schema,
+)
 from coffee_mlops.data.validate import validate_raw
 from coffee_mlops.storage import MANIFEST_NAME, read_table
 
@@ -181,8 +191,102 @@ def test_build_clean_writes_both_tables_with_lineage(
     data_dir = raw_dir.parent
     paths = build_clean(coffee_config, data_dir, at=datetime(2026, 9, 19, tzinfo=UTC))
 
-    assert set(paths) == {"coffee_reviews", "market_context"}
+    assert set(paths) == {"coffee_reviews", "market_context", "boroughs", "coffee_shops"}
     assert read_table(data_dir / "clean" / "coffee_reviews").height == 25
     manifest = json.loads((paths["coffee_reviews"].parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"cqi_2018", "cqi_2023"}
     assert all(p.startswith("ingested_at=") for p in manifest["inputs"].values())
+
+
+def shops(frames: Frames) -> pl.DataFrame:
+    return clean_coffee_shops(frames, frames["cdmx_boroughs"])
+
+
+def test_both_registers_become_one_table_of_places(frames: Frames) -> None:
+    table = check_contract(COFFEE_SHOPS, shops(frames))
+
+    assert dict(table["source"].value_counts().iter_rows()) == {"denue": 3, "osm": 5}
+    assert table["shop_id"].to_list()[:1] == ["denue-1"]
+    # Two registers, two vocabularies: each keeps what only it records.
+    assert table.filter(pl.col("source") == "denue")["employees_band"].null_count() == 0
+    assert table.filter(pl.col("source") == "osm")["employees_band"].null_count() == 5
+
+
+def test_every_place_is_put_in_a_borough(frames: Frames) -> None:
+    table = shops(frames)
+
+    assert table["borough_id"].null_count() == 0
+    assert set(table.filter(pl.col("source") == "denue")["borough"]) == {"Miguel Hidalgo"}
+
+
+def test_the_join_is_audited_against_the_borough_the_source_declares(
+    frames: Frames, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The check that proves the projection and the axis order: DENUE states its own
+    borough, so the join can be scored instead of trusted."""
+    caplog.set_level(logging.INFO)
+
+    shops(frames)
+
+    assert "agrees with the source's own borough on 3 of 3 places (100.00%)" in caplog.text
+
+
+def test_a_disagreement_is_reported_rather_than_absorbed(
+    frames: Frames, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    moved = dict(frames)
+    moved["denue_cafes"] = frames["denue_cafes"].with_columns(pl.lit("090150001").alias("AreaGeo"))
+
+    clean_coffee_shops(moved, frames["cdmx_boroughs"])
+
+    assert "agrees with the source's own borough on 0 of 3" in caplog.text
+
+
+def test_a_place_outside_every_borough_is_kept_and_counted(
+    frames: Frames, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING)
+    adrift = dict(frames)
+    adrift["denue_cafes"] = set_first(frames["denue_cafes"], "Latitud", 0.0)
+
+    table = clean_coffee_shops(adrift, frames["cdmx_boroughs"])
+
+    assert "1 places fell outside every borough" in caplog.text
+    assert table["borough_id"].null_count() == 1  # the row stays, unplaced
+
+
+def test_an_element_without_a_coordinate_is_dropped(
+    frames: Frames, caplog: pytest.LogCaptureFixture
+) -> None:
+    """OSM is crowd-sourced: a cafe can be tagged without ever being placed."""
+    caplog.set_level(logging.WARNING)
+    unplaced = dict(frames)
+    unplaced["osm_cafes"] = set_first(frames["osm_cafes"], "latitude", None)
+
+    table = clean_coffee_shops(unplaced, frames["cdmx_boroughs"])
+
+    assert "Dropped 1 places with no coordinate" in caplog.text
+    assert table.height == 7
+
+
+def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
+    """A clone with no DENUE token still gets the OpenStreetMap half."""
+    table = clean_coffee_shops({"osm_cafes": frames["osm_cafes"]}, frames["cdmx_boroughs"])
+
+    assert table["source"].unique().to_list() == ["osm"]
+    assert table["declared_borough_id"].null_count() == table.height
+
+
+def test_no_register_at_all_says_what_to_run(frames: Frames) -> None:
+    with pytest.raises(ValueError, match="run extract first"):
+        clean_coffee_shops({}, frames["cdmx_boroughs"])
+
+
+def test_boroughs_keep_their_polygon_and_their_official_key(frames: Frames) -> None:
+    table = check_contract(BOROUGHS, clean_boroughs(frames["cdmx_boroughs"]))
+
+    assert table.height == 16
+    assert "Cuauhtémoc" in table["borough"].to_list()
+    # The geometry travels as WKB, so reading the table needs no spatial extension.
+    assert table["boundary"].dtype == pl.Binary
