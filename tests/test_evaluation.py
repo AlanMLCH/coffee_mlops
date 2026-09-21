@@ -4,8 +4,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.ml.evaluation import (
+from mlops_core.config import DomainConfig
+from mlops_core.ml.evaluation import (
     absolute_errors,
     compare,
     mae_interval,

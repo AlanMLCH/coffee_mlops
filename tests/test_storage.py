@@ -4,7 +4,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from coffee_mlops.storage import (
+from mlops_core.storage import (
     TIMESTAMP_FORMAT,
     latest_partition,
     prune_layers,

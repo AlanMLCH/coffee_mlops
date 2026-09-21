@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.schemas import (
+from mlops_core.config import DomainConfig
+from mlops_core.data.schemas import (
     BOROUGHS,
     COFFEE_SHOPS,
     MARKET_CONTEXT,
     coffee_reviews_schema,
 )
-from coffee_mlops.ml.features import review_features_schema
-from coffee_mlops.ml.predict import PREDICTIONS
+from mlops_core.ml.features import review_features_schema
+from mlops_core.ml.predict import PREDICTIONS
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 DATA_DICTIONARY = (DOCS / "data-dictionary.md").read_text(encoding="utf-8")

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "coffee_mlops"
+SRC = Path(__file__).resolve().parents[1] / "src" / "mlops_core"
 SHARED = ["config.py", "contracts.py", "storage.py", "catalog.py"]
 
 
@@ -36,26 +36,26 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
 @pytest.mark.parametrize(
     ("package", "forbidden"),
     [
-        ("ml", "coffee_mlops.data"),
-        ("data", "coffee_mlops.ml"),
-        ("serving", "coffee_mlops.data"),
-        ("data", "coffee_mlops.analysis"),
-        ("ml", "coffee_mlops.analysis"),
-        ("ml", "coffee_mlops.serving"),
+        ("ml", "mlops_core.data"),
+        ("data", "mlops_core.ml"),
+        ("serving", "mlops_core.data"),
+        ("data", "mlops_core.analysis"),
+        ("ml", "mlops_core.analysis"),
+        ("ml", "mlops_core.serving"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:
     assert offenders(list((SRC / package).rglob("*.py")), forbidden) == []
 
 
-@pytest.mark.parametrize("forbidden", ["coffee_mlops.data", "coffee_mlops.ml"])
+@pytest.mark.parametrize("forbidden", ["mlops_core.data", "mlops_core.ml"])
 def test_shared_modules_do_not_depend_on_a_pipeline(forbidden: str) -> None:
     # The CLI is the one place allowed to know about both.
     assert offenders([SRC / name for name in SHARED], forbidden) == []
 
 
 def test_every_source_file_is_actually_in_the_repository() -> None:
-    """A too-broad ignore rule (`data/` also matches src/coffee_mlops/data/) kept four
+    """A too-broad ignore rule (`data/` also matches src/mlops_core/data/) kept four
     modules out of the repository: everything worked locally and CI failed on an import.
     """
     tracked = subprocess.run(

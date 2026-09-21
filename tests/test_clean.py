@@ -6,9 +6,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.contracts import check_contract
-from coffee_mlops.data.clean import (
+from mlops_core.config import DomainConfig
+from mlops_core.contracts import check_contract
+from mlops_core.data.clean import (
     altitude_from_text,
     build_clean,
     clean_boroughs,
@@ -18,15 +18,15 @@ from coffee_mlops.data.clean import (
     parse_grading_date,
     reconcile_market_sources,
 )
-from coffee_mlops.data.schemas import (
+from mlops_core.data.schemas import (
     BOROUGHS,
     COFFEE_SHOPS,
     MARKET_CONTEXT,
     PSD_ATTRIBUTES,
     coffee_reviews_schema,
 )
-from coffee_mlops.data.validate import validate_raw
-from coffee_mlops.storage import MANIFEST_NAME, read_table
+from mlops_core.data.validate import validate_raw
+from mlops_core.storage import MANIFEST_NAME, read_table
 
 Frames = dict[str, pl.DataFrame]
 

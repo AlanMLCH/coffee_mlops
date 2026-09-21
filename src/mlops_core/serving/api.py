@@ -17,10 +17,10 @@ import polars as pl
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from coffee_mlops.config import DomainConfig, Settings, load_domain_config
-from coffee_mlops.ml.features import add_market_context
-from coffee_mlops.ml.registry import ServedModel, load_champion
-from coffee_mlops.storage import read_table
+from mlops_core.config import DomainConfig, Settings, load_domain_config
+from mlops_core.ml.features import add_market_context
+from mlops_core.ml.registry import ServedModel, load_champion
+from mlops_core.storage import read_table
 
 logger = logging.getLogger(__name__)
 

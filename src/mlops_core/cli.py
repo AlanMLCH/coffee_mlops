@@ -15,14 +15,14 @@ from typing import Annotated
 
 import typer
 
-from coffee_mlops.config import DomainConfig, Settings, load_domain_config
-from coffee_mlops.data.api import silence_request_urls
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.data.extract import extract_all, http_client
-from coffee_mlops.data.sources import extract_api_sources
-from coffee_mlops.data.validate import validate_raw
-from coffee_mlops.provenance import REPO_ROOT
-from coffee_mlops.storage import prune_layers
+from mlops_core.config import DomainConfig, Settings, load_domain_config
+from mlops_core.data.api import silence_request_urls
+from mlops_core.data.clean import build_clean
+from mlops_core.data.extract import extract_all, http_client
+from mlops_core.data.sources import extract_api_sources
+from mlops_core.data.validate import validate_raw
+from mlops_core.provenance import REPO_ROOT
+from mlops_core.storage import prune_layers
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
@@ -117,7 +117,7 @@ def data_run(domain: Domain = "coffee") -> None:
 def features(domain: Domain = "coffee") -> None:
     """Build the model-ready feature table from the latest clean layer."""
     with _needs_extra("ml"):
-        from coffee_mlops.ml.features import build_features
+        from mlops_core.ml.features import build_features
 
     config = load_domain_config(domain)
     typer.echo(f"review_features: {build_features(config, _data_dir(config))}")
@@ -128,7 +128,7 @@ def train(domain: Domain = "coffee") -> None:
     """Tune and train a model, track it in MLflow, promote it if it passes the quality gate."""
     # Imported here: MLflow and LightGBM take seconds to import and no other command needs them.
     with _needs_extra("ml"):
-        from coffee_mlops.ml.train import train_model
+        from mlops_core.ml.train import train_model
 
     config = load_domain_config(domain)
     result = train_model(config, _data_dir(config), Settings().mlflow_tracking_uri)
@@ -142,7 +142,7 @@ def train(domain: Domain = "coffee") -> None:
 def predict(domain: Domain = "coffee") -> None:
     """Score the whole feature table with the champion and write the predictions."""
     with _needs_extra("ml"):
-        from coffee_mlops.ml.predict import batch_predict
+        from mlops_core.ml.predict import batch_predict
 
     config = load_domain_config(domain)
     path = batch_predict(config, _data_dir(config), Settings().mlflow_tracking_uri)
@@ -161,7 +161,7 @@ def ml_run(domain: Domain = "coffee") -> None:
 def analysis_run(domain: Domain = "coffee") -> None:
     """Compute every study from the latest layers, as Parquet and CSV."""
     with _needs_extra("analysis"):
-        from coffee_mlops.analysis.pipeline import build_analysis
+        from mlops_core.analysis.pipeline import build_analysis
 
     config = load_domain_config(domain)
     # Figures are published into the repo's docs only when running from a checkout.
@@ -221,7 +221,7 @@ def sql(
 ) -> None:
     """Run SQL over the latest partition of every layer."""
     with _needs_extra("data"):
-        from coffee_mlops.catalog import connect
+        from mlops_core.catalog import connect
 
     config = load_domain_config(domain)
     typer.echo(connect(_data_dir(config)).sql(query))

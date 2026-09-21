@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from coffee_mlops.config import ModelSpec, Settings, load_domain_config
+from mlops_core.config import ModelSpec, Settings, load_domain_config
 
 
 def test_coffee_config_declares_its_file_sources() -> None:

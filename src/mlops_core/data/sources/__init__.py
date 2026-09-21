@@ -16,12 +16,12 @@ from pathlib import Path
 
 import httpx
 
-from coffee_mlops.config import DomainConfig, Settings
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.extract import RawArtifact
-from coffee_mlops.data.sources.denue import ingest_establishments
-from coffee_mlops.data.sources.fas import ingest_balance
-from coffee_mlops.data.sources.overpass import ingest_places
+from mlops_core.config import DomainConfig, Settings
+from mlops_core.data.api import ApiClient
+from mlops_core.data.extract import RawArtifact
+from mlops_core.data.sources.denue import ingest_establishments
+from mlops_core.data.sources.fas import ingest_balance
+from mlops_core.data.sources.overpass import ingest_places
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from typing import cast
 import numpy as np
 import polars as pl
 
-from coffee_mlops.config import ModelSpec
+from mlops_core.config import ModelSpec
 
 # Quality bands used when reporting error: a buyer cares about these ranges, not deciles.
 QUALITY_BANDS = [

@@ -47,7 +47,7 @@ typecheck:
 	uv run mypy
 
 test:
-	uv run pytest --cov=coffee_mlops --cov-report=term-missing
+	uv run pytest --cov=mlops_core --cov-report=term-missing
 
 test-network:
 	uv run pytest -m network
@@ -55,31 +55,31 @@ test-network:
 check: lint typecheck test
 
 data:
-	uv run coffee-mlops data run --domain $(DOMAIN)
+	uv run mlops data run --domain $(DOMAIN)
 
 extract:
-	uv run coffee-mlops data extract --domain $(DOMAIN)
+	uv run mlops data extract --domain $(DOMAIN)
 
 validate:
-	uv run coffee-mlops data validate --domain $(DOMAIN)
+	uv run mlops data validate --domain $(DOMAIN)
 
 clean-layer:
-	uv run coffee-mlops data clean --domain $(DOMAIN)
+	uv run mlops data clean --domain $(DOMAIN)
 
 ml:
-	uv run coffee-mlops ml run --domain $(DOMAIN)
+	uv run mlops ml run --domain $(DOMAIN)
 
 features:
-	uv run coffee-mlops ml features --domain $(DOMAIN)
+	uv run mlops ml features --domain $(DOMAIN)
 
 sql:
-	uv run coffee-mlops sql "$(Q)" --domain $(DOMAIN)
+	uv run mlops sql "$(Q)" --domain $(DOMAIN)
 
 train:
-	uv run coffee-mlops ml train --domain $(DOMAIN)
+	uv run mlops ml train --domain $(DOMAIN)
 
 predict:
-	uv run coffee-mlops ml predict --domain $(DOMAIN)
+	uv run mlops ml predict --domain $(DOMAIN)
 
 services-up:
 	docker compose --profile $(PROFILE) up -d --wait
@@ -89,13 +89,13 @@ services-down:
 
 dagster:
 	uv run python -c "import pathlib; pathlib.Path('.dagster').mkdir(exist_ok=True)"
-	uv run dagster dev -m coffee_mlops.orchestration.definitions
+	uv run dagster dev -m mlops_core.orchestration.definitions
 
 prune:
-	uv run coffee-mlops prune --domain $(DOMAIN) --keep $(KEEP)
+	uv run mlops prune --domain $(DOMAIN) --keep $(KEEP)
 
 analysis:
-	uv run coffee-mlops analysis run --domain $(DOMAIN)
+	uv run mlops analysis run --domain $(DOMAIN)
 
 dashboard:
-	uv run coffee-mlops analysis dashboard --domain $(DOMAIN)
+	uv run mlops analysis dashboard --domain $(DOMAIN)

@@ -16,9 +16,9 @@ import duckdb
 import polars as pl
 import pytest
 
-from coffee_mlops.config import SpatialConfig
-from coffee_mlops.data import geo
-from coffee_mlops.data.geo import AREA_COLUMNS, attribute_points, read_areas, spatial_connection
+from mlops_core.config import SpatialConfig
+from mlops_core.data import geo
+from mlops_core.data.geo import AREA_COLUMNS, attribute_points, read_areas, spatial_connection
 
 ARCHIVE = Path(__file__).parent / "fixtures" / "cdmx_boroughs_sample.zip"
 MEMBER = "conjunto_de_datos/09mun.shp"

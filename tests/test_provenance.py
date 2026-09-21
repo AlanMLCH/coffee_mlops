@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from coffee_mlops.provenance import CodeVersion, code_version
+from mlops_core.provenance import CodeVersion, code_version
 
 
 def test_a_checkout_reports_its_revision() -> None:

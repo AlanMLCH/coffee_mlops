@@ -5,16 +5,16 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.data.schemas import SENSORY_COLUMNS
-from coffee_mlops.ml.features import (
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.data.schemas import SENSORY_COLUMNS
+from mlops_core.ml.features import (
     add_market_context,
     build_features,
     build_review_features,
     review_features_schema,
 )
-from coffee_mlops.storage import MANIFEST_NAME, read_table
+from mlops_core.storage import MANIFEST_NAME, read_table
 
 
 def context_row(country: str, year: int, production: float, arabica: float) -> dict[str, object]:

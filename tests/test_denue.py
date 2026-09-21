@@ -11,15 +11,15 @@ from pathlib import Path
 import httpx
 import pytest
 
-from coffee_mlops.config import DenueConfig
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.sources.denue import (
+from mlops_core.config import DenueConfig
+from mlops_core.data.api import ApiClient
+from mlops_core.data.sources.denue import (
     DOCUMENTED_URL,
     count,
     establishments,
     ingest_establishments,
 )
-from coffee_mlops.storage import MANIFEST_NAME
+from mlops_core.storage import MANIFEST_NAME
 
 TOKEN = "super-secret-token"
 CONFIG = DenueConfig(

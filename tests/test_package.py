@@ -1,5 +1,5 @@
-import coffee_mlops
+import mlops_core
 
 
 def test_package_imports() -> None:
-    assert coffee_mlops.__doc__
+    assert mlops_core.__doc__

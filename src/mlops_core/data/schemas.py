@@ -15,7 +15,7 @@ contract with every downstream consumer (features, the agent's SQL, the API).
 import pandera.polars as pa
 import polars as pl
 
-from coffee_mlops.config import CleaningConfig
+from mlops_core.config import CleaningConfig
 
 SENSORY_SCORES = [
     "Aroma",

@@ -11,11 +11,11 @@ from mlflow import MlflowClient
 from mlflow.models import infer_signature
 from sklearn.dummy import DummyRegressor
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.ml.evaluation import Comparison
-from coffee_mlops.ml.features import build_features
-from coffee_mlops.ml.train import (
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.ml.evaluation import Comparison
+from mlops_core.ml.features import build_features
+from mlops_core.ml.train import (
     CHAMPION,
     baseline_predictions,
     build_pipeline,

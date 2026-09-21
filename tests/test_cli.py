@@ -14,12 +14,12 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from coffee_mlops import cli
-from coffee_mlops.config import load_domain_config
-from coffee_mlops.data.extract import http_client
-from coffee_mlops.ml.registry import ServedModel
-from coffee_mlops.ml.train import TrainResult
-from coffee_mlops.storage import write_table
+from mlops_core import cli
+from mlops_core.config import load_domain_config
+from mlops_core.data.extract import http_client
+from mlops_core.ml.registry import ServedModel
+from mlops_core.ml.train import TrainResult
+from mlops_core.storage import write_table
 from tests.fakes import ConstantModel, RecordedServer, without_rate_limits
 
 
@@ -108,11 +108,11 @@ def test_ml_run_chains_features_and_training(
 ) -> None:
     CliRunner().invoke(cli.app, ["data", "run"])
     monkeypatch.setattr(
-        "coffee_mlops.ml.train.train_model",
+        "mlops_core.ml.train.train_model",
         lambda config, data, uri: TrainResult("run-1", "1", False, {"test_mae": 2.0}),
     )
     monkeypatch.setattr(
-        "coffee_mlops.ml.predict.load_champion",
+        "mlops_core.ml.predict.load_champion",
         lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "registry"),
     )
 
@@ -133,7 +133,7 @@ def test_train_reports_version_and_gate_decision(
         calls.append((data, tracking_uri))
         return TrainResult("run-1", "3", True, {"test_mae": 1.5})
 
-    monkeypatch.setattr("coffee_mlops.ml.train.train_model", fake_train_model)
+    monkeypatch.setattr("mlops_core.ml.train.train_model", fake_train_model)
     monkeypatch.setenv("COFFEE_MLFLOW_TRACKING_URI", "sqlite:///somewhere.db")
 
     result = CliRunner().invoke(cli.app, ["ml", "train"])
@@ -259,7 +259,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
     runner.invoke(cli.app, ["data", "run"])
     runner.invoke(cli.app, ["ml", "features"])
     monkeypatch.setattr(
-        "coffee_mlops.analysis.pipeline.load_champion",
+        "mlops_core.analysis.pipeline.load_champion",
         lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "cache"),
     )
     monkeypatch.setattr(cli, "REPO_ROOT", data_dir / "checkout")

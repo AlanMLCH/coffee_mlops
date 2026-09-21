@@ -18,10 +18,10 @@ from pathlib import Path
 
 import polars as pl
 
-from coffee_mlops.config import CleaningConfig, DomainConfig
-from coffee_mlops.contracts import check_contract
-from coffee_mlops.data.geo import attribute_points
-from coffee_mlops.data.schemas import (
+from mlops_core.config import CleaningConfig, DomainConfig
+from mlops_core.contracts import check_contract
+from mlops_core.data.geo import attribute_points
+from mlops_core.data.schemas import (
     BOROUGHS,
     COFFEE_SHOPS,
     MARKET_CONTEXT,
@@ -31,8 +31,8 @@ from coffee_mlops.data.schemas import (
     SENSORY_SCORES_2018,
     coffee_reviews_schema,
 )
-from coffee_mlops.data.validate import validate_raw
-from coffee_mlops.storage import write_table
+from mlops_core.data.validate import validate_raw
+from mlops_core.storage import write_table
 
 logger = logging.getLogger(__name__)
 

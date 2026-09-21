@@ -9,12 +9,12 @@ import polars as pl
 import pytest
 from dagster import AssetSelection, materialize
 
-from coffee_mlops.config import Settings
-from coffee_mlops.data.sources import ApiExtraction
-from coffee_mlops.ml.train import TrainResult
-from coffee_mlops.orchestration import definitions
-from coffee_mlops.orchestration.definitions import build_definitions
-from coffee_mlops.storage import write_table
+from mlops_core.config import Settings
+from mlops_core.data.sources import ApiExtraction
+from mlops_core.ml.train import TrainResult
+from mlops_core.orchestration import definitions
+from mlops_core.orchestration.definitions import build_definitions
+from mlops_core.storage import write_table
 
 FEATURES_TABLE = "review_features"
 

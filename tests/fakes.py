@@ -12,7 +12,7 @@ import httpx
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 
-from coffee_mlops.config import DomainConfig
+from mlops_core.config import DomainConfig
 
 # A DENUE-shaped answer for the CLI tests: three establishments, and a count to match.
 # Every field the raw contract requires is here, with the shape the real service uses:

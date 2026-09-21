@@ -14,12 +14,12 @@ import httpx
 import pandera.errors
 import pytest
 
-from coffee_mlops.config import FasConfig
-from coffee_mlops.contracts import check_contract
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.schemas import PSD_COFFEE
-from coffee_mlops.data.sources.fas import KEY_HEADER, fetch_rows, ingest_balance, to_frame
-from coffee_mlops.storage import MANIFEST_NAME
+from mlops_core.config import FasConfig
+from mlops_core.contracts import check_contract
+from mlops_core.data.api import ApiClient
+from mlops_core.data.schemas import PSD_COFFEE
+from mlops_core.data.sources.fas import KEY_HEADER, fetch_rows, ingest_balance, to_frame
+from mlops_core.storage import MANIFEST_NAME
 from tests.fakes import fas_recording, fas_response
 
 KEY = "super-secret-key"

@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from coffee_mlops.data.api import ApiClient
+from mlops_core.data.api import ApiClient
 
 URL = "https://example.test/data"
 

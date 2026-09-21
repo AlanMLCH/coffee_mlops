@@ -6,13 +6,13 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.ml import predict as batch
-from coffee_mlops.ml.features import build_features
-from coffee_mlops.ml.predict import PREDICTIONS, batch_predict, score
-from coffee_mlops.ml.registry import ServedModel
-from coffee_mlops.storage import MANIFEST_NAME, read_table
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.ml import predict as batch
+from mlops_core.ml.features import build_features
+from mlops_core.ml.predict import PREDICTIONS, batch_predict, score
+from mlops_core.ml.registry import ServedModel
+from mlops_core.storage import MANIFEST_NAME, read_table
 
 AT = datetime(2026, 9, 19, 12, tzinfo=UTC)
 

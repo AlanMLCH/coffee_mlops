@@ -6,10 +6,10 @@ import pandera.errors
 import polars as pl
 import pytest
 
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.extract import latest_ingestion
-from coffee_mlops.data.schemas import RAW_SCHEMAS
-from coffee_mlops.data.validate import check_contract, read_raw, validate_raw
+from mlops_core.config import DomainConfig
+from mlops_core.data.extract import latest_ingestion
+from mlops_core.data.schemas import RAW_SCHEMAS
+from mlops_core.data.validate import check_contract, read_raw, validate_raw
 
 
 def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFrame:

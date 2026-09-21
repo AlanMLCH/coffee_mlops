@@ -8,10 +8,10 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
-from coffee_mlops.config import DomainConfig, Settings
-from coffee_mlops.ml.registry import ServedModel
-from coffee_mlops.serving import api
-from coffee_mlops.storage import write_table
+from mlops_core.config import DomainConfig, Settings
+from mlops_core.ml.registry import ServedModel
+from mlops_core.serving import api
+from mlops_core.storage import write_table
 
 LOT = {
     "country": "Mexico",

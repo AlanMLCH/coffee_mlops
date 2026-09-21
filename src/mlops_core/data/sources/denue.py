@@ -18,9 +18,9 @@ from pathlib import Path
 
 import polars as pl
 
-from coffee_mlops.config import DenueConfig
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.extract import RawArtifact, store_payload
+from mlops_core.config import DenueConfig
+from mlops_core.data.api import ApiClient
+from mlops_core.data.extract import RawArtifact, store_payload
 
 logger = logging.getLogger(__name__)
 

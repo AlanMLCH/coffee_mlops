@@ -14,10 +14,10 @@ import logging
 import mlflow
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
-from coffee_mlops.config import Settings, load_domain_config
-from coffee_mlops.ml.evaluation import absolute_errors, compare
-from coffee_mlops.ml.train import build_pipeline, fit_params, temporal_split, xy
-from coffee_mlops.storage import read_table
+from mlops_core.config import Settings, load_domain_config
+from mlops_core.ml.evaluation import absolute_errors, compare
+from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
+from mlops_core.storage import read_table
 
 # Fixed parameters across candidates: tuning each one separately would confound "fewer
 # features" with "a luckier search", and the question here is only about the features.

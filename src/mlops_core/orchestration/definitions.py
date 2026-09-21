@@ -23,15 +23,15 @@ from dagster import (
     define_asset_job,
 )
 
-from coffee_mlops.config import CONFIGS_DIR, DomainConfig, Settings, load_domain_config
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.data.extract import extract_all, http_client
-from coffee_mlops.data.sources import extract_api_sources
-from coffee_mlops.data.validate import validate_raw
-from coffee_mlops.ml.features import build_features
-from coffee_mlops.ml.predict import batch_predict
-from coffee_mlops.ml.train import train_model
-from coffee_mlops.storage import read_table
+from mlops_core.config import CONFIGS_DIR, DomainConfig, Settings, load_domain_config
+from mlops_core.data.clean import build_clean
+from mlops_core.data.extract import extract_all, http_client
+from mlops_core.data.sources import extract_api_sources
+from mlops_core.data.validate import validate_raw
+from mlops_core.ml.features import build_features
+from mlops_core.ml.predict import batch_predict
+from mlops_core.ml.train import train_model
+from mlops_core.storage import read_table
 
 # Assets write their own Parquet, so they hand Dagster metadata, not a value.
 Materialized = MaterializeResult[None]
@@ -127,7 +127,7 @@ def build_definitions(
         domain = domain_assets(config, settings)
         assets += domain
         checks += domain_checks(config, settings, domain)
-    # One job per pipeline, mirroring `coffee-mlops data run` and `ml run`.
+    # One job per pipeline, mirroring `mlops data run` and `ml run`.
     jobs = [
         define_asset_job(
             name=f"{config.name}_{pipeline}",

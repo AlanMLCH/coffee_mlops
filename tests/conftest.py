@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
-from coffee_mlops.config import DomainConfig, Settings, load_domain_config
+from mlops_core.config import DomainConfig, Settings, load_domain_config
 from tests.fakes import RecordedServer, fas_recording, without_rate_limits
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -78,7 +78,7 @@ def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedS
 def client(server: RecordedServer) -> Iterator[Any]:
     import httpx
 
-    from coffee_mlops.data.extract import http_client
+    from mlops_core.data.extract import http_client
 
     with http_client(httpx.MockTransport(server.handler)) as c:
         yield c
@@ -92,8 +92,8 @@ def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
     The API sources are pulled too, with a token supplied: the clean layer's table of
     places is built from them, so a fixture without them would test half a pipeline.
     """
-    from coffee_mlops.data.extract import extract_all
-    from coffee_mlops.data.sources import extract_api_sources
+    from mlops_core.data.extract import extract_all
+    from mlops_core.data.sources import extract_api_sources
 
     data_dir = tmp_path / coffee_config.name
     extract_all(coffee_config, data_dir / "raw", client)

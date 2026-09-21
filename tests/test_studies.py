@@ -3,7 +3,7 @@ from datetime import date
 import polars as pl
 import pytest
 
-from coffee_mlops.analysis.studies import (
+from mlops_core.analysis.studies import (
     categorical_profile,
     feature_recommendation,
     market_history,
@@ -12,7 +12,7 @@ from coffee_mlops.analysis.studies import (
     residuals_by_group,
     target_distribution,
 )
-from coffee_mlops.config import DomainConfig, ModelSpec
+from mlops_core.config import DomainConfig, ModelSpec
 
 SPEC = ModelSpec(
     target="total_cup_points",

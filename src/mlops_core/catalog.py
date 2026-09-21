@@ -9,7 +9,7 @@ from pathlib import Path
 
 import duckdb
 
-from coffee_mlops.storage import latest_partition
+from mlops_core.storage import latest_partition
 
 LAYERS = ("clean", "features", "predictions", "analysis")
 

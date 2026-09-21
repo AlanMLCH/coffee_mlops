@@ -26,7 +26,7 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
-from coffee_mlops.config import SpatialConfig
+from mlops_core.config import SpatialConfig
 
 logger = logging.getLogger(__name__)
 

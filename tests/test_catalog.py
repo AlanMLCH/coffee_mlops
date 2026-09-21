@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from coffee_mlops.catalog import connect
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.ml.features import build_features
+from mlops_core.catalog import connect
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.ml.features import build_features
 
 
 def test_every_built_table_is_queryable_by_layer(

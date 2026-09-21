@@ -23,8 +23,8 @@ from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
 
-from coffee_mlops.config import DomainConfig, ModelSpec, TrainingConfig
-from coffee_mlops.ml.evaluation import (
+from mlops_core.config import DomainConfig, ModelSpec, TrainingConfig
+from mlops_core.ml.evaluation import (
     Comparison,
     absolute_errors,
     compare,
@@ -33,8 +33,8 @@ from coffee_mlops.ml.evaluation import (
     regression_metrics,
     stratified_metrics,
 )
-from coffee_mlops.provenance import code_version
-from coffee_mlops.storage import latest_partition, read_table
+from mlops_core.provenance import code_version
+from mlops_core.storage import latest_partition, read_table
 
 logger = logging.getLogger(__name__)
 

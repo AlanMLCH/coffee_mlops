@@ -55,11 +55,16 @@ orchestration = [
 ]
 
 [project.scripts]
-coffee-mlops = "coffee_mlops.cli:app"
+mlops = "mlops_core.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
+
+# The distribution keeps the repository's name; the code inside it is named for what it
+# is. `mlops_core` knows no domain; each domain is a package of its own under `domains`.
+[tool.uv.build-backend]
+module-name = "mlops_core"
 
 [tool.ruff]
 line-length = 100
@@ -82,7 +87,7 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 # Experiments are typed too: they are read as evidence, so they must be correct.
-files = ["src/coffee_mlops", "experiments"]
+files = ["src/mlops_core", "experiments"]
 
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "scipy.*"] # ship no type information

@@ -99,7 +99,7 @@ make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) 
   GROUP BY 1"
 ```
 
-Run `make help` for every target, or `uv run coffee-mlops --help` for the CLI.
+Run `make help` for every target, or `uv run mlops --help` for the CLI.
 
 ## What the data says
 
@@ -215,7 +215,7 @@ The evaluation is built to survive a small test set:
 - `pre-commit` runs ruff and **gitleaks** on every commit, so credentials never reach history.
 - Secrets live in `.env` (gitignored); `.env.example` documents each variable and where
   to get it. Copy it to `.env`, paste the values, and check them with
-  `uv run coffee-mlops secrets`, which reports what is configured without printing it.
+  `uv run mlops secrets`, which reports what is configured without printing it.
   Credentials are typed as `SecretStr`, so a repr, a log line or a traceback shows
   `**********` and reading one takes an explicit `.get_secret_value()`.
 - `data/` is gitignored: every dataset is rebuilt by running the pipeline. The boundary

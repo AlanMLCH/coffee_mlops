@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from coffee_mlops.ml.targets import percentile_within, points_from_percentile
+from mlops_core.ml.targets import percentile_within, points_from_percentile
 
 
 def test_the_percentile_is_computed_inside_each_period() -> None:

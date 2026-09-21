@@ -24,7 +24,7 @@ import polars as pl
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from coffee_mlops.analysis.studies import QUALITY_BANDS
+from mlops_core.analysis.studies import QUALITY_BANDS
 
 logger = logging.getLogger(__name__)
 

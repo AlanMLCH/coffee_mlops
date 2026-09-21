@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from coffee_mlops.analysis import pipeline
-from coffee_mlops.analysis.pipeline import build_analysis
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.ml.features import build_features
-from coffee_mlops.ml.registry import ServedModel
+from mlops_core.analysis import pipeline
+from mlops_core.analysis.pipeline import build_analysis
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.ml.features import build_features
+from mlops_core.ml.registry import ServedModel
 from tests.fakes import ConstantModel
 
 DASHBOARD = Path(pipeline.__file__).with_name("dashboard.py")

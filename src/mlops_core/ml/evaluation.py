@@ -13,7 +13,7 @@ import numpy as np
 import polars as pl
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
-from coffee_mlops.config import ModelSpec
+from mlops_core.config import ModelSpec
 
 
 @dataclass(frozen=True)

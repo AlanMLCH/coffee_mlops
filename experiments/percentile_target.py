@@ -15,11 +15,11 @@ import mlflow
 import numpy as np
 from scipy.stats import spearmanr
 
-from coffee_mlops.config import Settings, load_domain_config
-from coffee_mlops.ml.evaluation import absolute_errors
-from coffee_mlops.ml.targets import percentile_within, points_from_percentile
-from coffee_mlops.ml.train import build_pipeline, fit_params, temporal_split, xy
-from coffee_mlops.storage import read_table
+from mlops_core.config import Settings, load_domain_config
+from mlops_core.ml.evaluation import absolute_errors
+from mlops_core.ml.targets import percentile_within, points_from_percentile
+from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
+from mlops_core.storage import read_table
 
 PARAMS = {"n_estimators": 300, "learning_rate": 0.03, "num_leaves": 15, "min_child_samples": 10}
 

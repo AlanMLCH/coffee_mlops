@@ -12,10 +12,10 @@ from pathlib import Path
 import pandera.polars as pa
 import polars as pl
 
-from coffee_mlops.config import DomainConfig, ModelSpec
-from coffee_mlops.contracts import check_contract
-from coffee_mlops.ml.registry import ServedModel, load_champion
-from coffee_mlops.storage import latest_partition, read_table, write_table
+from mlops_core.config import DomainConfig, ModelSpec
+from mlops_core.contracts import check_contract
+from mlops_core.ml.registry import ServedModel, load_champion
+from mlops_core.storage import latest_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 

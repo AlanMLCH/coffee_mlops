@@ -21,9 +21,9 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel
 
-from coffee_mlops.config import DomainConfig, SourceConfig
-from coffee_mlops.data.api import silence_request_urls
-from coffee_mlops.storage import MANIFEST_NAME, latest_partition, new_partition
+from mlops_core.config import DomainConfig, SourceConfig
+from mlops_core.data.api import silence_request_urls
+from mlops_core.storage import MANIFEST_NAME, latest_partition, new_partition
 
 logger = logging.getLogger(__name__)
 

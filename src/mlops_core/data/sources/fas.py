@@ -28,9 +28,9 @@ from typing import Any
 
 import polars as pl
 
-from coffee_mlops.config import FasConfig
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.extract import RawArtifact, store_payload
+from mlops_core.config import FasConfig
+from mlops_core.data.api import ApiClient
+from mlops_core.data.extract import RawArtifact, store_payload
 
 logger = logging.getLogger(__name__)
 

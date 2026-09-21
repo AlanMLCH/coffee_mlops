@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from coffee_mlops.analysis import pipeline
-from coffee_mlops.analysis.pipeline import build_analysis, champion_importance
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.data.clean import build_clean
-from coffee_mlops.ml.features import build_features
-from coffee_mlops.ml.predict import batch_predict
-from coffee_mlops.ml.registry import ServedModel
-from coffee_mlops.storage import MANIFEST_NAME, read_table
+from mlops_core.analysis import pipeline
+from mlops_core.analysis.pipeline import build_analysis, champion_importance
+from mlops_core.config import DomainConfig
+from mlops_core.data.clean import build_clean
+from mlops_core.ml.features import build_features
+from mlops_core.ml.predict import batch_predict
+from mlops_core.ml.registry import ServedModel
+from mlops_core.storage import MANIFEST_NAME, read_table
 from tests.fakes import ConstantModel
 
 AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
@@ -79,7 +79,7 @@ def test_residuals_appear_once_there_are_predictions(
     before = build_analysis(analysis_config, data_dir, "sqlite:///unused", at=AT)
     assert "residuals" not in before.tables
 
-    monkeypatch.setattr("coffee_mlops.ml.predict.load_champion", lambda *a, **k: champion)
+    monkeypatch.setattr("mlops_core.ml.predict.load_champion", lambda *a, **k: champion)
     batch_predict(analysis_config, data_dir, "sqlite:///unused")
     after = build_analysis(
         analysis_config, data_dir, "sqlite:///unused", at=datetime(2026, 9, 21, 12, tzinfo=UTC)

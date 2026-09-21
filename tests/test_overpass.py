@@ -13,10 +13,10 @@ from typing import Any
 import httpx
 import pytest
 
-from coffee_mlops.config import OverpassConfig
-from coffee_mlops.data.api import ApiClient
-from coffee_mlops.data.sources.overpass import COUNT, build_query, fetch, ingest_places
-from coffee_mlops.storage import MANIFEST_NAME
+from mlops_core.config import OverpassConfig
+from mlops_core.data.api import ApiClient
+from mlops_core.data.sources.overpass import COUNT, build_query, fetch, ingest_places
+from mlops_core.storage import MANIFEST_NAME
 
 # A real answer, trimmed: three cafes mapped as nodes and two mapped as buildings.
 FIXTURE = Path(__file__).parent / "fixtures" / "overpass_cafes_sample.json"

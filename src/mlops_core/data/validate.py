@@ -19,12 +19,12 @@ from typing import Any
 
 import polars as pl
 
-from coffee_mlops.config import DomainConfig, SourceConfig
-from coffee_mlops.contracts import check_contract
-from coffee_mlops.data.extract import RawArtifact, latest_ingestion
-from coffee_mlops.data.geo import read_areas
-from coffee_mlops.data.schemas import RAW_SCHEMAS
-from coffee_mlops.data.sources import denue, fas, overpass
+from mlops_core.config import DomainConfig, SourceConfig
+from mlops_core.contracts import check_contract
+from mlops_core.data.extract import RawArtifact, latest_ingestion
+from mlops_core.data.geo import read_areas
+from mlops_core.data.schemas import RAW_SCHEMAS
+from mlops_core.data.sources import denue, fas, overpass
 
 logger = logging.getLogger(__name__)
 

@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 import polars as pl
 from sklearn.inspection import permutation_importance
 
-from coffee_mlops.analysis.figures import render_all
-from coffee_mlops.analysis.studies import (
+from mlops_core.analysis.figures import render_all
+from mlops_core.analysis.studies import (
     categorical_profile,
     feature_recommendation,
     market_history,
@@ -29,10 +29,10 @@ from coffee_mlops.analysis.studies import (
     residuals_by_group,
     target_distribution,
 )
-from coffee_mlops.config import DomainConfig
-from coffee_mlops.ml.registry import load_champion
-from coffee_mlops.ml.train import temporal_split, xy
-from coffee_mlops.storage import latest_partition, new_partition, read_table, write_table
+from mlops_core.config import DomainConfig
+from mlops_core.ml.registry import load_champion
+from mlops_core.ml.train import temporal_split, xy
+from mlops_core.storage import latest_partition, new_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 

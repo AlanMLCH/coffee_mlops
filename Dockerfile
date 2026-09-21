@@ -25,4 +25,4 @@ RUN useradd --create-home --uid 10001 api     && mkdir /cache     && chown -R ap
 USER api
 
 EXPOSE 8000
-CMD ["uvicorn", "coffee_mlops.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "mlops_core.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]

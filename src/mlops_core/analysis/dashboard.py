@@ -5,7 +5,7 @@ evidence on disk, stamped with the partition it came from, and every table can b
 downloaded as the same CSV the pipeline wrote. Nothing here computes a statistic, so
 the dashboard can never disagree with the tables.
 
-Run it with `make dashboard` (or `streamlit run src/coffee_mlops/analysis/dashboard.py`).
+Run it with `make dashboard` (or `streamlit run src/mlops_core/analysis/dashboard.py`).
 """
 
 import json
@@ -14,8 +14,8 @@ from pathlib import Path
 import polars as pl
 import streamlit as st
 
-from coffee_mlops.config import Settings, load_domain_config
-from coffee_mlops.storage import MANIFEST_NAME, latest_partition
+from mlops_core.config import Settings, load_domain_config
+from mlops_core.storage import MANIFEST_NAME, latest_partition
 
 ANALYSIS = "analysis"
 FIGURES = "figures"
