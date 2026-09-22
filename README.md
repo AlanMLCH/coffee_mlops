@@ -60,6 +60,101 @@ Everything runs locally. No cloud, no recurring costs.
 
 ## Architecture
 
+The whole flow, from each source to what reads the model. Blue is the generic core
+(`mlops_core`), orange is what the coffee domain supplies (its config, its adapter and
+the tables it defines), grey is where data is stored, and dashed is planned for stage 3.
+Every step is its own command; Dagster runs the same functions as one graph per domain.
+
+```mermaid
+flowchart TD
+    subgraph SOURCES["External sources, declared in domains/coffee/config.yaml"]
+        direction LR
+        subgraph FILES["Files, downloaded as they are"]
+            direction TB
+            cqi_2018["cqi_2018<br/>CQI 2018 · CSV"]
+            cqi_2023["cqi_2023<br/>CQI 2023 · ZIP"]
+            psd_coffee["psd_coffee<br/>USDA PSD · ZIP"]
+            siap_agricola["siap_agricola<br/>SIAP · CSV in Latin-1"]
+            cdmx_boroughs["cdmx_boroughs<br/>INEGI · shapefile ZIP"]
+        end
+        subgraph APIS["APIs, which need code"]
+            direction TB
+            denue_cafes["denue_cafes<br/>DENUE · token in path, paged"]
+            osm_places["osm_places<br/>Overpass · one query"]
+            fas_psd_coffee["fas_psd_coffee<br/>USDA FAS · key in header, by year"]
+        end
+        subgraph LATER["Stage 3, planned"]
+            direction TB
+            roasters["roaster shops<br/>scraping"]
+            documents["technical documents<br/>cultivation · processing · roasting"]
+        end
+    end
+
+    extract_files["mlops data extract<br/>stream the file, de-duplicate by sha256"]
+    extract_apis["adapter.extract<br/>ApiClient: rate limit, retries, expiring cache"]
+    raw[("raw/<br/>untouched bytes + manifest<br/>one partition per ingestion")]
+    validate[["validate<br/>one Pandera contract per source<br/>CSV · map layer · API JSON"]]
+
+    subgraph CLEAN["clean/ : adapter.clean, held to strict contracts by the core"]
+        direction LR
+        coffee_reviews["coffee_reviews<br/>graded lots: the items"]
+        market_context["market_context<br/>country × market year"]
+        mexico_production["mexico_production<br/>municipality × year"]
+        boroughs["boroughs<br/>16 polygons as WKB"]
+        coffee_shops["coffee_shops<br/>kind · borough · twin link"]
+    end
+    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
+
+    review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
+    train["mlops ml train<br/>temporal split · Optuna on<br/>time-ordered CV · LightGBM"]
+    gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion"}}
+    mlflow[("MLflow<br/>runs + registry<br/>alias: champion")]
+
+    subgraph USE["What reads the model and the layers"]
+        direction LR
+        review_predictions[("predictions/review_predictions<br/>batch scores + model version")]
+        api["FastAPI POST /predict<br/>the adapter's request model<br/>the same enrich"]
+        analysis["mlops analysis run<br/>core studies + the domain's"]
+        dashboard["Streamlit dashboard"]
+        catalog[("DuckDB views over the<br/>newest partitions: mlops sql")]
+    end
+
+    subgraph AI["Stage 3, planned: RAG and agent"]
+        direction LR
+        corpus["corpus in English<br/>translated first if Spanish-only"]
+        vectors[("chunks + embeddings<br/>vector DB")]
+        agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
+    end
+
+    FILES --> extract_files
+    APIS --> extract_apis
+    extract_files & extract_apis --> raw
+    raw --> validate --> CLEAN
+    CLEAN --- audits
+    coffee_reviews & market_context --> review_features
+    review_features --> train --> gate
+    gate -- "promoted only if it wins" --> mlflow
+    review_features & mlflow --> review_predictions
+    mlflow --> api
+    market_context --> api
+    review_predictions --> analysis --> dashboard
+    CLEAN & review_features & review_predictions & analysis -.-> catalog
+
+    LATER -.-> corpus -.-> vectors -.-> agent
+    catalog -.-> agent
+    api -.-> agent
+
+    classDef core fill:#dbe9fb,stroke:#2a78d6,color:#111
+    classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
+    classDef store fill:#eeeeea,stroke:#898781,color:#111
+    classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
+    class extract_files,validate,train,gate,api,analysis,dashboard core
+    class extract_apis,review_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
+    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee domain
+    class raw,mlflow,review_predictions,catalog store
+    class roasters,documents,corpus,vectors,agent planned
+```
+
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
 ask it to: every step is its own command, reading the previous step's output from disk.
 
