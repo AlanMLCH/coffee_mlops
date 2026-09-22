@@ -85,6 +85,24 @@ both can avoid counting one place twice.
 > `coffee` agrees with OSM's tag 142 times out of 142, and finds 79% of the cafes OSM
 > knows (`analysis.kind_scores`); `unclassified` names are where the rest hide.
 
+## `clean.mexico_production` — coffee grown in one Mexican municipality, one year
+
+SIAP's closing agricultural statistics (definitive, not the monthly advance), crop
+5710000 *Café cereza*. 489 rows for 2025. SIAP splits a municipality by district, CADER
+and water regime; those rows are summed, and yield and price derived from the totals.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `year` | Int | Agricultural year of the closing statistics |
+| `state_id`, `state` | String | INEGI state code (zero-padded) and name |
+| `municipality_id` | String | INEGI CVEGEO (state + municipality), the key the boundary layers use |
+| `municipality` | String | As SIAP spells it |
+| `planted_ha`, `harvested_ha`, `lost_ha` | Float | Hectares planted, harvested, and lost to weather or pests |
+| `production_t` | Float | Tonnes of **cherry**, not green coffee - several times the weight |
+| `value_mxn` | Float | Value at the rural price, pesos |
+| `yield_t_per_ha` | Float? | `production_t / harvested_ha`; null when nothing was harvested |
+| `rural_price_mxn_per_t` | Float? | `value_mxn / production_t`; null when nothing was produced |
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**

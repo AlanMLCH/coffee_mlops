@@ -35,12 +35,18 @@ class ValidatedSource:
 
 
 def read_raw(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
-    """Read a raw file with every column as text; the schema does the typing."""
+    """Read a raw file with every column as text; the schema does the typing.
+
+    The raw file stays in its own encoding on disk (the raw layer never transforms);
+    it is decoded here, on read, because polars parses UTF-8 only.
+    """
     if source.member is None:
         data = artifact.path.read_bytes()
     else:
         with zipfile.ZipFile(artifact.path) as archive:
             data = archive.read(source.member)
+    if source.encoding.replace("-", "").lower() != "utf8":
+        data = data.decode(source.encoding).encode("utf-8")
     return pl.read_csv(data, infer_schema_length=0, null_values=source.null_values or None)
 
 

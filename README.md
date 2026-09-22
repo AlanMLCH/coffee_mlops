@@ -32,6 +32,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
 | [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` (1,125) or `ice_cream` (232) in Mexico City | 1,357 | Overpass API, no credential |
 | [USDA FAS Open Data](https://apps.fas.usda.gov/opendataweb/) (stage 2) | The same PSD coffee balance, by market year, through an API | 87,704 | API key in a header, free |
+| [SIAP cierre agrícola](https://nube.agricultura.gob.mx/datosAbiertos/Agricola.php) (stage 2) | Every crop in every Mexican municipality, 2025; coffee cherry in 489 of them | 35,902 | Direct download, Latin-1 |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
@@ -251,6 +252,24 @@ parlours are in both registers (3) to score that rule at all.
 
 Nothing is dropped: filter `kind = 'coffee'` for the coffee view, and use
 `matched_shop_id` to count a place both registers list only once.
+
+## Where Mexico grows it (stage 2)
+
+`clean.mexico_production` is SIAP's definitive 2025 figures for coffee cherry, one row
+per municipality. The chain from farm to cup now spans the project: who grows it here,
+what the world market does with it (PSD), and where the city drinks it (DENUE, OSM).
+
+![Where Mexico grows its coffee](docs/figures/mexico_production.png)
+
+Four states grow 91% of it - Chiapas 37%, Veracruz 25%, Puebla 21%, Oaxaca 9% - but they
+are not paid alike. Value over volume, a tonne of cherry fetched **$13,970 in Puebla and
+$5,482 in Chiapas**: the largest producer earns the least per tonne.
+
+SIAP weighs cherry as picked; PSD counts green coffee ready to export. Set side by side
+(`analysis.production_crosscheck`), 1.07 million tonnes of cherry against PSD's 235,680-
+244,800 t of green coffee means 4.4-4.5 t of cherry per tonne of green, depending on
+whether PSD's market year is aligned with SIAP's year or with the one before. That is
+the factor the two would need for both to be right; it is shown, not assumed.
 
 ## Results (stage 1)
 

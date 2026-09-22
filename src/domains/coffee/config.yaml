@@ -54,6 +54,17 @@ sources:
       name_column: NOMGEO
       expected_features: 16 # the 16 alcaldias
 
+  # SIAP's closing agricultural statistics for 2025: every crop in every municipality,
+  # the definitive figures (not the monthly advance). Verified 2026-09-21: 35,902 rows,
+  # 314 crops; coffee is crop 5710000 "Café cereza" in tonnes, 501 rows in 489
+  # municipalities of 15 states. One file per year (2003-2025) at the same URL with a
+  # different ANIO; this is the latest.
+  siap_agricola:
+    url: https://nube.agricultura.gob.mx/index.php?view=10AE434F-A2158368-A120BC5A-EDF4AFAA&ANIO=2025
+    filename: Cierre_agricola_mun_2025.csv
+    # Latin-1, and nothing in the file says so. Read as UTF-8 it fails on "Otoño".
+    encoding: latin-1
+
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
 denue:
@@ -229,6 +240,16 @@ training:
   recalibration_window: 30
   registered_model: coffee-total-cup-points
 
+# Mexico's own coffee, from SIAP: which crop to read and in what unit. A different
+# name or unit for the same id stops the run - it would change what the numbers mean.
+production:
+  crop_id: "5710000"
+  crop: Café cereza # cherry, not green coffee: roughly four to five times the weight
+  unit: Tonelada
+  # The country whose world-market balance (PSD, in 60 kg bags of green coffee) the
+  # municipal totals are set against.
+  country: Mexico
+
 # The studies every domain gets: profiles, drift, feature evidence, residuals.
 analysis:
   # Groups and levels smaller than this are not reported: the numbers would be noise.
@@ -246,6 +267,7 @@ analysis:
     - residual_bias
     - market_history
     - shop_kinds
+    - mexico_production
 
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:

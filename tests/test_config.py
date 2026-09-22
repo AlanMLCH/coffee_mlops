@@ -13,7 +13,13 @@ def test_coffee_config_declares_its_file_sources() -> None:
     config = load_adapter("coffee").config
 
     assert config.name == "coffee"
-    assert set(config.sources) == {"cqi_2018", "cqi_2023", "psd_coffee", "cdmx_boroughs"}
+    assert set(config.sources) == {
+        "cqi_2018",
+        "cqi_2023",
+        "psd_coffee",
+        "cdmx_boroughs",
+        "siap_agricola",
+    }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
     assert boundaries.spatial is not None

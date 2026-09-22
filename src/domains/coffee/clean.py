@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import polars as pl
 from polars.expr.whenthen import ChainedThen, Then
 
-from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ShopKindRule
+from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ProductionConfig, ShopKindRule
 from domains.coffee.schemas import (
     PSD_ATTRIBUTES,
     SENSORY_COLUMNS,
@@ -385,8 +385,52 @@ def _report_placement(placed: pl.DataFrame) -> None:
     )
 
 
+def clean_mexico_production(siap: pl.DataFrame, crop: ProductionConfig) -> pl.DataFrame:
+    """SIAP's coffee rows, summed to one row per municipality and year.
+
+    SIAP splits a municipality by rural development district, CADER and water regime,
+    so a municipality can appear several times (Ocosingo, Chiapas, is in three CADERs).
+    The totals are summed first and yield and price derived from them afterwards: an
+    average of the rows' own yields would weight a 30 ha plot like a 3,000 ha one.
+    """
+    coffee = siap.filter(pl.col("Idcultivo") == crop.crop_id)
+    if coffee.is_empty():
+        raise ValueError(f"SIAP has no rows for crop {crop.crop_id}: check `production.crop_id`")
+    for column, expected in (("Nomcultivo", crop.crop), ("Nomunidad", crop.unit)):
+        found = set(coffee[column])
+        if found != {expected}:
+            # Same id, another name or unit: the numbers would silently mean something else.
+            raise ValueError(
+                f"SIAP crop {crop.crop_id} has {column} {sorted(found)}, expected {expected}"
+            )
+    totals = coffee.group_by(
+        pl.col("Anio").alias("year"),
+        pl.col("Idestado").cast(pl.String).str.zfill(2).alias("state_id"),
+        pl.col("Nomestado").alias("state"),
+        (
+            pl.col("Idestado").cast(pl.String).str.zfill(2)
+            + pl.col("Idmunicipio").cast(pl.String).str.zfill(3)
+        ).alias("municipality_id"),
+        pl.col("Nommunicipio").alias("municipality"),
+    ).agg(
+        pl.col("Sembrada").sum().alias("planted_ha"),
+        pl.col("Cosechada").sum().alias("harvested_ha"),
+        pl.col("Siniestrada").sum().alias("lost_ha"),
+        pl.col("Volumenproduccion").sum().alias("production_t"),
+        pl.col("Valorproduccion").sum().alias("value_mxn"),
+    )
+    return totals.with_columns(
+        pl.when(pl.col("harvested_ha") > 0)
+        .then(pl.col("production_t") / pl.col("harvested_ha"))
+        .alias("yield_t_per_ha"),
+        pl.when(pl.col("production_t") > 0)
+        .then(pl.col("value_mxn") / pl.col("production_t"))
+        .alias("rural_price_mxn_per_t"),
+    ).sort("municipality_id", "year")
+
+
 def clean_tables(
-    frames: Mapping[str, pl.DataFrame], rules: CleaningConfig
+    frames: Mapping[str, pl.DataFrame], rules: CleaningConfig, crop: ProductionConfig
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's four clean tables, each with its sources."""
     if "fas_psd_coffee" in frames:  # absent without a key, and nothing depends on it
@@ -399,4 +443,7 @@ def clean_tables(
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),
         "boroughs": CleanTable(clean_boroughs(areas), ("cdmx_boroughs",)),
         "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
+        "mexico_production": CleanTable(
+            clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)
+        ),
     }

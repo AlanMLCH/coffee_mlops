@@ -79,7 +79,7 @@ class CoffeeAdapter:
     def clean(self, raw: Mapping[str, pl.DataFrame]) -> Mapping[str, CleanTable]:
         from domains.coffee.clean import clean_tables
 
-        return clean_tables(raw, self.config.cleaning)
+        return clean_tables(raw, self.config.cleaning, self.config.production)
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
         return clean_schemas(self.config.cleaning)
@@ -96,7 +96,7 @@ class CoffeeAdapter:
     def studies(self, clean: Mapping[str, pl.DataFrame]) -> Mapping[str, pl.DataFrame]:
         from domains.coffee.analysis import studies
 
-        return studies(clean, self.config.market_analysis)
+        return studies(clean, self.config.market_analysis, self.config.production)
 
     def figures(self, tables: Mapping[str, pl.DataFrame]) -> Mapping[str, Figure]:
         from domains.coffee.analysis import figures

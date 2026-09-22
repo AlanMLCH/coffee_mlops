@@ -53,6 +53,7 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
         "cqi_2023",
         "psd_coffee",
         "cdmx_boroughs",
+        "siap_agricola",
         "osm_places",
     }
 
@@ -80,6 +81,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "market_context",
         "boroughs",
         "coffee_shops",
+        "mexico_production",
     }
 
 
@@ -103,6 +105,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "market_context",
         "boroughs",
         "coffee_shops",
+        "mexico_production",
     }
 
 
@@ -277,7 +280,8 @@ def test_analysis_run_writes_studies_and_publishes_figures(
     assert {path.name for path in published.iterdir()} == {
         "target_distribution.png",
         "feature_importance.png",
-        "market_history.png",  # residual_bias needs predictions, which this run has none of
+        "market_history.png",
+        "mexico_production.png",  # residual_bias needs predictions, which this run lacks
     }
 
 

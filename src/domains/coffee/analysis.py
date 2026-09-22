@@ -11,14 +11,16 @@ from collections.abc import Mapping
 import polars as pl
 from matplotlib.figure import Figure
 
-from domains.coffee.config import UNCLASSIFIED, MarketAnalysisConfig
+from domains.coffee.config import UNCLASSIFIED, MarketAnalysisConfig, ProductionConfig
 from mlops_core.analysis.figures import MUTED, SECONDARY, SERIES, canvas, value_grid
 
 COFFEE = "coffee"  # the kind the whole thesis is about
+# PSD counts thousands of 60 kg bags: one thousand bags is 60 tonnes.
+TONNES_PER_THOUSAND_BAGS = 60.0
 
 
 def studies(
-    clean: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig
+    clean: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig, crop: ProductionConfig
 ) -> dict[str, pl.DataFrame]:
     """The domain's studies: the world market, and the city's places."""
     context, shops = clean["market_context"], clean["coffee_shops"]
@@ -29,6 +31,10 @@ def studies(
         "shop_kinds": shop_kinds(shops),
         "kind_agreement": agreement,
         "kind_scores": kind_scores(agreement),
+        "production_by_state": production_by_state(clean["mexico_production"]),
+        "production_crosscheck": production_crosscheck(
+            clean["mexico_production"], context, crop.country
+        ),
     }
 
 
@@ -41,6 +47,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
         drawn["market_history"] = market_history_figure(
             tables["market_history"], market.spotlight_country
         )
+    if not tables["production_by_state"].is_empty():
+        drawn["mexico_production"] = production_figure(tables["production_by_state"])
     denue = tables["shop_kinds"].filter(pl.col("source") == "denue")
     if not denue.is_empty():
         drawn["shop_kinds"] = shop_kinds_figure(denue)
@@ -215,5 +223,90 @@ def market_history_figure(table: pl.DataFrame, country: str) -> Figure:
     ax.set_xticks(years[:: max(len(years) // 6, 1)])
     ax.set_xlim(min(years) - 0.3, max(years) + (max(years) - min(years)) * 0.28)
     value_grid(ax, axis="y")
+    figure.tight_layout()
+    return figure
+
+
+def production_by_state(production: pl.DataFrame) -> pl.DataFrame:
+    """Where Mexico grows its coffee: each state's cherry, its share, and its price.
+
+    The price is value over volume of the state's totals - the average a tonne actually
+    fetched there - not a mean of municipal prices.
+    """
+    return (
+        production.group_by("year", "state")
+        .agg(
+            pl.len().alias("municipalities"),
+            pl.col("planted_ha").sum(),
+            pl.col("production_t").sum(),
+            pl.col("value_mxn").sum(),
+        )
+        .with_columns(
+            (100 * pl.col("production_t") / pl.col("production_t").sum().over("year")).alias(
+                "share_pct"
+            ),
+            pl.when(pl.col("production_t") > 0)
+            .then(pl.col("value_mxn") / pl.col("production_t"))
+            .alias("rural_price_mxn_per_t"),
+        )
+        .sort("year", "production_t", descending=[False, True])
+    )
+
+
+def production_crosscheck(
+    production: pl.DataFrame, context: pl.DataFrame, country: str
+) -> pl.DataFrame:
+    """SIAP's national cherry total against PSD's green coffee for the same country.
+
+    The two measure different things - SIAP weighs cherry as picked, PSD green coffee
+    ready to export - so they should differ by a steady factor, the weight lost in
+    processing. That factor is not asserted here; the table shows what it would have
+    to be for the two sources to agree, for PSD's market year labelled like SIAP's year
+    and for the one before (their calendars are not documented as aligned).
+    """
+    national = production.group_by("year").agg(pl.col("production_t").sum().alias("siap_cherry_t"))
+    psd = context.filter(pl.col("country") == country).select(
+        pl.col("market_year").alias("psd_market_year"),
+        (pl.col("production") * TONNES_PER_THOUSAND_BAGS).alias("psd_green_t"),
+    )
+    pairs = pl.concat(
+        [national.with_columns((pl.col("year") - lag).alias("psd_market_year")) for lag in (1, 0)]
+    )
+    return (
+        pairs.join(psd, on="psd_market_year", how="inner")
+        .with_columns((pl.col("siap_cherry_t") / pl.col("psd_green_t")).alias("cherry_per_green"))
+        .select(
+            pl.col("year").alias("siap_year"),
+            "psd_market_year",
+            "siap_cherry_t",
+            "psd_green_t",
+            "cherry_per_green",
+        )
+        .sort("siap_year", "psd_market_year")
+    )
+
+
+def production_figure(by_state: pl.DataFrame) -> Figure:
+    """Pure magnitude, one hue, latest year: the states that grow Mexico's coffee."""
+    latest = by_state.filter(pl.col("year") == by_state["year"].max())
+    ranked = latest.sort("production_t")
+    figure, ax = canvas(
+        f"Where Mexico grows its coffee ({latest['year'][0]})",
+        "tonnes of coffee cherry, SIAP closing statistics",
+    )
+    ax.barh(ranked["state"], ranked["production_t"], color=SERIES[0], height=0.62)
+    for state, tonnes, share in zip(
+        ranked["state"], ranked["production_t"], ranked["share_pct"], strict=True
+    ):
+        ax.text(
+            tonnes,
+            state,
+            f"  {tonnes:,.0f} ({share:.0f}%)",
+            va="center",
+            color=SECONDARY,
+            fontsize=9,
+        )
+    ax.margins(x=0.25)
+    value_grid(ax)
     figure.tight_layout()
     return figure

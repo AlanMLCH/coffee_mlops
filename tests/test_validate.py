@@ -40,7 +40,10 @@ def test_recorded_sources_pass_and_come_out_typed(
         "denue_cafes": 3,
         "osm_places": 7,
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
+        "siap_agricola": 13,
     }
+    # Latin-1 on disk, decoded on read: the accents come through as accents.
+    assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()
     assert frames["cdmx_boroughs"]["area_km2"].dtype == pl.Float64
     assert frames["denue_cafes"]["Latitud"].dtype == pl.Float64  # text upstream
     assert frames["osm_places"]["id"].dtype == pl.Int64
@@ -141,3 +144,13 @@ def test_an_api_source_that_was_never_ingested_is_skipped_not_raised(
 
     assert "denue_cafes" not in validated
     assert "osm_places" in validated
+
+
+def test_a_file_in_another_encoding_must_say_so(coffee_config: DomainConfig, raw_dir: Path) -> None:
+    """SIAP is Latin-1 and declares it nowhere: read as UTF-8 it fails, it does not guess."""
+    artifact = latest_ingestion(raw_dir, "siap_agricola")
+    assert artifact is not None
+    as_utf8 = coffee_config.sources["siap_agricola"].model_copy(update={"encoding": "utf-8"})
+
+    with pytest.raises(pl.exceptions.ComputeError):
+        read_raw(artifact, as_utf8)

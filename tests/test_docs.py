@@ -11,6 +11,7 @@ import pytest
 from domains.coffee.schemas import (
     BOROUGHS,
     MARKET_CONTEXT,
+    MEXICO_PRODUCTION,
     coffee_reviews_schema,
     coffee_shops_schema,
 )
@@ -28,6 +29,7 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "coffee_reviews": list(coffee_reviews_schema(coffee_config.cleaning).columns),
         "market_context": list(MARKET_CONTEXT.columns),
         "boroughs": list(BOROUGHS.columns),
+        "mexico_production": list(MEXICO_PRODUCTION.columns),
         "coffee_shops": list(coffee_shops_schema(coffee_config.cleaning).columns),
         "review_features": list(features_schema(coffee_config.items, coffee_config.model).columns),
         "review_predictions": list(predictions_schema(coffee_config.items).columns),
@@ -46,7 +48,15 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
 
 
 @pytest.mark.parametrize(
-    "table", ["coffee_reviews", "market_context", "boroughs", "coffee_shops", "review_features"]
+    "table",
+    [
+        "coffee_reviews",
+        "market_context",
+        "boroughs",
+        "coffee_shops",
+        "mexico_production",
+        "review_features",
+    ],
 )
 def test_each_table_has_its_own_section(table: str) -> None:
     assert f"`{table}`" in DATA_DICTIONARY or f".{table}`" in DATA_DICTIONARY

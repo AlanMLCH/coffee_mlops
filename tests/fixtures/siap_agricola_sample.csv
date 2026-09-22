@@ -1,0 +1,14 @@
+Anio,Idestado,Nomestado,Idddr,Nomddr,Idcader,Nomcader,Idmunicipio,Nommunicipio,Idciclo,Nomcicloproductivo,Idmodalidad,Nommodalidad,Idunidadmedida,Nomunidad,Idcultivo,Nomcultivo,Sembrada,Cosechada,Siniestrada,Volumenproduccion,Rendimiento,Preciomediorural,Valorproduccion
+2025,7,Chiapas,23,Palenque,4,Ocosingo,59,Ocosingo,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,2870,2870,0,4018,1.4,5236.07,21038529.26
+2025,7,Chiapas,27,Selva Lacandona,1,Frontera Corozal/Echeverría,59,Ocosingo,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,1008,1004,0,1134.52,1.13,5489.96,6228469.42
+2025,7,Chiapas,27,Selva Lacandona,3,San Quintín/Tacitas,59,Ocosingo,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,1860,1659,0,2505.09,1.51,5452.27,13658427.05
+2025,30,Veracruz,167,Huayacocotla,1,Huayacocotla,72,Huayacocotla,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,28,25,0,32.5,1.3,7215.38,234499.85
+2025,30,Veracruz,167,Huayacocotla,1,Huayacocotla,76,Ilamatlán,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,192,188,0,240.64,1.28,7336.85,1765539.58
+2025,21,Puebla,111,Huauchinango,1,Xicotepec de Juárez,49,Chiconcuautla,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,1076,1010,0,3232,3.2,14143.64,45712244.48
+2025,21,Puebla,111,Huauchinango,1,Xicotepec de Juárez,68,Hermenegildo Galeana,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,1221,955,0,4330.93,4.54,13948.68,60410773.55
+2025,20,Oaxaca,104,Huajuapan de León,4,Tlaxiaco,20,Constancia del Rosario,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,33,30,0,25.5,0.85,5653.53,144165.02
+2025,20,Oaxaca,104,Huajuapan de León,4,Tlaxiaco,73,Putla Villa de Guerrero,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,2203,2176,0,1914.88,0.88,5499.26,10530422.99
+2025,6,Colima,16,Colima,1,Coquimatlán,10,Villa de Álvarez,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,207,198,0,253.44,1.28,12000,3041280
+2025,6,Colima,16,Colima,2,Comala,3,Comala,3,Perennes,2,Temporal,200201,Tonelada,5710000,Café cereza,1459,1447,0,1866.63,1.29,12000,22399560
+2025,1,Aguascalientes,1,Aguascalientes,1,Aguascalientes,1,Aguascalientes,1,Otoño-Invierno,1,Riego,200201,Tonelada,5490000,Avena forrajera en verde,1500,1500,0,35250,23.5,654,23053500
+2025,1,Aguascalientes,1,Aguascalientes,1,Aguascalientes,1,Aguascalientes,3,Perennes,2,Temporal,200201,Tonelada,5050000,Agave,8,0,0,0,,,0

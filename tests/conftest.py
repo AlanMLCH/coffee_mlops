@@ -76,6 +76,9 @@ def recorded() -> dict[str, bytes]:
         # Shaped like INEGI's download: a shapefile inside a ZIP, Latin-1 attributes,
         # the layer's own projection. Two boroughs instead of sixteen.
         "cdmx_boroughs": (FIXTURES / "cdmx_boroughs_sample.zip").read_bytes(),
+        # SIAP's real bytes, still Latin-1: 11 coffee rows (Ocosingo's three CADERs among
+        # them) and two other crops, one with nothing harvested.
+        "siap_agricola": (FIXTURES / "siap_agricola_sample.csv").read_bytes(),
     }
 
 

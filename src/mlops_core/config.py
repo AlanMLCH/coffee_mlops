@@ -67,6 +67,9 @@ class SourceConfig(BaseModel):
     member: str | None = None
     # Literal strings the upstream uses for missing values (e.g. R writes "NA").
     null_values: list[str] = []
+    # Character set of a table. A government CSV in Latin-1 declares it nowhere, and
+    # read as UTF-8 it fails on the first accented name rather than mangling it.
+    encoding: str = "utf-8"
     # Set when the member is a map layer rather than a table.
     spatial: SpatialConfig | None = None
 

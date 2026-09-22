@@ -189,6 +189,38 @@ AREAS = pa.DataFrameSchema(
     },
 )
 
+
+def _amount(nullable: bool = False) -> pa.Column:
+    return pa.Column(pl.Float64, pa.Check.ge(0), nullable=nullable)
+
+
+# SIAP's closing statistics: one row per district x CADER x municipality x cycle x
+# water regime x crop. No uniqueness is claimed: even that full key repeats twice in the
+# 2025 file, and one municipality can sit in several CADERs (Ocosingo is in three).
+SIAP_AGRICOLA = pa.DataFrameSchema(
+    name="siap_agricola",
+    coerce=True,
+    columns={
+        "Anio": pa.Column(pl.Int64, pa.Check.in_range(2000, 2100)),
+        "Idestado": pa.Column(pl.Int64, pa.Check.in_range(1, 32)),
+        "Nomestado": _text(),
+        "Idmunicipio": pa.Column(pl.Int64, pa.Check.in_range(1, 999)),
+        "Nommunicipio": _text(),
+        "Nommodalidad": _text(),
+        "Idcultivo": _text(),
+        "Nomcultivo": _text(),
+        "Nomunidad": _text(),
+        "Sembrada": _amount(),  # hectares
+        "Cosechada": _amount(),
+        "Siniestrada": _amount(),
+        "Volumenproduccion": _amount(),
+        # Empty where nothing was harvested: a yield or a price of nothing is undefined.
+        "Rendimiento": _amount(nullable=True),
+        "Preciomediorural": _amount(nullable=True),  # MXN per unit
+        "Valorproduccion": _amount(),  # MXN
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -198,6 +230,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "osm_places": OSM_PLACES,
     # The API is held to the file's contract: one table, two ways to reach it.
     "fas_psd_coffee": PSD_COFFEE,
+    "siap_agricola": SIAP_AGRICOLA,
 }
 
 
@@ -318,4 +351,29 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "market_context": MARKET_CONTEXT,
         "boroughs": BOROUGHS,
         "coffee_shops": coffee_shops_schema(rules),
+        "mexico_production": MEXICO_PRODUCTION,
     }
+
+
+MEXICO_PRODUCTION = pa.DataFrameSchema(
+    name="mexico_production",
+    strict=True,
+    unique=["municipality_id", "year"],
+    columns={
+        "year": pa.Column(pl.Int64),
+        "state_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2}$")),
+        "state": pa.Column(pl.String),
+        # INEGI's CVEGEO (state + municipality), the key the boundary layers use.
+        "municipality_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+        "municipality": pa.Column(pl.String),
+        "planted_ha": pa.Column(pl.Float64, pa.Check.ge(0)),
+        "harvested_ha": pa.Column(pl.Float64, pa.Check.ge(0)),
+        "lost_ha": pa.Column(pl.Float64, pa.Check.ge(0)),
+        "production_t": pa.Column(pl.Float64, pa.Check.ge(0)),  # tonnes of cherry
+        "value_mxn": pa.Column(pl.Float64, pa.Check.ge(0)),
+        # Derived from the totals, so they stay right after summing CADERs; null where
+        # the denominator is zero.
+        "yield_t_per_ha": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+        "rural_price_mxn_per_t": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+    },
+)

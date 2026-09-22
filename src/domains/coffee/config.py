@@ -118,6 +118,17 @@ class CleaningConfig(BaseModel):
 UNCLASSIFIED = "unclassified"  # named, but the name says nothing any rule recognises
 
 
+class ProductionConfig(BaseModel):
+    """Which SIAP crop is coffee, and the unit its volume must come in."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    crop_id: str
+    crop: str
+    unit: str
+    country: str  # its PSD name, for setting the municipal totals against the world balance
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -137,4 +148,5 @@ class CoffeeConfig(DomainConfig):
     overpass: OverpassConfig | None = None
     fas: FasConfig | None = None
     cleaning: CleaningConfig
+    production: ProductionConfig
     market_analysis: MarketAnalysisConfig

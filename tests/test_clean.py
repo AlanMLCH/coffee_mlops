@@ -13,6 +13,7 @@ from domains.coffee.clean import (
     clean_boroughs,
     clean_coffee_shops,
     clean_market_context,
+    clean_mexico_production,
     clean_reviews,
     parse_grading_date,
     reconcile_market_sources,
@@ -196,7 +197,13 @@ def test_build_clean_writes_both_tables_with_lineage(
     data_dir = raw_dir.parent
     paths = build_clean(coffee_adapter, data_dir, at=datetime(2026, 9, 19, tzinfo=UTC))
 
-    assert set(paths) == {"coffee_reviews", "market_context", "boroughs", "coffee_shops"}
+    assert set(paths) == {
+        "coffee_reviews",
+        "market_context",
+        "boroughs",
+        "coffee_shops",
+        "mexico_production",
+    }
     assert read_table(data_dir / "clean" / "coffee_reviews").height == 25
     manifest = json.loads((paths["coffee_reviews"].parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"cqi_2018", "cqi_2023"}
@@ -401,3 +408,63 @@ def test_a_place_both_registers_list_is_linked_both_ways(frames: Frames) -> None
     }
     kinds = dict(zip(table["kind_basis"], table["kind"], strict=True))
     assert kinds == {"name": "coffee", "tag": "coffee"}
+
+
+CROP = domains.coffee.adapter().config.production
+
+
+def test_a_municipality_split_across_districts_becomes_one_row(frames: Frames) -> None:
+    """Ocosingo sits in three CADERs of two districts: one municipality, summed."""
+    production = clean_mexico_production(frames["siap_agricola"], CROP)
+
+    ocosingo = production.filter(pl.col("municipality_id") == "07059").row(0, named=True)
+    assert production["municipality_id"].is_unique().all()
+    assert ocosingo["planted_ha"] == 2870 + 1008 + 1860
+    # Yield from the totals, not an average of the rows' own yields.
+    assert ocosingo["yield_t_per_ha"] == pytest.approx(
+        ocosingo["production_t"] / ocosingo["harvested_ha"]
+    )
+    assert "Avena forrajera en verde" not in production["municipality"].to_list()
+
+
+def test_the_municipal_key_is_inegis(frames: Frames) -> None:
+    """Zero-padded to CVEGEO, so the table joins INEGI's boundary layers."""
+    production = clean_mexico_production(frames["siap_agricola"], CROP)
+
+    comala = production.filter(pl.col("municipality") == "Comala").row(0, named=True)
+    assert (comala["state_id"], comala["municipality_id"]) == ("06", "06003")
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        pytest.param("Nomunidad", "Kilogramo", "Nomunidad", id="unit-changed"),
+        pytest.param("Nomcultivo", "Café pergamino", "Nomcultivo", id="crop-renamed"),
+    ],
+)
+def test_the_same_crop_id_meaning_something_else_stops_the_run(
+    frames: Frames, column: str, value: str, message: str
+) -> None:
+    changed = frames["siap_agricola"].with_columns(pl.lit(value).alias(column))
+
+    with pytest.raises(ValueError, match=message):
+        clean_mexico_production(changed, CROP)
+
+
+def test_a_crop_siap_does_not_carry_says_where_to_look(frames: Frames) -> None:
+    other = CROP.model_copy(update={"crop_id": "0000000"})
+
+    with pytest.raises(ValueError, match=r"production.crop_id"):
+        clean_mexico_production(frames["siap_agricola"], other)
+
+
+def test_nothing_harvested_means_no_yield_rather_than_zero(frames: Frames) -> None:
+    unharvested = set_first(
+        frames["siap_agricola"].filter(pl.col("Idcultivo") == CROP.crop_id), "Cosechada", 0.0
+    )
+    unharvested = set_first(unharvested, "Volumenproduccion", 0.0)
+    only_first = unharvested.head(1)
+
+    row = clean_mexico_production(only_first, CROP).row(0, named=True)
+
+    assert (row["yield_t_per_ha"], row["rural_price_mxn_per_t"]) == (None, None)

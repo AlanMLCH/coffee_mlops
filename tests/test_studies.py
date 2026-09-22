@@ -8,6 +8,8 @@ from domains.coffee.analysis import (
     kind_scores,
     market_history,
     market_summary,
+    production_by_state,
+    production_crosscheck,
     shop_kinds,
 )
 from mlops_core.analysis.studies import (
@@ -258,3 +260,45 @@ def test_with_no_shared_places_there_is_no_score_rather_than_a_zero() -> None:
 
     assert scores["value"].to_list() == [None, None]
     assert scores["of"].to_list() == [0, 0]
+
+
+def production_frame() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "year": [2025, 2025, 2025],
+            "state": ["Chiapas", "Chiapas", "Puebla"],
+            "planted_ha": [100.0, 50.0, 30.0],
+            "production_t": [300.0, 100.0, 100.0],
+            "value_mxn": [1_500.0, 500.0, 1_400.0],
+        }
+    )
+
+
+def test_production_is_shared_by_state_with_the_price_a_tonne_fetched() -> None:
+    table = production_by_state(production_frame())
+
+    chiapas = table.row(0, named=True)
+    assert (chiapas["state"], chiapas["municipalities"], chiapas["share_pct"]) == (
+        "Chiapas",
+        2,
+        80.0,
+    )
+    # Value over volume of the totals: 2,000 / 400, not the mean of the rows' prices.
+    assert chiapas["rural_price_mxn_per_t"] == 5.0
+
+
+def test_siap_cherry_is_set_against_psd_green_for_two_alignments() -> None:
+    """The factor between them is shown, not assumed; so is the alignment question."""
+    context = pl.DataFrame(
+        {
+            "country": ["Mexico", "Mexico", "Brazil"],
+            "market_year": [2024, 2025, 2025],
+            "production": [2.0, 4.0, 900.0],
+        }
+    )
+
+    check = production_crosscheck(production_frame(), context, "Mexico")
+
+    assert check["psd_market_year"].to_list() == [2024, 2025]
+    assert check["psd_green_t"].to_list() == [120.0, 240.0]  # thousands of 60 kg bags
+    assert check["cherry_per_green"].to_list() == pytest.approx([500 / 120, 500 / 240])
