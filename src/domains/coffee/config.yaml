@@ -71,14 +71,16 @@ denue:
   # updated a few times a year, so a day costs nothing and a forever cache costs truth.
   cache_hours: 24
 
-# Stage 2, no credential. Verified against the live API on 2026-09-20: 1,125 elements
-# tagged amenity=cafe in Mexico City (1,031 nodes, 94 ways, 0 relations).
+# Stage 2, no credential. Verified against the live API on 2026-09-21: 1,125 elements
+# tagged amenity=cafe in Mexico City (1,031 nodes, 94 ways, 0 relations) and 232 tagged
+# amenity=ice_cream. The ice-cream parlours are pulled because DENUE's class counts them
+# too: OSM's tag is the independent evidence the name rule below is scored against.
 overpass:
-  name: osm_cafes
+  name: osm_places
   base_url: https://overpass-api.de/api/interpreter
   area_iso: MX-CMX # ISO 3166-2 code of Mexico City
-  amenity: cafe
-  filename: osm_cafes.json
+  amenities: [cafe, ice_cream]
+  filename: osm_places.json
   # Overpass' own budget, deliberately under the client's 60 s read timeout: when the
   # query is too big we want the server's explanation, not a bare client timeout.
   timeout_s: 50
@@ -147,6 +149,43 @@ cleaning:
     browish-green: brownish
     none: null
 
+  # What a place in DENUE's class 722515 is, read from its name. The class is
+  # "cafeterias, fuentes de sodas, neverias, refresquerias y similares", and juice stands
+  # alone outnumber the ice-cream parlours ten to one. Ordered: the first matching rule
+  # wins, so a school tuck shop called "cafeteria escolar" is a school, and a name that
+  # says coffee is a place that sells coffee whatever else it sells.
+  #
+  # Written before being scored against OSM's tags; the only edits after scoring were
+  # spelling variants of words already here (CAFECITO, CAFFEE, KAFETA, COFFEEFY). The
+  # roasters' names are the ones listed for stage 3 before this data was seen - brands
+  # found only among the misses were deliberately not added, or the recall measured on
+  # those same places would be inflated by construction.
+  shop_kinds:
+    - kind: unnamed
+      pattern: '^(SIN NOMBRE.*|S/N|NINGUNO)?$'
+    - kind: school
+      pattern: '\b(COOPERATIVA|ESCOLAR|ESCUELA|PRIMARIA|SECUNDARIA|PREPARATORIA|KINDER|COLEGIO|JARDIN DE NINOS)\b'
+    - kind: coffee
+      pattern: '\b(CAF+E+\w*|KAFE\w*|COF+E+\w*|ESPRESSO|EXPRESSO|BARISTA|CAPU?CCINO|TOSTADOR\w*|STARBUCKS|CIELITO QUERIDO|PUNTA DEL CIELO|ITALIAN COFFEE|JAROCHO|BUNA|CUCURUCHO|ALMANEGRA|AVELLANEDA|QUENTIN|BOICOT)\b'
+    - kind: tea
+      pattern: '\b(TE|TEA|TES|TETERIA|CHAI|MATCHA)\b'
+    - kind: ice_cream
+      pattern: '\b(NEVERIA|NIEVES?|HELADOS?|HELADERIA|PALETERIA|PALETAS|GELATO|GELATERIA|MICHOACANA|HOLANDA|DOLPHY|YOGURT|FROZEN)\b'
+    - kind: juice
+      pattern: '\b(JUGOS?|JUGUERIA|LICUADOS?|AGUAS FRESCAS|SMOOTHIES?|ZUMOS?|FRUTAS|ESQUIMOS?)\b'
+    - kind: soda_fountain
+      pattern: '\b(FUENTES? DE SODAS|SODAS)\b'
+  # OSM's own tag decides the kind of its places; the name rule is scored against it.
+  osm_kinds:
+    cafe: coffee
+    ice_cream: ice_cream
+  # The same place in both registers: points this close, names this alike, and each the
+  # other's best candidate. 60 m and 0.88 kept every sampled pair a true one; see
+  # analysis.kind_agreement for what the name rule scores on the places they share.
+  register_match:
+    radius_m: 60
+    min_name_similarity: 0.88
+
 # What the model sees. Fitted transforms (encoding, rare-category grouping) live in
 # the model pipeline, learned on the training split only.
 model:
@@ -206,6 +245,7 @@ analysis:
     - feature_importance
     - residual_bias
     - market_history
+    - shop_kinds
 
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:

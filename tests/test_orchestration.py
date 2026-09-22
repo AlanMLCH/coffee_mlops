@@ -100,7 +100,7 @@ def test_every_asset_runs_its_own_pipeline_step(
     # The orchestrator pulls the API sources too, through the domain's adapter, or DENUE
     # and OSM would arrive only when someone typed the command.
     extract = Stub(
-        ApiExtraction(artifacts={"osm_cafes": artifact}, skipped={"denue_cafes": "no token"})
+        ApiExtraction(artifacts={"osm_places": artifact}, skipped={"denue_cafes": "no token"})
     )
     monkeypatch.setattr(coffee_adapter, "extract", extract)
     stubs = {

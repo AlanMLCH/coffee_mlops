@@ -157,7 +157,7 @@ DENUE_ESTABLISHMENTS = pa.DataFrameSchema(
 
 # One row per OSM element, already flattened out of the element/tags shape.
 OSM_PLACES = pa.DataFrameSchema(
-    name="osm_cafes",
+    name="osm_places",
     coerce=True,
     unique=["type", "id"],
     columns={
@@ -195,7 +195,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "psd_coffee": PSD_COFFEE,
     "cdmx_boroughs": AREAS,
     "denue_cafes": DENUE_ESTABLISHMENTS,
-    "osm_cafes": OSM_PLACES,
+    "osm_places": OSM_PLACES,
     # The API is held to the file's contract: one table, two ways to reach it.
     "fas_psd_coffee": PSD_COFFEE,
 }
@@ -261,6 +261,31 @@ BOROUGHS = pa.DataFrameSchema(
     },
 )
 
+
+def coffee_shops_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """Contract of `coffee_shops`; the kinds a place can have come from the config."""
+    return COFFEE_SHOPS.add_columns(
+        {
+            "kind": pa.Column(pl.String, pa.Check.isin(rules.kinds)),
+            # How the kind was decided: DENUE's name read by the rules, or OSM's own tag.
+            "kind_basis": pa.Column(pl.String, pa.Check.isin(["name", "tag"])),
+            # The same place in the other register, when both list it.
+            # Nulls do not collide: only the links themselves must be one-to-one.
+            "matched_shop_id": pa.Column(
+                pl.String,
+                pa.Check(
+                    lambda data: data.lazyframe.select(
+                        ~pl.col(data.key).drop_nulls().is_duplicated().any()
+                    ),
+                    error="a place is linked to one place at most",
+                ),
+                nullable=True,
+            ),
+        }
+    )
+
+
+# The columns every place has, before its kind is read. `coffee_shops_schema` completes it.
 COFFEE_SHOPS = pa.DataFrameSchema(
     name="coffee_shops",
     strict=True,
@@ -292,5 +317,5 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "coffee_reviews": coffee_reviews_schema(rules),
         "market_context": MARKET_CONTEXT,
         "boroughs": BOROUGHS,
-        "coffee_shops": COFFEE_SHOPS,
+        "coffee_shops": coffee_shops_schema(rules),
     }

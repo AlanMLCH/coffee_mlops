@@ -30,7 +30,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [CQI 2023 snapshot](https://www.kaggle.com/datasets/fatihb/coffee-quality-data-cqi) | Same entity, re-scraped, different schema | 207 | Kaggle public download |
 | [USDA PSD coffee](https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip) | Production, trade, consumption, stocks by country and market year | 87,704 | Direct download |
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
-| [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` in Mexico City, with a point for each | 1,125 | Overpass API, no credential |
+| [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` (1,125) or `ice_cream` (232) in Mexico City | 1,357 | Overpass API, no credential |
 | [USDA FAS Open Data](https://apps.fas.usda.gov/opendataweb/) (stage 2) | The same PSD coffee balance, by market year, through an API | 87,704 | API key in a header, free |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 
@@ -220,8 +220,37 @@ wealthier boroughs, while the official register covers all sixteen. Density from
 alone would measure where mappers live. Both sources are kept side by side, unmerged,
 with a `source` column — deciding which one to believe is analysis, not cleaning.
 
-> DENUE's class 722515 is wider than coffee: it counts soda fountains and ice-cream
-> parlours too. Nothing is filtered by name yet, because no filter has been measured.
+**What DENUE's "cafeterías" class actually holds.** SCIAN 722515 is "cafeterias, soda
+fountains, ice-cream parlours, juice bars and similar", so counting it counts much more
+than coffee. Each place is labelled with a `kind` read from its name by ordered rules in
+the domain config (a school tuck shop called "cafetería escolar" is a school; a name
+that says coffee is a place that sells coffee):
+
+![What DENUE's cafeterias class holds](docs/figures/shop_kinds.png)
+
+Juice stands are a quarter of the class; the ice-cream parlours the class is named after
+are 2%. **The rule is scored, not trusted.** OSM's `amenity` tag was set by someone
+standing in front of the place, independently of how DENUE spells its name, so on the
+183 places both registers list (within 60 m, names at least 0.88 alike, each the other's
+best match) the two can be compared:
+
+| Name rule vs OSM tag, on shared places | Value |
+|---|---|
+| Precision: the rule says coffee, OSM agrees | **142 of 142** |
+| Recall: OSM says cafe, the rule found it | 142 of 180 (79%) |
+
+The misses are names that say nothing a rule can read - *Tierra Garat*, *Camino a
+Comala* - and they live in `unclassified`, which is why it is drawn grey rather than as
+"not coffee": 3,717 named coffee places is a floor, not a count. The rule was written
+before it was scored; the only edits afterwards were spelling variants of words already
+in it (*cafecito*, *caffee*), and brand names found only among the misses were left out
+on purpose, since adding them would raise the recall measured on those same places by
+construction. Shared places are also mostly named, mapped and central, so the scores
+say how the rule does where it can be checked, not everywhere. Too few ice-cream
+parlours are in both registers (3) to score that rule at all.
+
+Nothing is dropped: filter `kind = 'coffee'` for the coffee view, and use
+`matched_shop_id` to count a place both registers list only once.
 
 ## Results (stage 1)
 

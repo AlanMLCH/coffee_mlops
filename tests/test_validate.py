@@ -38,12 +38,12 @@ def test_recorded_sources_pass_and_come_out_typed(
         "psd_coffee": 114,
         "cdmx_boroughs": 16,
         "denue_cafes": 3,
-        "osm_cafes": 5,
+        "osm_places": 7,
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
     }
     assert frames["cdmx_boroughs"]["area_km2"].dtype == pl.Float64
     assert frames["denue_cafes"]["Latitud"].dtype == pl.Float64  # text upstream
-    assert frames["osm_cafes"]["id"].dtype == pl.Int64
+    assert frames["osm_places"]["id"].dtype == pl.Int64
     assert frames["cqi_2018"]["Total.Cup.Points"].dtype == pl.Float64
     assert frames["cqi_2023"]["Quakers"].dtype == pl.Int64
     assert frames["psd_coffee"]["Market_Year"].dtype == pl.Int64
@@ -140,4 +140,4 @@ def test_an_api_source_that_was_never_ingested_is_skipped_not_raised(
     validated = validate_raw(coffee_adapter, raw_dir)
 
     assert "denue_cafes" not in validated
-    assert "osm_cafes" in validated
+    assert "osm_places" in validated

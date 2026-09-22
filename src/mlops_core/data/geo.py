@@ -123,3 +123,73 @@ def attribute_points(
             "the areas overlap"
         )
     return attributed
+
+
+# A metre in degrees of latitude, for the coarse prefilter below. Longitude degrees are
+# shorter away from the equator, so the prefilter widens by 1/cos(60 deg) = 2 to stay
+# loose up to 60 degrees of latitude; the exact distance decides afterwards.
+METRES_PER_DEGREE = 111_320.0
+PREFILTER_SLACK = 2.0
+
+
+def match_places(
+    left: pl.DataFrame, right: pl.DataFrame, *, radius_m: float, min_similarity: float
+) -> pl.DataFrame:
+    """The places two registers both list: close, named alike, each the other's best.
+
+    Both frames need `id`, `name`, `latitude` and `longitude`. A pair counts when the
+    points are within `radius_m` and the names - upper-cased, accents stripped - have a
+    Jaro-Winkler similarity of at least `min_similarity`. Only mutual best matches are
+    kept, so a place is linked to one place at most: on a busy street, two branches of one
+    chain next door to each other must not both claim the same entry.
+
+    `ST_Distance_Sphere` reads the first coordinate as latitude, unlike `ST_Point`'s
+    usual x-then-y. Given longitude first it does not fail: a 111 m north-south gap
+    comes out as 18 m, which is how the first version of this join accepted neighbours
+    six times too far away.
+    """
+    empty = pl.DataFrame(
+        schema={
+            "left_id": pl.String,
+            "right_id": pl.String,
+            "meters": pl.Float64,
+            "similarity": pl.Float64,
+        }
+    )
+    if left.is_empty() or right.is_empty():
+        return empty
+    window = radius_m / METRES_PER_DEGREE * PREFILTER_SLACK
+    query = """
+        WITH l AS (
+            SELECT id, upper(strip_accents(trim(name))) AS n, latitude, longitude
+            FROM left_places WHERE coalesce(trim(name), '') <> ''
+        ), r AS (
+            SELECT id, upper(strip_accents(trim(name))) AS n, latitude, longitude
+            FROM right_places WHERE coalesce(trim(name), '') <> ''
+        ), candidates AS (
+            SELECT l.id AS left_id, r.id AS right_id,
+                   ST_Distance_Sphere(ST_Point(l.latitude, l.longitude),
+                                      ST_Point(r.latitude, r.longitude)) AS meters,
+                   jaro_winkler_similarity(l.n, r.n) AS similarity
+            FROM l JOIN r
+              ON abs(l.latitude - r.latitude) < $window
+             AND abs(l.longitude - r.longitude) < $window
+        ), ranked AS (
+            SELECT *,
+                   row_number() OVER (PARTITION BY left_id
+                                      ORDER BY similarity DESC, meters, right_id) AS left_rank,
+                   row_number() OVER (PARTITION BY right_id
+                                      ORDER BY similarity DESC, meters, left_id) AS right_rank
+            FROM candidates
+            WHERE meters <= $radius AND similarity >= $similarity
+        )
+        SELECT left_id, right_id, meters, similarity
+        FROM ranked WHERE left_rank = 1 AND right_rank = 1
+        ORDER BY left_id
+    """
+    with closing(spatial_connection()) as con:
+        con.register("left_places", left.select("id", "name", "latitude", "longitude"))
+        con.register("right_places", right.select("id", "name", "latitude", "longitude"))
+        parameters = {"window": window, "radius": radius_m, "similarity": min_similarity}
+        pairs: pl.DataFrame = con.execute(query, parameters).pl()
+    return pairs if not pairs.is_empty() else empty

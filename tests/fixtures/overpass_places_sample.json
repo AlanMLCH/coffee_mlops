@@ -94,6 +94,39 @@
         "internet_access": "wlan",
         "name": "Cafetería de la UAM Xochimilco"
       }
+    },
+    {
+      "type": "node",
+      "id": 2112498943,
+      "lat": 19.4179445,
+      "lon": -99.1595028,
+      "tags": {
+        "amenity": "ice_cream",
+        "brand": "Amorino",
+        "brand:wikidata": "Q2843884",
+        "name": "Amorino"
+      }
+    },
+    {
+      "type": "way",
+      "id": 260989642,
+      "center": {
+        "lat": 19.3392484,
+        "lon": -99.2323141
+      },
+      "tags": {
+        "addr:housenumber": "5260-5",
+        "addr:postcode": "01700",
+        "addr:street": "Calzada Desierto de los Leones",
+        "amenity": "ice_cream",
+        "building": "yes",
+        "cuisine": "Helados__y Lacteos",
+        "internet_access": "no",
+        "name": "Santa Clara",
+        "opening_hours": "Mo-Sa 09:00-20:30, Su 10:00-20:30",
+        "outdoor_seating": "yes",
+        "takeaway": "yes"
+      }
     }
   ]
 }

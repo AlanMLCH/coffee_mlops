@@ -60,9 +60,10 @@ INEGI's 2020 geostatistical framework, layer `09mun`, reprojected to WGS84. 16 r
 ## `clean.coffee_shops` — one place that sells coffee
 
 DENUE and OpenStreetMap side by side, each row placed in a borough by a point-in-polygon
-join. 10,985 rows (9,860 from DENUE, 1,125 from OSM). The registers are **not**
-deduplicated against each other: they disagree about what exists, and choosing between
-them is analysis, not cleaning.
+join, given a `kind`, and linked to its twin in the other register when both list it.
+11,217 rows (9,860 from DENUE; 1,357 from OSM, of which 232 are ice-cream parlours). The
+registers are **not** merged: `matched_shop_id` says where they agree, so a count across
+both can avoid counting one place twice.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -74,10 +75,15 @@ them is analysis, not cleaning.
 | `latitude`, `longitude` | Float | WGS84 |
 | `borough_id`, `borough` | String? | From the spatial join. Null if the point falls outside every borough |
 | `declared_borough_id` | String? | The borough the source itself claims (DENUE's `AreaGeo`); null for OSM. The column the join is audited against |
+| `kind` | String | What the place is: `coffee`, `tea`, `ice_cream`, `juice`, `soda_fountain`, `school`, `unnamed` or `unclassified`. For a coffee-only view, filter `kind = 'coffee'` |
+| `kind_basis` | String | How the kind was decided: `name` (DENUE, read by the ordered rules in `cleaning.shop_kinds`) or `tag` (OSM, its own `amenity` tag) |
+| `matched_shop_id` | String? | The same place in the other register, both ways: within 60 m, names at least 0.88 alike (Jaro-Winkler), each the other's best match |
 
-> DENUE's activity class 722515 is **wider than coffee**: it covers soda fountains and
-> ice-cream parlours too. Every row is kept and labelled rather than filtered by name,
-> because no filter has been measured yet.
+> DENUE's activity class 722515 is **wider than coffee**: 38% of it is named as coffee,
+> 24% as juice stands, and ice-cream parlours are only 2%. Every row is kept with its
+> `kind` rather than filtered. Where both registers list a place, the name rule's
+> `coffee` agrees with OSM's tag 142 times out of 142, and finds 79% of the cafes OSM
+> knows (`analysis.kind_scores`); `unclassified` names are where the rest hide.
 
 ## `features.review_features` — model input
 

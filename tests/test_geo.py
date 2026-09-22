@@ -17,7 +17,13 @@ import polars as pl
 import pytest
 
 from mlops_core.config import SpatialConfig
-from mlops_core.data.geo import AREA_COLUMNS, attribute_points, read_areas, spatial_connection
+from mlops_core.data.geo import (
+    AREA_COLUMNS,
+    attribute_points,
+    match_places,
+    read_areas,
+    spatial_connection,
+)
 
 ARCHIVE = Path(__file__).parent / "fixtures" / "cdmx_boroughs_sample.zip"
 MEMBER = "conjunto_de_datos/09mun.shp"
@@ -115,3 +121,45 @@ def test_a_missing_extension_says_what_is_missing(monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(RuntimeError, match="spatial"):
         spatial_connection()
+
+
+def places(*rows: tuple[str, str, float, float]) -> pl.DataFrame:
+    return pl.DataFrame(rows, schema=["id", "name", "latitude", "longitude"], orient="row")
+
+
+def test_the_same_place_in_two_registers_is_found_despite_spelling() -> None:
+    left = places(("d1", "CAFE LUNA", 19.4000, -99.15), ("d2", "TACOS EL GÜERO", 19.4000, -99.15))
+    right = places(("o1", "Café Luna", 19.4001, -99.15))
+
+    pairs = match_places(left, right, radius_m=60, min_similarity=0.88)
+
+    assert pairs.select("left_id", "right_id").rows() == [("d1", "o1")]
+    assert pairs["meters"].item() == pytest.approx(11.1, abs=0.2)
+
+
+def test_distance_is_measured_the_right_way_round() -> None:
+    """0.001 degrees of latitude is 111 m. Read longitude-first, the spherical distance
+    comes out at 18 m and a place across the block passes for the one next door."""
+    left = places(("d1", "CAFE LUNA", 19.400, -99.15))
+    right = places(("o1", "CAFE LUNA", 19.401, -99.15))
+
+    assert match_places(left, right, radius_m=100, min_similarity=0.88).is_empty()
+    assert match_places(left, right, radius_m=120, min_similarity=0.88).height == 1
+
+
+def test_two_neighbours_cannot_both_claim_one_place() -> None:
+    """Mutual best only: two branches next door map to one entry at most."""
+    left = places(("d1", "CAFE LUNA", 19.4000, -99.15), ("d2", "CAFE LUNA", 19.4003, -99.15))
+    right = places(("o1", "Cafe Luna", 19.4001, -99.15))
+
+    assert match_places(left, right, radius_m=60, min_similarity=0.88)["left_id"].to_list() == [
+        "d1"
+    ]
+
+
+def test_unnamed_places_are_never_matched() -> None:
+    left = places(("d1", "", 19.4, -99.15))
+    right = places(("o1", "", 19.4, -99.15))
+
+    assert match_places(left, right, radius_m=60, min_similarity=0.0).is_empty()
+    assert match_places(left.clear(), right, radius_m=60, min_similarity=0.0).is_empty()

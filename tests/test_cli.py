@@ -53,7 +53,7 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
         "cqi_2023",
         "psd_coffee",
         "cdmx_boroughs",
-        "osm_cafes",
+        "osm_places",
     }
 
 
@@ -187,13 +187,13 @@ def test_extract_pulls_openstreetmap_without_any_credential(
     result = CliRunner().invoke(cli.app, ["data", "extract"])
 
     assert result.exit_code == 0, result.output
-    assert "osm_cafes:" in result.output
+    assert "osm_places:" in result.output
     stored = json.loads(
-        next((data_dir / "coffee" / "raw" / "osm_cafes").rglob("osm_cafes.json")).read_text(
+        next((data_dir / "coffee" / "raw" / "osm_places").rglob("osm_places.json")).read_text(
             encoding="utf-8"
         )
     )
-    assert len(stored["elements"]) == 5
+    assert len(stored["elements"]) == 7
     assert "ODbL" in stored["license"]
 
 

@@ -39,13 +39,14 @@ COUNT = "count"
 
 
 def build_query(config: OverpassConfig, output: str = ELEMENTS) -> str:
-    """Overpass QL asking for one amenity in one area, as nodes, ways and relations.
+    """Overpass QL asking for some amenities in one area, as nodes, ways and relations.
 
+    One query for every tag rather than one per tag: the service is run by volunteers.
     Relations are in the union although Mexico City currently has none tagged
     `amenity=cafe`: a cafe mapped as a multipolygon is legal OSM, and leaving the type
     out would lose it without a word.
     """
-    selector = f'["amenity"="{config.amenity}"]'
+    selector = f'["amenity"~"^({"|".join(config.amenities)})$"]'
     return (
         f"[out:json][timeout:{config.timeout_s}];"
         f'area["ISO3166-2"="{config.area_iso}"]->.a;'
@@ -92,7 +93,7 @@ def ingest_places(
             len(without_coordinates),
             len(elements),
         )
-    logger.info("Overpass: %d elements tagged amenity=%s", len(elements), config.amenity)
+    logger.info("Overpass: %d elements tagged %s", len(elements), "/".join(config.amenities))
 
     # Same reason as DENUE: the service is free to answer in any order, and without a
     # canonical one every run would hash differently and store an identical partition.

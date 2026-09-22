@@ -17,17 +17,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
+from polars.expr.whenthen import ChainedThen, Then
 
-from domains.coffee.config import CleaningConfig
+from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ShopKindRule
 from domains.coffee.schemas import (
-    COFFEE_SHOPS,
     PSD_ATTRIBUTES,
     SENSORY_COLUMNS,
     SENSORY_SCORES,
     SENSORY_SCORES_2018,
+    coffee_shops_schema,
 )
 from mlops_core.adapter import CleanTable
-from mlops_core.data.geo import attribute_points
+from mlops_core.data.geo import attribute_points, match_places
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ TEXT_COLUMNS = ["country", "region", "variety", "processing_method", "color", "g
 # DENUE packs entity + municipality + locality into `AreaGeo`; the first five characters
 # are the borough's official CVEGEO, the same key INEGI's polygons carry.
 BOROUGH_ID_LENGTH = 5
-SHOP_SOURCES = ("denue_cafes", "osm_cafes")
+SHOP_SOURCES = ("denue_cafes", "osm_places")
 
 
 def altitude_from_text(text: pl.Expr) -> pl.Expr:
@@ -221,13 +222,41 @@ def _blank_to_null(column: pl.Expr) -> pl.Expr:
     return pl.when(column.str.len_chars() > 0).then(column)
 
 
-def _denue_shops(denue: pl.DataFrame) -> pl.DataFrame:
-    """DENUE's register, narrowed to what a place is in this project.
+def normalised_name(name: pl.Expr) -> pl.Expr:
+    """Upper case, accents stripped, trimmed: `Café  ` and `CAFE` are the same word."""
+    return (
+        name.str.normalize("NFKD")
+        .str.replace_all(r"\p{Mn}", "")
+        .str.to_uppercase()
+        .str.strip_chars()
+    )
 
-    Every row of the activity class is kept, ice-cream parlours and soda fountains
-    included: the class is wider than coffee, and no name-based filter would be honest
-    before it has been measured. `source` says where a row came from, so a later rule
-    can be applied -- and argued with -- on top of this table instead of inside it.
+
+def shop_kind(name: pl.Expr, rules: list[ShopKindRule]) -> pl.Expr:
+    """What a place is, read from its name: the first rule whose pattern matches.
+
+    A classification, not a filter. Every row stays in the table with its kind, so a
+    reader who disagrees with a rule sees exactly which rows it moved - and the rule can
+    be scored, which is what `analysis.kind_agreement` does against OSM's own tags.
+    """
+    normalised = normalised_name(name.fill_null(""))
+    first, *rest = rules
+    # polars types the chain link by link (Then, then ChainedThen), so the variable
+    # is declared as either.
+    kind: Then | ChainedThen = pl.when(normalised.str.contains(first.pattern)).then(
+        pl.lit(first.kind)
+    )
+    for rule in rest:
+        kind = kind.when(normalised.str.contains(rule.pattern)).then(pl.lit(rule.kind))
+    return kind.otherwise(pl.lit(UNCLASSIFIED))
+
+
+def _denue_shops(denue: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
+    """DENUE's register, each establishment labelled with what its name says it is.
+
+    Every row of the activity class is kept - juice stands, ice-cream parlours and
+    school tuck shops included - and `kind` says which is which, so a coffee-only view
+    is a filter a reader applies, and can argue with, rather than rows that vanished.
     """
     return denue.select(
         (pl.lit("denue-") + pl.col("Id")).alias("shop_id"),
@@ -238,11 +267,20 @@ def _denue_shops(denue: pl.DataFrame) -> pl.DataFrame:
         pl.col("Latitud").alias("latitude"),
         pl.col("Longitud").alias("longitude"),
         pl.col("AreaGeo").str.slice(0, BOROUGH_ID_LENGTH).alias("declared_borough_id"),
+        shop_kind(pl.col("Nombre"), rules.shop_kinds).alias("kind"),
+        pl.lit("name").alias("kind_basis"),
     )
 
 
-def _osm_shops(osm: pl.DataFrame) -> pl.DataFrame:
-    """OSM's elements, keyed by type and id because a node and a way can share a number."""
+def _osm_shops(osm: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
+    """OSM's elements, keyed by type and id because a node and a way can share a number.
+
+    Their kind comes from the mappers' own `amenity` tag, through a closed vocabulary: a
+    tag nobody mapped stops the run instead of becoming a guess.
+    """
+    unknown = sorted(set(osm["amenity"]) - rules.osm_kinds.keys())
+    if unknown:
+        raise ValueError(f"Unmapped OSM amenities {unknown}: add them to `cleaning.osm_kinds`")
     return osm.select(
         (pl.lit("osm-") + pl.col("type") + pl.lit("-") + pl.col("id").cast(pl.String)).alias(
             "shop_id"
@@ -254,18 +292,23 @@ def _osm_shops(osm: pl.DataFrame) -> pl.DataFrame:
         pl.col("latitude"),
         pl.col("longitude"),
         pl.lit(None, pl.String).alias("declared_borough_id"),  # nor which borough it is in
+        pl.col("amenity").replace_strict(rules.osm_kinds, return_dtype=pl.String).alias("kind"),
+        pl.lit("tag").alias("kind_basis"),
     )
 
 
-def clean_coffee_shops(frames: Mapping[str, pl.DataFrame], areas: pl.DataFrame) -> pl.DataFrame:
-    """Both registers as one table of places, each one placed inside a borough.
+def clean_coffee_shops(
+    frames: Mapping[str, pl.DataFrame], areas: pl.DataFrame, rules: CleaningConfig
+) -> pl.DataFrame:
+    """Both registers as one table of places, each one placed inside a borough, given a
+    kind, and linked to its twin in the other register when there is one.
 
     The sources sit side by side rather than merged: DENUE is the official register, OSM
-    is what people mapped, they disagree about what exists, and deciding which is right
-    is analysis, not cleaning.
+    is what people mapped, and they disagree about what exists. `matched_shop_id` says
+    where they agree, so a count across both can avoid counting one place twice.
     """
-    readers = {"denue_cafes": _denue_shops, "osm_cafes": _osm_shops}
-    parts = [reader(frames[name]) for name, reader in readers.items() if name in frames]
+    readers = {"denue_cafes": _denue_shops, "osm_places": _osm_shops}
+    parts = [reader(frames[name], rules) for name, reader in readers.items() if name in frames]
     if not parts:
         raise ValueError("No register of places has been ingested: run extract first")
     shops = pl.concat(parts)
@@ -279,7 +322,42 @@ def clean_coffee_shops(frames: Mapping[str, pl.DataFrame], areas: pl.DataFrame) 
         {"area_id": "borough_id", "area_name": "borough"}
     )
     _report_placement(placed)
-    return placed.select(*COFFEE_SHOPS.columns).sort("shop_id")
+    linked = _link_registers(placed, rules)
+    return linked.select(*coffee_shops_schema(rules).columns).sort("shop_id")
+
+
+def _link_registers(shops: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
+    """Point each place both registers list at its twin, in both directions."""
+    by_source = {
+        source: shops.filter(pl.col("source") == source).select(
+            pl.col("shop_id").alias("id"), "name", "latitude", "longitude"
+        )
+        for source in ("denue", "osm")
+    }
+    match = rules.register_match
+    pairs = match_places(
+        by_source["denue"],
+        by_source["osm"],
+        radius_m=match.radius_m,
+        min_similarity=match.min_name_similarity,
+    )
+    links = pl.concat(
+        [
+            pairs.select(
+                pl.col("left_id").alias("shop_id"), pl.col("right_id").alias("matched_shop_id")
+            ),
+            pairs.select(
+                pl.col("right_id").alias("shop_id"), pl.col("left_id").alias("matched_shop_id")
+            ),
+        ]
+    )
+    logger.info(
+        "%d places are listed by both registers (within %.0f m, names at least %.2f alike)",
+        pairs.height,
+        match.radius_m,
+        match.min_name_similarity,
+    )
+    return shops.join(links, on="shop_id", how="left")
 
 
 def _report_placement(placed: pl.DataFrame) -> None:
@@ -320,5 +398,5 @@ def clean_tables(
         "coffee_reviews": CleanTable(clean_reviews(frames, rules), ("cqi_2018", "cqi_2023")),
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),
         "boroughs": CleanTable(clean_boroughs(areas), ("cdmx_boroughs",)),
-        "coffee_shops": CleanTable(clean_coffee_shops(frames, areas), shop_inputs),
+        "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
     }

@@ -18,14 +18,15 @@ from domains.coffee.sources.overpass import COUNT, build_query, fetch, ingest_pl
 from mlops_core.data.api import ApiClient
 from mlops_core.storage import MANIFEST_NAME
 
-# A real answer, trimmed: three cafes mapped as nodes and two mapped as buildings.
-FIXTURE = Path(__file__).parent / "fixtures" / "overpass_cafes_sample.json"
+# A real answer, trimmed: three cafes mapped as nodes, two mapped as buildings, and
+# two ice-cream parlours (one of each).
+FIXTURE = Path(__file__).parent / "fixtures" / "overpass_places_sample.json"
 CONFIG = OverpassConfig(
-    name="osm_cafes",
+    name="osm_places",
     base_url="https://overpass.test/api/interpreter",
     area_iso="MX-CMX",
-    amenity="cafe",
-    filename="osm_cafes.json",
+    amenities=["cafe", "ice_cream"],
+    filename="osm_places.json",
     timeout_s=50,
     rate_limit_seconds=0.0,
     cache_hours=24,
@@ -63,8 +64,9 @@ def test_the_query_asks_for_every_element_type_inside_the_area() -> None:
 
     assert "[out:json][timeout:50]" in query
     assert 'area["ISO3166-2"="MX-CMX"]' in query
+    # Both tags in one query: the service is run by volunteers.
     for element_type in ("node", "way", "relation"):
-        assert f'{element_type}["amenity"="cafe"](area.a)' in query
+        assert f'{element_type}["amenity"~"^(cafe|ice_cream)$"](area.a)' in query
     # Without `center`, the cafes mapped as buildings come back with no coordinate.
     assert query.endswith("out center tags;")
 
@@ -86,7 +88,7 @@ def test_places_mapped_as_buildings_keep_the_centre(tmp_path: Path) -> None:
 
     stored = json.loads(artifact.path.read_text(encoding="utf-8"))
     ways = [e for e in stored["elements"] if e["type"] == "way"]
-    assert len(stored["elements"]) == 5  # nothing dropped on the way in
+    assert len(stored["elements"]) == 7  # nothing dropped on the way in
     assert ways and all("center" in way for way in ways)
 
 
@@ -107,7 +109,7 @@ def test_an_element_without_a_coordinate_is_reported(
 
     ingest_places(build_client(FakeOverpass(payload), tmp_path / "cache"), CONFIG, tmp_path / "raw")
 
-    assert "1 of 5 elements came back without a coordinate" in caplog.text
+    assert "1 of 7 elements came back without a coordinate" in caplog.text
 
 
 def test_the_licence_and_the_query_are_stored_with_the_data(tmp_path: Path) -> None:
@@ -134,7 +136,7 @@ def test_the_same_places_in_another_order_are_not_new_data(tmp_path: Path) -> No
     shuffled["osm3s"]["timestamp_osm_base"] = "2026-09-21T09:00:00Z"
     second = ingest_places(build_client(FakeOverpass(shuffled), tmp_path / "b"), CONFIG, raw)
 
-    assert len(list((raw / "osm_cafes").iterdir())) == 1  # one partition, not two
+    assert len(list((raw / "osm_places").iterdir())) == 1  # one partition, not two
     assert json.loads(second.path.read_text(encoding="utf-8"))["elements"][0]["type"] == "node"
 
 

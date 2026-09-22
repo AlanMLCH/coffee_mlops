@@ -6,6 +6,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+import domains.coffee
 from domains.coffee.adapter import CoffeeAdapter
 from domains.coffee.clean import (
     altitude_from_text,
@@ -15,13 +16,14 @@ from domains.coffee.clean import (
     clean_reviews,
     parse_grading_date,
     reconcile_market_sources,
+    shop_kind,
 )
 from domains.coffee.schemas import (
     BOROUGHS,
-    COFFEE_SHOPS,
     MARKET_CONTEXT,
     PSD_ATTRIBUTES,
     coffee_reviews_schema,
+    coffee_shops_schema,
 )
 from mlops_core.config import DomainConfig
 from mlops_core.contracts import check_contract
@@ -30,6 +32,7 @@ from mlops_core.data.validate import validate_raw
 from mlops_core.storage import MANIFEST_NAME, read_table
 
 Frames = dict[str, pl.DataFrame]
+RULES = domains.coffee.adapter().config.cleaning
 
 
 @pytest.fixture
@@ -201,24 +204,27 @@ def test_build_clean_writes_both_tables_with_lineage(
 
 
 def shops(frames: Frames) -> pl.DataFrame:
-    return clean_coffee_shops(frames, frames["cdmx_boroughs"])
+    return clean_coffee_shops(frames, frames["cdmx_boroughs"], RULES)
 
 
 def test_both_registers_become_one_table_of_places(frames: Frames) -> None:
-    table = check_contract(COFFEE_SHOPS, shops(frames))
+    table = check_contract(coffee_shops_schema(RULES), shops(frames))
 
-    assert dict(table["source"].value_counts().iter_rows()) == {"denue": 3, "osm": 5}
+    assert dict(table["source"].value_counts().iter_rows()) == {"denue": 3, "osm": 7}
     assert table["shop_id"].to_list()[:1] == ["denue-1"]
     # Two registers, two vocabularies: each keeps what only it records.
     assert table.filter(pl.col("source") == "denue")["employees_band"].null_count() == 0
-    assert table.filter(pl.col("source") == "osm")["employees_band"].null_count() == 5
+    assert table.filter(pl.col("source") == "osm")["employees_band"].null_count() == 7
 
 
 def test_every_place_is_put_in_a_borough(frames: Frames) -> None:
     table = shops(frames)
 
     assert table["borough_id"].null_count() == 0
-    assert set(table.filter(pl.col("source") == "denue")["borough"]) == {"Miguel Hidalgo"}
+    assert set(table.filter(pl.col("source") == "denue")["borough"]) == {
+        "Miguel Hidalgo",
+        "Tláhuac",
+    }
 
 
 def test_the_join_is_audited_against_the_borough_the_source_declares(
@@ -240,7 +246,7 @@ def test_a_disagreement_is_reported_rather_than_absorbed(
     moved = dict(frames)
     moved["denue_cafes"] = frames["denue_cafes"].with_columns(pl.lit("090150001").alias("AreaGeo"))
 
-    clean_coffee_shops(moved, frames["cdmx_boroughs"])
+    clean_coffee_shops(moved, frames["cdmx_boroughs"], RULES)
 
     assert "agrees with the source's own borough on 0 of 3" in caplog.text
 
@@ -252,7 +258,7 @@ def test_a_place_outside_every_borough_is_kept_and_counted(
     adrift = dict(frames)
     adrift["denue_cafes"] = set_first(frames["denue_cafes"], "Latitud", 0.0)
 
-    table = clean_coffee_shops(adrift, frames["cdmx_boroughs"])
+    table = clean_coffee_shops(adrift, frames["cdmx_boroughs"], RULES)
 
     assert "1 places fell outside every borough" in caplog.text
     assert table["borough_id"].null_count() == 1  # the row stays, unplaced
@@ -264,17 +270,17 @@ def test_an_element_without_a_coordinate_is_dropped(
     """OSM is crowd-sourced: a cafe can be tagged without ever being placed."""
     caplog.set_level(logging.WARNING)
     unplaced = dict(frames)
-    unplaced["osm_cafes"] = set_first(frames["osm_cafes"], "latitude", None)
+    unplaced["osm_places"] = set_first(frames["osm_places"], "latitude", None)
 
-    table = clean_coffee_shops(unplaced, frames["cdmx_boroughs"])
+    table = clean_coffee_shops(unplaced, frames["cdmx_boroughs"], RULES)
 
     assert "Dropped 1 places with no coordinate" in caplog.text
-    assert table.height == 7
+    assert table.height == 9  # 3 from DENUE, 7 from OSM, less the one with no point
 
 
 def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
     """A clone with no DENUE token still gets the OpenStreetMap half."""
-    table = clean_coffee_shops({"osm_cafes": frames["osm_cafes"]}, frames["cdmx_boroughs"])
+    table = clean_coffee_shops({"osm_places": frames["osm_places"]}, frames["cdmx_boroughs"], RULES)
 
     assert table["source"].unique().to_list() == ["osm"]
     assert table["declared_borough_id"].null_count() == table.height
@@ -282,7 +288,7 @@ def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
 
 def test_no_register_at_all_says_what_to_run(frames: Frames) -> None:
     with pytest.raises(ValueError, match="run extract first"):
-        clean_coffee_shops({}, frames["cdmx_boroughs"])
+        clean_coffee_shops({}, frames["cdmx_boroughs"], RULES)
 
 
 def test_boroughs_keep_their_polygon_and_their_official_key(frames: Frames) -> None:
@@ -347,3 +353,51 @@ def test_a_clean_table_without_a_contract_is_refused(
         build_clean(coffee_adapter, raw_dir.parent)
 
     assert not (raw_dir.parent / "clean").exists()  # nothing half-written
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("CAFETERIA LA ESQUINA", "coffee"),
+        ("CAFECITO TUNTUN", "coffee"),  # a diminutive is still coffee
+        ("Café Fuerte", "coffee"),  # accents and case do not matter
+        ("PICKUP CAFFEE", "coffee"),
+        ("STARBUCKS COFFEE", "coffee"),
+        ("NEVERIA Y CAFETERIA LA FLOR", "coffee"),  # a name that says coffee sells coffee
+        ("CAFETERIA ESCOLAR PRIMARIA BENITO JUAREZ", "school"),  # a tuck shop is not a cafe
+        ("PALETERIA LA MICHOACANA", "ice_cream"),
+        ("JUGOS Y LICUADOS DOÑA MARY", "juice"),
+        ("FUENTE DE SODAS EL OASIS", "soda_fountain"),
+        ("LA ESQUINA DEL TE", "tea"),
+        ("TIERRA GARAT", "unclassified"),  # a roaster whose name says nothing a rule reads
+        ("SIN NOMBRE", "unnamed"),
+        ("", "unnamed"),
+        (None, "unnamed"),
+    ],
+)
+def test_a_place_is_what_its_name_says(name: str | None, kind: str) -> None:
+    names = pl.DataFrame({"name": [name]}, schema={"name": pl.String})
+
+    labelled = names.select(shop_kind(pl.col("name"), RULES.shop_kinds).alias("kind"))
+
+    assert labelled["kind"].item() == kind
+
+
+def test_an_osm_tag_nobody_mapped_stops_the_run(frames: Frames) -> None:
+    unmapped = dict(frames)
+    unmapped["osm_places"] = set_first(frames["osm_places"], "amenity", "fast_food")
+
+    with pytest.raises(ValueError, match="fast_food"):
+        clean_coffee_shops(unmapped, frames["cdmx_boroughs"], RULES)
+
+
+def test_a_place_both_registers_list_is_linked_both_ways(frames: Frames) -> None:
+    """The recorded Starbucks is in both: linked, so a count across them counts it once."""
+    table = shops(frames).filter(pl.col("matched_shop_id").is_not_null())
+
+    assert dict(zip(table["shop_id"], table["matched_shop_id"], strict=True)) == {
+        "denue-3": "osm-node-319644388",
+        "osm-node-319644388": "denue-3",
+    }
+    kinds = dict(zip(table["kind_basis"], table["kind"], strict=True))
+    assert kinds == {"name": "coffee", "tag": "coffee"}

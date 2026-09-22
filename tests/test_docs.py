@@ -10,9 +10,9 @@ import pytest
 
 from domains.coffee.schemas import (
     BOROUGHS,
-    COFFEE_SHOPS,
     MARKET_CONTEXT,
     coffee_reviews_schema,
+    coffee_shops_schema,
 )
 from mlops_core.config import DomainConfig
 from mlops_core.ml.features import features_schema
@@ -28,7 +28,7 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "coffee_reviews": list(coffee_reviews_schema(coffee_config.cleaning).columns),
         "market_context": list(MARKET_CONTEXT.columns),
         "boroughs": list(BOROUGHS.columns),
-        "coffee_shops": list(COFFEE_SHOPS.columns),
+        "coffee_shops": list(coffee_shops_schema(coffee_config.cleaning).columns),
         "review_features": list(features_schema(coffee_config.items, coffee_config.model).columns),
         "review_predictions": list(predictions_schema(coffee_config.items).columns),
     }

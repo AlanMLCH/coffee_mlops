@@ -30,7 +30,20 @@ DENUE_ESTABLISHMENTS = [
         "Latitud": "19.45",
         "Longitud": "-99.15",
     }
-    for i in (1, 2, 3)
+    for i in (1, 2)
+] + [
+    # The Starbucks the recorded OSM answer also lists, at its node's coordinates: the
+    # one place both registers share, so linking and the name rule's score have a case.
+    {
+        "Id": "3",
+        "Nombre": "STARBUCKS",
+        "Clase_actividad": "Cafeterías, fuentes de sodas, neverías, refresquerías y similares",
+        "CLASE_ACTIVIDAD_ID": "722515",
+        "AreaGeo": "090110001",
+        "Estrato": "6 a 10 personas",
+        "Latitud": "19.3495012",
+        "Longitud": "-99.1969644",
+    }
 ]
 
 

@@ -44,14 +44,14 @@ class DenueConfig(BaseModel):
 
 
 class OverpassConfig(BaseModel):
-    """The OpenStreetMap inventory to pull: one amenity tag inside one administrative area."""
+    """The OpenStreetMap inventory to pull: some amenity tags inside one administrative area."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     base_url: str
     area_iso: str  # ISO 3166-2 code of the area; "MX-CMX" is Mexico City
-    amenity: str  # OSM `amenity` value, e.g. "cafe"
+    amenities: list[str]  # OSM `amenity` values, e.g. ["cafe", "ice_cream"]
     filename: str
     # Overpass' own budget for the query. Must stay under the HTTP read timeout so the
     # server's explanation arrives before the client gives up without one.
@@ -74,6 +74,25 @@ class FasConfig(BaseModel):
     cache_hours: float  # see DenueConfig
 
 
+class ShopKindRule(BaseModel):
+    """One kind of place, recognised by a pattern in its name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+    # A regex over the upper-cased, accent-stripped name.
+    pattern: str
+
+
+class RegisterMatchConfig(BaseModel):
+    """When an entry in one register and an entry in another are the same place."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    radius_m: float
+    min_name_similarity: float  # Jaro-Winkler, 0-1
+
+
 class CleaningConfig(BaseModel):
     """Rules for the clean layer. Vocabularies are closed: an unseen label stops the run."""
 
@@ -83,6 +102,20 @@ class CleaningConfig(BaseModel):
     country_aliases: dict[str, str]
     processing_methods: dict[str, str]
     colors: dict[str, str | None]
+    # Ordered: the first rule whose pattern matches a name decides the kind.
+    shop_kinds: list[ShopKindRule]
+    # OSM amenity tag -> kind. OSM's mappers already said what the place is.
+    osm_kinds: dict[str, str]
+    register_match: RegisterMatchConfig
+
+    @property
+    def kinds(self) -> list[str]:
+        """Every kind a place can have, including the two no rule assigns."""
+        named = [rule.kind for rule in self.shop_kinds]
+        return [*dict.fromkeys([*named, *self.osm_kinds.values(), UNCLASSIFIED])]
+
+
+UNCLASSIFIED = "unclassified"  # named, but the name says nothing any rule recognises
 
 
 class MarketAnalysisConfig(BaseModel):

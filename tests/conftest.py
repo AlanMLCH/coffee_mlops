@@ -87,7 +87,7 @@ def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedS
     return RecordedServer(
         payloads,
         redirects={urls["cqi_2023"]: SIGNED_URL},
-        overpass=(FIXTURES / "overpass_cafes_sample.json").read_bytes(),
+        overpass=(FIXTURES / "overpass_places_sample.json").read_bytes(),
         fas=fas_recording(),
     )
 

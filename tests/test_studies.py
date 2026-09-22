@@ -3,7 +3,13 @@ from datetime import date
 import polars as pl
 import pytest
 
-from domains.coffee.analysis import market_history, market_summary
+from domains.coffee.analysis import (
+    kind_agreement,
+    kind_scores,
+    market_history,
+    market_summary,
+    shop_kinds,
+)
 from mlops_core.analysis.studies import (
     categorical_profile,
     feature_recommendation,
@@ -213,3 +219,42 @@ def test_studies_run_on_the_real_domain_config(coffee_config: DomainConfig) -> N
     """The configured columns must exist in the frames the pipeline passes."""
     assert coffee_config.items.period == "snapshot"
     assert coffee_config.training.stratify_by in coffee_config.model.categorical
+
+
+def shops_frame() -> pl.DataFrame:
+    """Two registers: three DENUE places, two OSM ones, two pairs linked."""
+    return pl.DataFrame(
+        {
+            "shop_id": ["denue-1", "denue-2", "denue-3", "osm-a", "osm-b"],
+            "source": ["denue", "denue", "denue", "osm", "osm"],
+            "kind": ["coffee", "unclassified", "juice", "coffee", "coffee"],
+            "matched_shop_id": ["osm-a", "osm-b", None, "denue-1", "denue-2"],
+        }
+    )
+
+
+def test_shop_kinds_share_each_register_by_kind() -> None:
+    table = shop_kinds(shops_frame())
+
+    osm = table.filter(pl.col("source") == "osm").row(0, named=True)
+    assert (osm["kind"], osm["places"], osm["share_pct"]) == ("coffee", 2, 100.0)
+    assert table.filter(pl.col("source") == "denue")["share_pct"].sum() == pytest.approx(100.0)
+
+
+def test_the_name_rule_is_scored_on_the_places_both_registers_list() -> None:
+    agreement = kind_agreement(shops_frame())
+    scores = {row["metric"]: row for row in kind_scores(agreement).rows(named=True)}
+
+    assert agreement["pairs"].sum() == 2  # the juice stand has no twin, so no verdict
+    assert (scores["precision"]["hits"], scores["precision"]["of"]) == (1, 1)
+    # OSM calls both coffee; the rule found one - the other's name said nothing.
+    assert scores["recall"]["value"] == 0.5
+
+
+def test_with_no_shared_places_there_is_no_score_rather_than_a_zero() -> None:
+    lonely = shops_frame().with_columns(pl.lit(None, pl.String).alias("matched_shop_id"))
+
+    scores = kind_scores(kind_agreement(lonely))
+
+    assert scores["value"].to_list() == [None, None]
+    assert scores["of"].to_list() == [0, 0]
