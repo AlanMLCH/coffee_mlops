@@ -10,6 +10,7 @@ from domains.coffee.analysis import (
     market_summary,
     production_by_state,
     production_crosscheck,
+    roaster_coverage,
     shop_kinds,
 )
 from mlops_core.analysis.studies import (
@@ -302,3 +303,43 @@ def test_siap_cherry_is_set_against_psd_green_for_two_alignments() -> None:
     assert check["psd_market_year"].to_list() == [2024, 2025]
     assert check["psd_green_t"].to_list() == [120.0, 240.0]  # thousands of 60 kg bags
     assert check["cherry_per_green"].to_list() == pytest.approx([500 / 120, 500 / 240])
+
+
+def test_roaster_coverage_counts_coffees_not_origins() -> None:
+    """A blend gives a field once; a label no rule understood is not a method; the price
+    per kilogram is counted over offers."""
+    coffees = pl.DataFrame(
+        {"shop": ["a", "a", "b"], "product_id": ["blend", "bare", "one"], "origins": [2, 0, 1]}
+    )
+    origins = pl.DataFrame(
+        {
+            "shop": ["a", "a", "b"],
+            "product_id": ["blend", "blend", "one"],
+            "country": ["Mexico", "Mexico", None],
+            "processing_method": ["washed", "unclassified", "unclassified"],
+        }
+    ).with_columns(
+        *[
+            pl.lit(None, dtype=pl.String).alias(column)
+            for column in ("state", "region", "producer", "farm", "process", "species")
+        ],
+        pl.lit(None, dtype=pl.Float64).alias("altitude_min_m"),
+        pl.lit(None, dtype=pl.Float64).alias("sca_score"),
+        pl.lit(None, dtype=pl.List(pl.String)).alias("varieties"),
+    )
+    offers = pl.DataFrame({"shop": ["a", "a", "b"], "price_mxn_per_kg": [900.0, None, 700.0]})
+
+    table = roaster_coverage(coffees, origins, offers)
+
+    def given(shop: str, field: str) -> tuple[int, int]:
+        row = table.filter((pl.col("shop") == shop) & (pl.col("field") == field))
+        return row["given"].item(), row["of"].item()
+
+    assert given("a", "sheet") == (1, 2)
+    assert given("a", "country") == (1, 2)  # two origins, one coffee
+    assert given("b", "processing method") == (0, 1)
+    assert given("all", "processing method") == (1, 3)
+    assert given("a", "price per kg") == (1, 2)
+    assert given("all", "price per kg") == (2, 3)
+    assert table["shop"].unique(maintain_order=True).to_list() == ["a", "b", "all"]
+    assert table.filter(pl.col("shop") == "a")["field"].to_list()[:2] == ["sheet", "country"]

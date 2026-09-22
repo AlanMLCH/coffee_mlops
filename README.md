@@ -106,6 +106,9 @@ flowchart TD
         mexico_production["mexico_production<br/>municipality × year"]
         boroughs["boroughs<br/>16 polygons as WKB"]
         coffee_shops["coffee_shops<br/>kind · borough · twin link"]
+        roaster_coffees["roaster_coffees<br/>the shops' coffees: 2026 items"]
+        roaster_origins["roaster_origins<br/>one row per origin · blends split<br/>PSD · SIAP · CQI vocabularies"]
+        roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
     end
     audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
 
@@ -146,6 +149,7 @@ flowchart TD
     CLEAN & review_features & review_predictions & analysis -.-> catalog
 
     LATER -.-> corpus -.-> vectors -.-> agent
+    roaster_coffees -. "descriptions" .-> corpus
     catalog -.-> agent
     api -.-> agent
 
@@ -155,6 +159,7 @@ flowchart TD
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
     class extract_files,validate,train,gate,api,analysis,dashboard core
     class extract_apis,review_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
+    class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,catalog store
     class documents,corpus,vectors,agent planned
@@ -165,7 +170,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
-| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops` |
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
@@ -370,6 +375,58 @@ SIAP weighs cherry as picked; PSD counts green coffee ready to export. Set side 
 244,800 t of green coffee means 4.4-4.5 t of cherry per tonne of green, depending on
 whether PSD's market year is aligned with SIAP's year or with the one before. That is
 the factor the two would need for both to be right; it is shown, not assumed.
+
+## What the roasters sell (stage 3)
+
+The CQI stops in 2023. Four Mexico City roasters - Almanegra, Buna, Café con Jiribilla
+and Cucurucho - sell the same kind of item today, and their shops describe it: where it
+grew, at what altitude, which varieties, how it was processed, and what a kilogram costs.
+Three clean tables hold it, because a shop describes three different things:
+
+- `clean.roaster_coffees`: 167 coffees, one per product, with the shop's own text.
+- `clean.roaster_origins`: 142 origins. Most coffees name one; a blend lists each
+  component, and gets a row for each (Buna's Guarumbo: two arabicas and a robusta).
+- `clean.roaster_offers`: 527 offers, a coffee in one size, with its price per kilogram.
+
+Every canonical value speaks the vocabulary of a table that already exists: countries
+as PSD names them, Mexican states as SIAP does, processing methods and varieties as the
+CQI spells them. A 2026 bag from Oaxaca joins its state's harvest and its country's
+market balance, and sits next to a graded 2018 lot, with no mapping table in between.
+
+Reading the sheets is a core capability (`mlops_core.data.sheets`), because every shop
+has one of two shapes: "Label: value" lines in a description, or a heading over a
+paragraph on the product page. Two traps are handled there, not per shop: labels run
+together without a line break (*"YemenRegión: Haraz"*), and a blend repeats its labels
+for each component. What the labels mean, in Spanish, is the domain's config.
+
+![What the roasters' sheets say](docs/figures/roaster_coverage.png)
+
+What the shops say is uneven, and the table says so rather than hiding it
+(`analysis.roaster_coverage`). Almanegra's sheets are nearly complete and it lists 130 of
+the 167 coffees; Buna keeps a sheet on 4 of its 23 product pages; Cucurucho scatters a
+few labels through prose (a country for 4 of its 11 coffees).
+**A price model trained on these will learn Almanegra's pricing** - that is the first
+thing to say about it. 85 of the 142 origins are Mexican.
+
+Nothing is guessed, and three things were found by not guessing:
+
+- **The platform's weight is wrong** in 77 offers: Café con Jiribilla sells "1 kg" with
+  250 g in the weight field, Almanegra "1.25 kg" with 313 g. The size comes from the
+  titles ("5/16 kg (312.5 gr)", "Caja de 12 Bolsas ... de 340grs"), or it stays empty.
+- **Three prices were copied from another size**: a 156 g bag at the 1.25 kg price
+  ($8,640 a kilo), and two 1.25 kg bags at the price of the small one. They are kept as
+  listed - it is what the shop charges - and flagged `price_outlier` for being more than
+  3x off their product's other offers. The legitimate spread between different lots
+  sold as variants of one product stays within 0.5-1.7x.
+- **Process labels are free text**, from "Lavado" to "Fermentación Láctica con bacilos
+  autóctonos". They map to the CQI's methods by ordered rules; experiments and lots sold
+  two ways are "other", as the CQI rules file them, and a label no rule knows
+  (*Mycoprism*) is `unclassified`, counted, not forced into a method.
+
+Unlike the CQI's frozen labels, these shops change weekly, so these rules are open: a
+new country or process does not stop the pipeline. It is logged by name, left empty in
+the canonical column (a process keeps its label as written beside it), and it shows up
+in the coverage table.
 
 ## Results (stage 1)
 

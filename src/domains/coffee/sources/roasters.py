@@ -108,7 +108,8 @@ def to_frame(document: dict[str, Any]) -> pl.DataFrame:
 
     The two platforms name the same things differently: Shopify's variant has a `price`
     and `grams`, Squarespace's a `priceMoney` and no weight this project can trust (its
-    unit is not verified). Prices stay the text the shop sent; the contract types them.
+    unit is not verified). Squarespace leaves `body` empty and keeps the description in
+    `excerpt`. Prices stay the text the shop sent; the contract types them.
     """
     rows = []
     for shop, catalog in document["shops"].items():
@@ -130,7 +131,9 @@ def to_frame(document: dict[str, Any]) -> pl.DataFrame:
                         "platform_grams": variant.get("grams") if shopify else None,
                         "url": catalog["urls"][product_id],
                         "tags": ", ".join(product.get("tags") or []) or None,
-                        "body_html": product.get("body_html") if shopify else product.get("body"),
+                        "body_html": product.get("body_html")
+                        if shopify
+                        else product.get("body") or product.get("excerpt"),
                         "page_html": catalog["pages"].get(product_id),
                     }
                 )

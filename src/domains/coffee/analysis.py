@@ -2,21 +2,48 @@
 
 Every domain gets the core's analyses (profiles, drift, feature evidence, residuals).
 These only make sense for coffee: who grows it and who imports what they drink, what
-the places in DENUE's broad "cafeterias" class actually are, and how far the rule that
-says so can be trusted. Pure functions of clean tables, drawn in the core's house style.
+the places in DENUE's broad "cafeterias" class actually are, how far the rule that
+says so can be trusted, and how much the roasters' sheets actually say about each
+coffee. Pure functions of clean tables, drawn in the core's house style.
 """
 
 from collections.abc import Mapping
 
 import polars as pl
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 
 from domains.coffee.config import UNCLASSIFIED, MarketAnalysisConfig, ProductionConfig
-from mlops_core.analysis.figures import MUTED, SECONDARY, SERIES, canvas, value_grid
+from mlops_core.analysis.figures import (
+    INK,
+    MUTED,
+    SECONDARY,
+    SERIES,
+    SURFACE,
+    canvas,
+    value_grid,
+)
 
 COFFEE = "coffee"  # the kind the whole thesis is about
 # PSD counts thousands of 60 kg bags: one thousand bags is 60 tonnes.
 TONNES_PER_THOUSAND_BAGS = 60.0
+# What a roaster's sheet can tell about a coffee, from its origins; `processing_method`
+# counts only the labels the rules understood.
+SHEET_FIELDS = {
+    "country": "country",
+    "state": "state",
+    "region": "region",
+    "producer": "producer",
+    "farm": "farm",
+    "altitude_min_m": "altitude",
+    "varieties": "varieties",
+    "process": "process",
+    "processing_method": "processing method",
+    "species": "species",
+    "sca_score": "SCA score",
+}
+COVERAGE_FIELDS = ["sheet", *SHEET_FIELDS.values(), "price per kg"]
+ALL_SHOPS = "all"
 
 
 def studies(
@@ -35,6 +62,9 @@ def studies(
         "production_crosscheck": production_crosscheck(
             clean["mexico_production"], context, crop.country
         ),
+        "roaster_coverage": roaster_coverage(
+            clean["roaster_coffees"], clean["roaster_origins"], clean["roaster_offers"]
+        ),
     }
 
 
@@ -52,6 +82,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     denue = tables["shop_kinds"].filter(pl.col("source") == "denue")
     if not denue.is_empty():
         drawn["shop_kinds"] = shop_kinds_figure(denue)
+    if not tables["roaster_coverage"].is_empty():
+        drawn["roaster_coverage"] = roaster_coverage_figure(tables["roaster_coverage"])
     return drawn
 
 
@@ -308,5 +340,90 @@ def production_figure(by_state: pl.DataFrame) -> Figure:
         )
     ax.margins(x=0.25)
     value_grid(ax)
+    figure.tight_layout()
+    return figure
+
+
+def roaster_coverage(
+    coffees: pl.DataFrame, origins: pl.DataFrame, offers: pl.DataFrame
+) -> pl.DataFrame:
+    """How much each shop's sheets say: per shop and field, the share of its coffees that
+    give it, plus a row for all shops together.
+
+    "sheet" is having one at all. A coffee gives a field if any of its origins does, so
+    a blend counts once. The price per kilogram is counted over offers, not coffees.
+    It says where the stage-3 price model can learn, and from how few shops.
+    """
+    understood = pl.col("processing_method").is_not_null() & (
+        pl.col("processing_method") != UNCLASSIFIED
+    )
+    given = origins.group_by("shop", "product_id").agg(
+        *[
+            (understood if column == "processing_method" else pl.col(column).is_not_null())
+            .any()
+            .alias(field)
+            for column, field in SHEET_FIELDS.items()
+        ]
+    )
+    per_coffee = (
+        coffees.select("shop", "product_id", (pl.col("origins") > 0).alias("sheet"))
+        .join(given, on=["shop", "product_id"], how="left")
+        .fill_null(False)
+        .unpivot(index=["shop", "product_id"], variable_name="field", value_name="given")
+        .drop("product_id")
+    )
+    per_offer = offers.select(
+        "shop",
+        pl.lit("price per kg").alias("field"),
+        pl.col("price_mxn_per_kg").is_not_null().alias("given"),
+    )
+    answers = pl.concat([per_coffee, per_offer])
+    answers = pl.concat([answers, answers.with_columns(shop=pl.lit(ALL_SHOPS))])
+    return (
+        answers.group_by("shop", "field")
+        .agg(pl.len().alias("of"), pl.col("given").sum().cast(pl.Int64).alias("given"))
+        .with_columns((100 * pl.col("given") / pl.col("of")).alias("share_pct"))
+        .sort(
+            pl.col("shop") == ALL_SHOPS,
+            "shop",
+            pl.col("field").cast(pl.Enum(COVERAGE_FIELDS)),
+        )
+    )
+
+
+def roaster_coverage_figure(coverage: pl.DataFrame) -> Figure:
+    """One cell per shop and field, one hue for the share: where the sheets are thin."""
+    shops = coverage["shop"].unique(maintain_order=True).to_list()
+    coffees = dict(coverage.filter(pl.col("field") == "sheet").select("shop", "of").iter_rows())
+    grid = coverage.pivot(on="shop", index="field", values="share_pct")
+    shares = grid.select(shops).to_numpy()
+    figure, ax = canvas(
+        "What the roasters' sheets say about each coffee",
+        "Share of each shop's coffees whose sheet gives the field (price: of its offers)",
+    )
+    ax.imshow(
+        shares,
+        cmap=LinearSegmentedColormap.from_list("share", [SURFACE, SERIES[0]]),
+        vmin=0,
+        vmax=100,
+        aspect="auto",
+    )
+    for row in range(grid.height):
+        for column in range(len(shops)):
+            share = shares[row, column]
+            ax.text(
+                column,
+                row,
+                f"{share:.0f}%",
+                ha="center",
+                va="center",
+                fontsize=7.5,
+                color=SURFACE if share >= 60 else INK,
+            )
+    ax.set_xticks(range(len(shops)), [f"{shop}\n{coffees[shop]} coffees" for shop in shops])
+    ax.set_yticks(range(grid.height), grid["field"].to_list())
+    ax.tick_params(length=0)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_visible(False)
     figure.tight_layout()
     return figure

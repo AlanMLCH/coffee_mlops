@@ -13,8 +13,11 @@ from domains.coffee.schemas import (
     BOROUGHS,
     MARKET_CONTEXT,
     MEXICO_PRODUCTION,
+    ROASTER_COFFEES,
+    ROASTER_OFFERS,
     coffee_reviews_schema,
     coffee_shops_schema,
+    roaster_origins_schema,
 )
 from mlops_core.adapter import available_domains, load_adapter
 from mlops_core.config import DomainConfig
@@ -34,6 +37,9 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "boroughs": list(BOROUGHS.columns),
         "mexico_production": list(MEXICO_PRODUCTION.columns),
         "coffee_shops": list(coffee_shops_schema(coffee_config.cleaning).columns),
+        "roaster_coffees": list(ROASTER_COFFEES.columns),
+        "roaster_origins": list(roaster_origins_schema(coffee_config.cleaning).columns),
+        "roaster_offers": list(ROASTER_OFFERS.columns),
         "review_features": list(features_schema(coffee_config.items, coffee_config.model).columns),
         "review_predictions": list(predictions_schema(coffee_config.items).columns),
     }
@@ -58,6 +64,9 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "boroughs",
         "coffee_shops",
         "mexico_production",
+        "roaster_coffees",
+        "roaster_origins",
+        "roaster_offers",
         "review_features",
     ],
 )

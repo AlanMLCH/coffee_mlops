@@ -203,6 +203,9 @@ def test_build_clean_writes_both_tables_with_lineage(
         "boroughs",
         "coffee_shops",
         "mexico_production",
+        "roaster_coffees",
+        "roaster_origins",
+        "roaster_offers",
     }
     assert read_table(data_dir / "clean" / "coffee_reviews").height == 25
     manifest = json.loads((paths["coffee_reviews"].parent / MANIFEST_NAME).read_text())

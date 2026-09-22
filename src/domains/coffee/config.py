@@ -2,8 +2,9 @@
 
 The core's `DomainConfig` covers what every domain has. Coffee adds three API sources
 that each need code (DENUE pages, Overpass takes a query, FAS wants a key and walks
-years), a cleaning vocabulary for two CQI snapshots that disagree about spelling, and
-the market studies that only make sense for a commodity with a world balance.
+years), a cleaning vocabulary for two CQI snapshots that disagree about spelling, the
+rules for reading the roasters' product sheets, and the market studies that only make
+sense for a commodity with a world balance.
 """
 
 from typing import Literal, Self
@@ -132,6 +133,50 @@ class RegisterMatchConfig(BaseModel):
     min_name_similarity: float  # Jaro-Winkler, 0-1
 
 
+# What a roaster's sheet can say about one origin of a coffee.
+SheetField = Literal[
+    "country",
+    "state",
+    "origin",  # a place, written however the shop likes: "Tenejapa, Chiapas"
+    "region",
+    "producer",
+    "farm",
+    "altitude",
+    "varieties",
+    "process",
+    "species",
+    "sca_score",
+]
+
+
+class RoasterSheetRules(BaseModel):
+    """How to read the roasters' product sheets, which are written in Spanish.
+
+    Unlike the CQI's frozen labels, these shops add coffees every week: what the rules do
+    not recognise is kept as written and counted by `analysis.roaster_coverage`, not
+    fatal - as with the shop kinds. Keys of the lookups are lower-case and accent-free.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Label as written (any case) -> field. None: read, so it ends the value before it,
+    # then dropped.
+    labels: dict[str, SheetField | None]
+    countries: dict[str, str]  # -> the name PSD uses, so origins meet the world market
+    states: dict[str, str]  # -> the name SIAP uses, so origins meet Mexico's production
+    home_country: str  # the country a state implies
+    # Method -> pattern over the label; the vocabulary is the CQI's processing methods.
+    processes: dict[str, str]
+    # Fermentation experiments. The CQI rules call them "other"; so do these.
+    experimental: str
+    varieties: dict[str, str]  # spelling -> the CQI's spelling
+    species: dict[str, str]
+    # Titles of offers that pay for more than coffee: no price per kilogram.
+    bundles: str
+    # An offer this many times above or below its product's median price per kilogram.
+    price_outlier_ratio: float
+
+
 class CleaningConfig(BaseModel):
     """Rules for the clean layer. Vocabularies are closed: an unseen label stops the run."""
 
@@ -146,6 +191,16 @@ class CleaningConfig(BaseModel):
     # OSM amenity tag -> kind. OSM's mappers already said what the place is.
     osm_kinds: dict[str, str]
     register_match: RegisterMatchConfig
+    roaster_sheets: RoasterSheetRules
+
+    @model_validator(mode="after")
+    def _one_process_vocabulary(self) -> Self:
+        # The roasters' methods are the CQI's, or the two tables cannot be compared.
+        vocabulary = set(self.processing_methods.values())
+        stray = {*self.roaster_sheets.processes, OTHER} - vocabulary
+        if stray:
+            raise ValueError(f"roaster_sheets.processes outside processing_methods: {stray}")
+        return self
 
     @property
     def kinds(self) -> list[str]:
@@ -155,6 +210,8 @@ class CleaningConfig(BaseModel):
 
 
 UNCLASSIFIED = "unclassified"  # named, but the name says nothing any rule recognises
+# A lot sold as several processes, or processed experimentally: the CQI rules' "other".
+OTHER = "other"
 
 
 class ProductionConfig(BaseModel):

@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 import domains.coffee
-from domains.coffee.config import CoffeeConfig, CoffeeCredentials, ShopConfig
+from domains.coffee.config import CleaningConfig, CoffeeConfig, CoffeeCredentials, ShopConfig
 from mlops_core.adapter import available_domains, load_adapter
 from mlops_core.config import ModelSpec, Settings, load_config
 
@@ -93,6 +93,15 @@ def test_a_squarespace_shop_must_say_where_its_store_is() -> None:
     """Squarespace has no fixed catalog path, unlike Shopify's `/products.json`."""
     with pytest.raises(ValidationError, match="store_path"):
         ShopConfig(shop="nowhere", platform="squarespace", base_url="https://shop.test")
+
+
+def test_the_roasters_processes_speak_the_cqi_vocabulary() -> None:
+    """Otherwise a roaster's "washed" and a graded lot's could not be compared."""
+    cleaning = load_adapter("coffee").config.cleaning.model_dump()
+    cleaning["roaster_sheets"]["processes"]["fermented"] = "ferment"
+
+    with pytest.raises(ValidationError, match="fermented"):
+        CleaningConfig.model_validate(cleaning)
 
 
 @pytest.mark.parametrize("leaked", ["aroma", "total_cup_points"])

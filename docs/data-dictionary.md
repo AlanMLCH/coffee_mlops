@@ -103,6 +103,52 @@ and water regime; those rows are summed, and yield and price derived from the to
 | `yield_t_per_ha` | Float? | `production_t / harvested_ha`; null when nothing was harvested |
 | `rural_price_mxn_per_t` | Float? | `value_mxn / production_t`; null when nothing was produced |
 
+## `clean.roaster_coffees` — one coffee a roaster sells
+
+What four Mexico City roasters list as coffee in their own shops (stage 3), read
+2026-09-21: 167 coffees. Unlike the CQI, current and Mexican - but a shop's catalogue,
+not a graded sample: nothing here was cupped by a third party.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop`, `product_id` | String | The shop (as named in the config) and the platform's own product id: the key |
+| `title` | String | As the shop titles it |
+| `url` | String | The product page |
+| `description` | String? | The shop's own text, markup stripped; the source of RAG documents later |
+| `origins` | Int | How many origins its sheet describes: 0 = no sheet, 2 or more = a blend |
+
+## `clean.roaster_origins` — one origin a coffee's sheet describes
+
+Read from "Label: value" lines or, on Buna, from headed paragraphs on the product page.
+A blend lists each component in turn and gets a row for each. Canonical columns use the
+vocabulary of a table that already exists, so they join: countries as PSD names them,
+states as SIAP does, processing methods and varieties as the CQI spells them.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop`, `product_id`, `origin` | | Keys; `origin` is 1, 2, ... in the sheet's order |
+| `country` | String? | PSD's name, from the country label, a state (which implies Mexico), or a place |
+| `state` | String? | The Mexican state as SIAP names it (Estado de México is `México`) |
+| `region` | String? | As written; the "origin" label when there is no region |
+| `producer`, `farm` | String? | As written |
+| `altitude_min_m`, `altitude_max_m` | Float? | The range written, in metres; equal for a single figure; numbers outside 300-3,000 m dropped |
+| `varieties` | List[String]? | Lower-case, split on commas, "y", shares and slashes, spelled as the CQI spells them |
+| `process` | String? | As the shop wrote it: "Natural Maceración Carbónica" |
+| `processing_method` | String? | `washed`, `natural`, `honey`, `semi_washed`; `other` for experimental fermentations and lots sold as two methods; `unclassified` when no rule recognises the label |
+| `species` | String? | `arabica` or `robusta`, only where the sheet says so |
+| `sca_score` | Float? | The cupping score, where the shop publishes one |
+
+## `clean.roaster_offers` — one coffee in one size
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop`, `product_id`, `variant_id` | String | Keys; `variant_id` is the platform's |
+| `variant_title` | String? | Size, grind or lot, as the shop titles the variant |
+| `price_mxn` | Float | The listed price, pesos (Buna's pages state MXN; Squarespace's JSON does too) |
+| `bag_grams` | Float? | From the titles: the variant's size, else the product's, times the bags in a pack. Never the platform's own weight, which contradicts the titles in 77 offers |
+| `price_mxn_per_kg` | Float? | Null without a size, and for kits and samplers, whose price pays for more than coffee |
+| `price_outlier` | Bool? | More than 3x off its product's median per kilogram: the three found were a price copied from another size. Kept as listed, flagged |
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**

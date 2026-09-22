@@ -142,7 +142,7 @@ roasters:
       base_url: https://cucuruchocafe.com
       store_path: /tienda
       # The store page lists merch and subscriptions beside the coffee, untagged.
-      exclude_titles: ["^tote", "^playera", "chamarra", "^suscripci"]
+      exclude_titles: ["^tote", "^playera", "chamarra", "^suscripci", "^taza"]
 
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
@@ -226,6 +226,108 @@ cleaning:
     radius_m: 60
     min_name_similarity: 0.88
 
+  # The roasters' product sheets (stage 3), in Spanish. Lookup keys are lower-case and
+  # accent-free. Shops add coffees every week, so these rules are open, unlike the CQI's:
+  # what they do not recognise is kept as written and counted in analysis.roaster_coverage.
+  roaster_sheets:
+    # Every label seen on the four shops' sheets (2026-09-21), as written.
+    labels:
+      País: country
+      Pais: country
+      Estado: state
+      Origen: origin
+      Lugar de origen: origin
+      Región: region
+      Region: region
+      Productor: producer
+      Productora: producer
+      Productores: producer
+      Productoras: producer
+      Finca: farm
+      Fincas: farm
+      Predio: farm
+      Altura: altitude
+      Variedad: varieties
+      Variedades: varieties
+      Varietal(es): varieties
+      Proceso: process
+      Procesos: process
+      Especie: species
+      Especies: species
+      Puntaje SCA: sca_score
+      # Almanegra's "Tostado" names the roastery, not a roast level. Read so it ends the
+      # value before it: some sheets run it on ("Proceso: HoneyTostado: ...").
+      Tostado: null
+    countries: # as PSD names them
+      mexico: Mexico
+      etiopia: Ethiopia
+      kenia: Kenya
+      colombia: Colombia
+      yemen: Yemen # PSD's name since 1991; "Yemen (Sanaa)" is the north before unification
+      indonesia: Indonesia
+      burundi: Burundi
+      ruanda: Rwanda
+      rwanda: Rwanda
+      papua nueva guinea: Papua New Guinea
+      nicaragua: Nicaragua
+      republica del congo: Congo (Brazzaville)
+      tanzania: Tanzania
+      india: India
+      isla de timor oriental: Timor-Leste # not in PSD: no market context, like Myanmar
+    # The coffee-growing states, as SIAP names them. A bare "México" is the country; the
+    # state is "Estado de México", which SIAP calls México.
+    states:
+      chiapas: Chiapas
+      colima: Colima
+      estado de mexico: México
+      guerrero: Guerrero
+      hidalgo: Hidalgo
+      jalisco: Jalisco
+      michoacan: Michoacán
+      morelos: Morelos
+      nayarit: Nayarit
+      oaxaca: Oaxaca
+      puebla: Puebla
+      queretaro: Querétaro
+      san luis potosi: San Luis Potosí
+      tabasco: Tabasco
+      veracruz: Veracruz
+    home_country: Mexico
+    # Tried in this order over the label, parentheses dropped; each match is removed
+    # before the next, so "semi-lavado" is not also "lavado". A label naming two methods
+    # ("Lavado, Natural") is a lot sold two ways: other. None at all: unclassified.
+    processes:
+      semi_washed: 'semi.?lavad|giling basah|trillado humedo'
+      honey: 'honey|enmielad'
+      natural: '\bnatural\b|\bseco\b'
+      washed: '\blavad[oa]\b|\bwashed\b'
+    experimental: 'macera|anaerobic|anoxic|ferment|levadura|barrel|hidronatural'
+    # Spellings -> the CQI's, where it has the variety. Heirloom stays heirloom: the
+    # CQI's "ethiopian heirlooms" would be wrong for a Yemeni one.
+    varieties:
+      tipica: typica
+      tipicas: typica
+      sl-28: sl28
+      sl-34: sl34
+      ruiru-11: ruiru 11
+      mondo novo: mundo novo
+      marago: maragogype
+      bourbon amarillo: yellow bourbon
+      heirloom cultivars: heirloom
+      hibridos de timor: timor hybrid
+      colombia supremo: colombia # Supremo is a screen size, not a variety
+      arabica - garnica: garnica # the species written before the variety
+    species:
+      arabiga: arabica
+      arabica: arabica
+      robusta: robusta
+    # A kit's price pays for a book, chocolate or honey as well; a sampler's for a box.
+    bundles: '^kit|sampler'
+    # Far enough from the product's other offers to be a price copied from another size:
+    # the three found (2026-09-21) were exactly that. The legitimate spread between the
+    # different lots one product sells as variants stays within 0.5-1.7x.
+    price_outlier_ratio: 3.0
+
 # What the model sees. Fitted transforms (encoding, rare-category grouping) live in
 # the model pipeline, learned on the training split only.
 model:
@@ -297,6 +399,7 @@ analysis:
     - market_history
     - shop_kinds
     - mexico_production
+    - roaster_coverage
 
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:

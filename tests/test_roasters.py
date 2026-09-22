@@ -12,8 +12,10 @@ import httpx
 import polars as pl
 import pytest
 
+import domains.coffee
 from domains.coffee.config import RoastersConfig
-from domains.coffee.schemas import ROASTER_OFFERS
+from domains.coffee.roaster_sheets import clean_roasters
+from domains.coffee.schemas import ROASTER_CATALOGS, clean_schemas
 from domains.coffee.sources.roasters import ingest_catalogs, to_frame
 from mlops_core.contracts import check_contract
 from mlops_core.data.api import ApiClient
@@ -116,7 +118,7 @@ def test_offers_meet_the_raw_contract_across_both_platforms(
 ) -> None:
     document, _ = ingest(Shops(), roasters, tmp_path)
 
-    offers = check_contract(ROASTER_OFFERS, to_frame(document))
+    offers = check_contract(ROASTER_CATALOGS, to_frame(document))
 
     by_platform = offers.group_by("platform").agg(
         pl.col("platform_grams").null_count().alias("no_grams"), pl.len()
@@ -135,3 +137,76 @@ def test_the_same_catalog_in_another_order_is_not_new_data(
     ingest(Shops(reverse=True), roasters, tmp_path, cache="second")  # asked afresh, backwards
 
     assert len(list((tmp_path / "raw" / "roaster_catalogs").iterdir())) == 1
+
+
+@pytest.fixture
+def clean_tables(roasters: RoastersConfig, tmp_path: Path) -> dict[str, pl.DataFrame]:
+    """The recorded shops, read and cleaned, each table held to its contract."""
+    document, _ = ingest(Shops(), roasters, tmp_path)
+    rules = domains.coffee.adapter().config.cleaning
+    tables = clean_roasters(check_contract(ROASTER_CATALOGS, to_frame(document)), rules)
+    contracts = clean_schemas(rules)
+    return {name: check_contract(contracts[name], table) for name, table in tables.items()}
+
+
+def origins_of(tables: dict[str, pl.DataFrame], title: str) -> list[dict]:  # type: ignore[type-arg]
+    coffee = tables["roaster_coffees"].filter(pl.col("title") == title)
+    return (
+        tables["roaster_origins"]
+        .join(coffee.select("shop", "product_id"), on=["shop", "product_id"])
+        .sort("origin")
+        .to_dicts()
+    )
+
+
+def test_a_blend_gets_one_row_per_origin(clean_tables: dict[str, pl.DataFrame]) -> None:
+    """Buna's Guarumbo page lists three components with the same headings."""
+    origins = origins_of(clean_tables, "Café Guarumbo")
+
+    assert [(o["state"], o["species"]) for o in origins] == [
+        ("Oaxaca", "arabica"),
+        ("Chiapas", "arabica"),
+        ("Chiapas", "robusta"),
+    ]
+    assert origins[2]["altitude_min_m"] == 700
+    assert origins_of(clean_tables, "Micha y Micha") == []  # its page has no sheet
+
+
+def test_a_description_sheet_is_read_into_canonical_values(
+    clean_tables: dict[str, pl.DataFrame],
+) -> None:
+    (yemen,) = origins_of(clean_tables, "Yemen Mokha Haimi")
+
+    assert (yemen["country"], yemen["altitude_min_m"], yemen["altitude_max_m"]) == (
+        "Yemen",
+        2000,
+        2400,
+    )
+    assert yemen["varieties"] == ["heirloom"] and yemen["processing_method"] == "natural"
+
+
+def test_squarespace_descriptions_are_read_from_the_excerpt(
+    clean_tables: dict[str, pl.DataFrame],
+) -> None:
+    """Cucurucho's `body` is empty; its text, labels included, is in `excerpt`."""
+    (chiapas,) = origins_of(clean_tables, "Chiapas- Caramelo, avellana y chocolate")
+    coffees = clean_tables["roaster_coffees"].filter(pl.col("shop") == "cucurucho")
+
+    assert (chiapas["country"], chiapas["state"], chiapas["altitude_min_m"]) == (
+        "Mexico",
+        "Chiapas",
+        1250,
+    )
+    assert coffees["description"].is_not_null().all()
+
+
+def test_the_size_in_the_title_beats_the_platforms_weight(
+    clean_tables: dict[str, pl.DataFrame],
+) -> None:
+    """Café con Jiribilla says 1 kg in the title and 250 g in the platform's field."""
+    coarse = clean_tables["roaster_offers"].filter(
+        pl.col("variant_title") == "Molido grueso / 1 kg"
+    )
+
+    assert coarse["bag_grams"].item() == 1000
+    assert coarse["price_mxn_per_kg"].item() == coarse["price_mxn"].item()

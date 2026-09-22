@@ -4,6 +4,9 @@
 - USDA PSD (long format) -> `market_context` (one row per country and market year).
 - INEGI's borough polygons -> `boroughs` (one row per alcaldia, geometry as WKB).
 - DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough).
+- SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
+- The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
+  `domains.coffee.roaster_sheets`.
 
 Transforms are pure functions over validated frames. Reading the raw layer, holding
 each table to its contract and writing it with lineage is the core's job
@@ -20,6 +23,7 @@ import polars as pl
 from polars.expr.whenthen import ChainedThen, Then
 
 from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ProductionConfig, ShopKindRule
+from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
     PSD_ATTRIBUTES,
     SENSORY_COLUMNS,
@@ -432,12 +436,13 @@ def clean_mexico_production(siap: pl.DataFrame, crop: ProductionConfig) -> pl.Da
 def clean_tables(
     frames: Mapping[str, pl.DataFrame], rules: CleaningConfig, crop: ProductionConfig
 ) -> dict[str, CleanTable]:
-    """Validated raw frames -> the domain's four clean tables, each with its sources."""
+    """Validated raw frames -> the domain's clean tables, each with its sources."""
     if "fas_psd_coffee" in frames:  # absent without a key, and nothing depends on it
         reconcile_market_sources(frames["psd_coffee"], frames["fas_psd_coffee"])
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
     shop_inputs = tuple(name for name in (*SHOP_SOURCES, "cdmx_boroughs") if name in frames)
+    roasters = clean_roasters(frames.get("roaster_catalogs"), rules)
     return {
         "coffee_reviews": CleanTable(clean_reviews(frames, rules), ("cqi_2018", "cqi_2023")),
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),
@@ -446,4 +451,5 @@ def clean_tables(
         "mexico_production": CleanTable(
             clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)
         ),
+        **{name: CleanTable(table, ("roaster_catalogs",)) for name, table in roasters.items()},
     }

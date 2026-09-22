@@ -15,7 +15,7 @@ contract with every downstream consumer (features, the agent's SQL, the API).
 import pandera.polars as pa
 import polars as pl
 
-from domains.coffee.config import CleaningConfig
+from domains.coffee.config import UNCLASSIFIED, CleaningConfig
 
 SENSORY_SCORES = [
     "Aroma",
@@ -222,7 +222,7 @@ SIAP_AGRICOLA = pa.DataFrameSchema(
 )
 
 # One row per offer - a roaster's product in one size - as the shops listed it.
-ROASTER_OFFERS = pa.DataFrameSchema(
+ROASTER_CATALOGS = pa.DataFrameSchema(
     name="roaster_catalogs",
     coerce=True,
     unique=["shop", "variant_id"],
@@ -252,7 +252,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     # The API is held to the file's contract: one table, two ways to reach it.
     "fas_psd_coffee": PSD_COFFEE,
     "siap_agricola": SIAP_AGRICOLA,
-    "roaster_catalogs": ROASTER_OFFERS,
+    "roaster_catalogs": ROASTER_CATALOGS,
 }
 
 
@@ -374,7 +374,87 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "boroughs": BOROUGHS,
         "coffee_shops": coffee_shops_schema(rules),
         "mexico_production": MEXICO_PRODUCTION,
+        "roaster_coffees": ROASTER_COFFEES,
+        "roaster_origins": roaster_origins_schema(rules),
+        "roaster_offers": ROASTER_OFFERS,
     }
+
+
+ROASTER_COFFEES = pa.DataFrameSchema(
+    name="roaster_coffees",
+    strict=True,
+    unique=["shop", "product_id"],
+    columns={
+        "shop": pa.Column(pl.String),
+        "product_id": pa.Column(pl.String),
+        "title": pa.Column(pl.String),
+        "url": pa.Column(pl.String, pa.Check.str_startswith("https://")),
+        "description": pa.Column(pl.String, nullable=True),
+        "origins": pa.Column(pl.Int64, pa.Check.ge(0)),
+    },
+)
+
+
+def roaster_origins_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """Contract of `roaster_origins`: every canonical value is one some other table uses."""
+    sheets = rules.roaster_sheets
+    in_vocabulary = {
+        "country": sorted({*sheets.countries.values(), sheets.home_country}),
+        "state": sorted(set(sheets.states.values())),
+        "processing_method": sorted({*rules.processing_methods.values(), UNCLASSIFIED}),
+        "species": sorted(set(sheets.species.values())),
+    }
+    optional_text = ("region", "producer", "farm", "process")
+    return pa.DataFrameSchema(
+        name="roaster_origins",
+        strict=True,
+        unique=["shop", "product_id", "origin"],
+        columns={
+            "shop": pa.Column(pl.String),
+            "product_id": pa.Column(pl.String),
+            "origin": pa.Column(pl.Int64, pa.Check.ge(1)),
+            **{
+                name: pa.Column(pl.String, pa.Check.isin(values), nullable=True)
+                for name, values in in_vocabulary.items()
+            },
+            **{name: pa.Column(pl.String, nullable=True) for name in optional_text},
+            "altitude_min_m": pa.Column(
+                pl.Float64, pa.Check.in_range(*rules.altitude_m), nullable=True
+            ),
+            "altitude_max_m": pa.Column(
+                pl.Float64, pa.Check.in_range(*rules.altitude_m), nullable=True
+            ),
+            "varieties": pa.Column(pl.List(pl.String), nullable=True),
+            "sca_score": pa.Column(pl.Float64, pa.Check.in_range(0, 100), nullable=True),
+        },
+        checks=[
+            pa.Check(
+                lambda data: data.lazyframe.select(
+                    pl.col("altitude_min_m").le(pl.col("altitude_max_m")).fill_null(True)
+                ),
+                error="an altitude range runs from its lowest point to its highest",
+            )
+        ],
+    )
+
+
+ROASTER_OFFERS = pa.DataFrameSchema(
+    name="roaster_offers",
+    strict=True,
+    unique=["shop", "variant_id"],
+    columns={
+        "shop": pa.Column(pl.String),
+        "product_id": pa.Column(pl.String),
+        "variant_id": pa.Column(pl.String),
+        "variant_title": pa.Column(pl.String, nullable=True),
+        "price_mxn": pa.Column(pl.Float64, pa.Check.ge(0)),
+        # Null when neither title states a size: never the platform's own weight.
+        "bag_grams": pa.Column(pl.Float64, pa.Check.gt(0), nullable=True),
+        "price_mxn_per_kg": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+        # Listed as the shop lists it, but most likely a price copied from another size.
+        "price_outlier": pa.Column(pl.Boolean, nullable=True),
+    },
+)
 
 
 MEXICO_PRODUCTION = pa.DataFrameSchema(

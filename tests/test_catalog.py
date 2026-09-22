@@ -24,6 +24,9 @@ def test_every_built_table_is_queryable_by_layer(
         "clean.coffee_shops",
         "clean.market_context",
         "clean.mexico_production",
+        "clean.roaster_coffees",
+        "clean.roaster_offers",
+        "clean.roaster_origins",
         "features.review_features",
     ]
     assert con.sql("SELECT count(*) FROM features.review_features").fetchone() == (25,)

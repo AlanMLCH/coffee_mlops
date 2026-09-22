@@ -83,6 +83,9 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "boroughs",
         "coffee_shops",
         "mexico_production",
+        "roaster_coffees",
+        "roaster_origins",
+        "roaster_offers",
     }
 
 
@@ -107,6 +110,9 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "boroughs",
         "coffee_shops",
         "mexico_production",
+        "roaster_coffees",
+        "roaster_origins",
+        "roaster_offers",
     }
 
 
@@ -283,6 +289,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "feature_importance.png",
         "market_history.png",
         "mexico_production.png",  # residual_bias needs predictions, which this run lacks
+        "roaster_coverage.png",
     }
 
 
