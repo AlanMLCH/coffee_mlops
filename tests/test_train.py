@@ -11,6 +11,7 @@ from mlflow import MlflowClient
 from mlflow.models import infer_signature
 from sklearn.dummy import DummyRegressor
 
+from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.config import DomainConfig
 from mlops_core.data.clean import build_clean
 from mlops_core.ml.evaluation import Comparison
@@ -37,8 +38,9 @@ def fast_config(coffee_config: DomainConfig) -> DomainConfig:
 
 @pytest.fixture
 def data_dir(fast_config: DomainConfig, raw_dir: Path) -> Path:
-    build_clean(fast_config, raw_dir.parent)
-    build_features(fast_config, raw_dir.parent)
+    adapter = CoffeeAdapter(fast_config)  # type: ignore[arg-type]
+    build_clean(adapter, raw_dir.parent)
+    build_features(adapter, raw_dir.parent)
     return raw_dir.parent
 
 
@@ -75,7 +77,7 @@ def test_temporal_split_never_trains_on_the_future(fast_config: DomainConfig) ->
         {"grading_date": [date(2023, 1, 1), date(2010, 1, 1), date(2018, 12, 31), date(2019, 1, 1)]}
     )
 
-    train, test = temporal_split(features, fast_config.training)
+    train, test = temporal_split(features, fast_config.training, fast_config.items.time)
 
     assert train["grading_date"].to_list() == [date(2010, 1, 1), date(2018, 12, 31)]
     assert test["grading_date"].to_list() == [date(2019, 1, 1), date(2023, 1, 1)]
@@ -174,7 +176,9 @@ def test_training_is_tracked_registered_and_servable(
     model = mlflow.sklearn.load_model(f"models:/{name}/{result.model_version}")
     x_test = xy(
         temporal_split(
-            pl.read_parquet(next(data_dir.rglob("review_features.parquet"))), fast_config.training
+            pl.read_parquet(next(data_dir.rglob("review_features.parquet"))),
+            fast_config.training,
+            fast_config.items.time,
         )[1],
         fast_config.model,
     )[0]

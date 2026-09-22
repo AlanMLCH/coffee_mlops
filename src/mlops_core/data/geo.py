@@ -1,7 +1,7 @@
 """Geospatial reading and point-in-area attribution, through DuckDB's spatial extension.
 
 The extension is confined to this module. Layers stay plain Parquet and geometry travels
-as WKB in WGS84, so features, the API, the analysis and the agent read a borough table
+as WKB in WGS84, so features, the API, the analysis and the agent read an area table
 without installing or loading anything spatial. Two jobs live here: turn a downloaded map
 layer into a frame of areas, and say which area each point falls in.
 
@@ -9,24 +9,27 @@ Three traps, each of them silent, each found against the real data:
 
 - **`ST_Transform` needs `always_xy := true`.** EPSG:4326 officially orders its axes
   latitude first, so without it the call does not fail -- it returns coordinates that
-  are merely wrong. Mexico City's boroughs came back sitting in California.
-- **A shapefile's DBF declares no character set.** INEGI's is Latin-1, and reading it as
+  are merely wrong: a city's districts came back on another continent.
+- **A shapefile's DBF declares no character set.** A Latin-1 one read as
   UTF-8 raises "Invalid unicode" rather than mangling a few names, so the encoding has
   to be stated in the config.
 - **Areas are measured in the layer's own projection**, in metres. Lambert Conformal
   Conic preserves angles, not areas, so the number carries a little distortion: the 16
-  boroughs sum to 1,486 km2 against the 1,495 km2 the city publishes (0.6% out). That
+  areas of one real layer sum to 1,486 km2 against the published 1,495 (0.6% out). That
   is the accuracy to expect from these figures, and it is plenty for a density.
 """
 
 import logging
 from contextlib import closing
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import duckdb
 import polars as pl
 
 from mlops_core.config import SpatialConfig
+
+if TYPE_CHECKING:
+    import duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +37,15 @@ WGS84 = "EPSG:4326"  # what every point source in this project speaks
 AREA_COLUMNS = ["area_id", "area_name", "area_km2", "boundary"]
 
 
-def spatial_connection() -> duckdb.DuckDBPyConnection:
-    """A DuckDB connection with `spatial` loaded, or a message that says what is missing."""
+def spatial_connection() -> "duckdb.DuckDBPyConnection":
+    """A DuckDB connection with `spatial` loaded, or a message that says what is missing.
+
+    DuckDB is imported here, on use, not at the top of the module: validation and
+    cleaning import this module, and an environment that never reads a map layer - the
+    prediction API's - must be able to import them without installing a SQL engine.
+    """
+    import duckdb
+
     con = duckdb.connect()
     try:
         con.install_extension("spatial")

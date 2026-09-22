@@ -1,8 +1,9 @@
 """The analyses themselves: pure functions from layers to tables.
 
-Each one answers a question someone actually asks about this domain, and the last one
-answers the question that changes the model: which features are worth keeping. Nothing
-here does I/O, so every table can be tested on a handful of rows.
+Each one answers a question every domain gets asked, and the last one answers the
+question that changes the model: which features are worth keeping. A domain's own
+studies live with the domain. Nothing here does I/O, so every table can be tested on a
+handful of rows.
 """
 
 from typing import cast
@@ -10,31 +11,21 @@ from typing import cast
 import numpy as np
 import polars as pl
 
-from mlops_core.config import ModelSpec
-
-# Quality bands used when reporting error: a buyer cares about these ranges, not deciles.
-QUALITY_BANDS = [
-    (0.0, 82.0, "low (<82)"),
-    (82.0, 85.0, "mid (82-85)"),
-    (85.0, 101.0, "high (>=85)"),
-]
+from mlops_core.config import ModelSpec, TargetBands
 
 
-# Periods are ordered by when they happened, never by name: "new" sorts before "old".
-TIME_COLUMN = "grading_date"
-
-
-def periods_in_order(frame: pl.DataFrame, period: str) -> list[str]:
-    ordered = frame.group_by(period).agg(pl.col(TIME_COLUMN).min().alias("start")).sort("start")
+def periods_in_order(frame: pl.DataFrame, period: str, time: str) -> list[str]:
+    """Periods ordered by when they happened, never by name: "new" sorts before "old"."""
+    ordered = frame.group_by(period).agg(pl.col(time).min().alias("start")).sort("start")
     return [str(name) for name in ordered[period].to_list()]
 
 
-def target_distribution(reviews: pl.DataFrame, target: str, period: str) -> pl.DataFrame:
+def target_distribution(items: pl.DataFrame, target: str, period: str, time: str) -> pl.DataFrame:
     """How the target is distributed in each period. The shape matters as much as the
-    mean: a truncated period (no bad coffee) evaluates a model on a different problem."""
-    order = {name: position for position, name in enumerate(periods_in_order(reviews, period))}
+    mean: a truncated period (nothing below some score) evaluates a model on a different problem."""
+    order = {name: position for position, name in enumerate(periods_in_order(items, period, time))}
     return (
-        reviews.group_by(period)
+        items.group_by(period)
         .agg(
             pl.len().alias("n"),
             pl.col(target).mean().alias("mean"),
@@ -49,10 +40,12 @@ def target_distribution(reviews: pl.DataFrame, target: str, period: str) -> pl.D
     )
 
 
-def numeric_profile(features: pl.DataFrame, spec: ModelSpec, period: str) -> pl.DataFrame:
+def numeric_profile(
+    features: pl.DataFrame, spec: ModelSpec, period: str, time: str
+) -> pl.DataFrame:
     """Per numeric feature: how often it is missing, how it moves with the target, and
     how far its distribution drifted between periods (in standard deviations)."""
-    periods = periods_in_order(features, period)
+    periods = periods_in_order(features, period, time)
     rows = []
     for column in spec.numeric:
         values = features[column]
@@ -78,11 +71,11 @@ def numeric_profile(features: pl.DataFrame, spec: ModelSpec, period: str) -> pl.
 
 
 def categorical_profile(
-    features: pl.DataFrame, spec: ModelSpec, period: str, min_rows: int
+    features: pl.DataFrame, spec: ModelSpec, period: str, time: str, min_rows: int
 ) -> pl.DataFrame:
     """Per level of each categorical feature: its weight in each period and its mean
     target. A level that grows from 6% to 30% is a composition change, not drift."""
-    periods = periods_in_order(features, period)
+    periods = periods_in_order(features, period, time)
     first, last = periods[0], periods[-1]
     frames = []
     for column in spec.categorical:
@@ -129,19 +122,21 @@ def residuals_by_group(
     group: str,
     min_rows: int,
     period: str,
+    item_id: str,
+    bands: TargetBands,
 ) -> pl.DataFrame:
-    """Where the model is wrong: by a categorical feature and by quality band, **per
+    """Where the model is wrong: by a categorical feature and by target band, **per
     period**.
 
     Split by period on purpose. The batch job scores every row it has, training rows
     included, and a model is always flattering on the data it learned from; mixing the
     two would report an error nobody will ever see in production.
     """
-    scored = predictions.join(features.drop(period), on="review_id", how="inner").with_columns(
+    scored = predictions.join(features.drop(period), on=item_id, how="inner").with_columns(
         (pl.col("prediction") - pl.col(spec.target)).alias("error")
     )
     by_group = _error_summary(scored, group, "group", period).rename({group: "level"})
-    banded = scored.with_columns(_band(spec.target).alias("quality_band"))
+    banded = scored.with_columns(_band(spec.target, bands).alias("quality_band"))
     by_band = _error_summary(banded, "quality_band", "quality_band", period).rename(
         {"quality_band": "level"}
     )
@@ -158,7 +153,7 @@ def feature_recommendation(
     """One row per feature with the evidence needed to keep, review or drop it.
 
     The action is deliberately a suggestion, not an automatic change: the last time the
-    numbers looked damning (market context: no correlation, half the splits) removing the
+    numbers looked damning (context features: no correlation, half the splits) removing the
     features made the model worse. Evidence informs the decision, it does not make it.
     """
     numeric_rows = numeric.select(
@@ -189,42 +184,6 @@ def feature_recommendation(
     )
 
 
-def market_summary(context: pl.DataFrame, year: int, top: int) -> pl.DataFrame:
-    """Who produces the world's coffee in one market year, and what they do with it."""
-    producing = context.filter((pl.col("market_year") == year) & (pl.col("production") > 0))
-    return (
-        producing.select(
-            "country",
-            "production",
-            (100 * pl.col("production") / pl.col("production").sum()).alias("world_share_pct"),
-            (pl.col("exports") / pl.col("production")).alias("export_ratio"),
-            "domestic_consumption",
-            (pl.col("imports") / pl.col("domestic_consumption")).alias("imported_share_of_use"),
-        )
-        .sort("production", descending=True)
-        .head(top)
-    )
-
-
-def market_history(context: pl.DataFrame, country: str, since: int) -> pl.DataFrame:
-    """One country through time: production, what it exports, and what it imports to
-    drink. For Mexico those three lines are the whole story of the domestic market."""
-    return (
-        context.filter((pl.col("country") == country) & (pl.col("market_year") >= since))
-        .select(
-            "market_year",
-            "production",
-            "exports",
-            "domestic_consumption",
-            "imports",
-            (100 * pl.col("imports") / pl.col("domestic_consumption")).alias(
-                "imported_share_of_use_pct"
-            ),
-        )
-        .sort("market_year")
-    )
-
-
 def _correlation(frame: pl.DataFrame, column: str, target: str) -> float | None:
     pairs = frame.select(column, target).drop_nulls()
     if pairs.height < 3 or (pairs[column].std() or 0) == 0:
@@ -232,18 +191,10 @@ def _correlation(frame: pl.DataFrame, column: str, target: str) -> float | None:
     return float(np.corrcoef(pairs[column].to_numpy(), pairs[target].to_numpy())[0, 1])
 
 
-def _band(target: str) -> pl.Expr:
-    """Label each row with its quality band. Written out rather than folded in a loop,
-    because polars' when/then chain changes type at every link."""
-    score = pl.col(target)
-    (_, low_edge, low_label), (_, mid_edge, mid_label), (*_, high_label) = QUALITY_BANDS
-    return (
-        pl.when(score < low_edge)
-        .then(pl.lit(low_label))
-        .when(score < mid_edge)
-        .then(pl.lit(mid_label))
-        .otherwise(pl.lit(high_label))
-    )
+def _band(target: str, bands: TargetBands) -> pl.Expr:
+    """Label each row with its band of the target. Left-closed, so a value on an edge
+    belongs to the band above it, as the config promises."""
+    return pl.col(target).cut(bands.edges, labels=bands.labels, left_closed=True).cast(pl.String)
 
 
 def _scalar(value: object) -> float:

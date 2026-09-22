@@ -1,10 +1,11 @@
 """Quality gate between raw and clean: read the latest ingestion of each source and
-validate it against its Pandera contract. Any violation stops the pipeline.
+validate it against the contract the domain declares for it. Any violation stops the
+pipeline.
 
 Three kinds of source arrive here and each is *read* differently while being *checked*
 the same way: a table (CSV, possibly inside a ZIP), a map layer (read in place out of
-the archive and reprojected), and an API's stored JSON (flattened by the module that
-knows that service's shape). A source that has never been ingested because its
+the archive and reprojected), and an API's stored JSON (flattened by the domain module
+that knows that service's shape). A source that has never been ingested because its
 credential is missing is reported and skipped, not raised: the rest of the pipeline
 still has work to do.
 """
@@ -12,24 +13,19 @@ still has work to do.
 import json
 import logging
 import zipfile
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
+import pandera.polars as pa
 import polars as pl
 
-from mlops_core.config import DomainConfig, SourceConfig
+from mlops_core.adapter import DomainAdapter
+from mlops_core.config import SourceConfig
 from mlops_core.contracts import check_contract
 from mlops_core.data.extract import RawArtifact, latest_ingestion
 from mlops_core.data.geo import read_areas
-from mlops_core.data.schemas import RAW_SCHEMAS
-from mlops_core.data.sources import denue, fas, overpass
 
 logger = logging.getLogger(__name__)
-
-# name -> the function that turns that service's stored JSON into a frame.
-JsonReader = Callable[[Any], pl.DataFrame]
 
 
 @dataclass(frozen=True)
@@ -55,41 +51,36 @@ def read_layer(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
     return read_areas(artifact.path, source.member, source.spatial)
 
 
-def validate_raw(config: DomainConfig, raw_dir: Path) -> dict[str, ValidatedSource]:
+def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSource]:
     """Return each source validated and typed, or raise `SchemaErrors` listing every failure."""
+    contracts = adapter.raw_contracts()
     validated = {}
-    for name, source in config.sources.items():
+    for name, source in adapter.config.sources.items():
         artifact = latest_ingestion(raw_dir, name)
         if artifact is None:
             raise FileNotFoundError(
                 f"No raw ingestion for '{name}' in {raw_dir}; run extract first"
             )
         frame = read_layer(artifact, source) if source.spatial else read_raw(artifact, source)
-        validated[name] = _checked(name, artifact, frame)
+        validated[name] = _checked(contracts[name], artifact, frame)
 
-    for name, read_json in _json_sources(config):
+    for name, read_json in adapter.json_readers().items():
         artifact = latest_ingestion(raw_dir, name)
         if artifact is None:
-            # Not an error: DENUE is skipped without its token, and everything that does
-            # not depend on it still builds.
+            # Not an error: a source whose credential is missing is skipped at extract,
+            # and everything that does not depend on it still builds.
             logger.info("%s has never been ingested; skipping its contract", name)
             continue
         payload = json.loads(artifact.path.read_text(encoding="utf-8"))
-        validated[name] = _checked(name, artifact, read_json(payload))
+        validated[name] = _checked(contracts[name], artifact, read_json(payload))
     return validated
 
 
-def _checked(name: str, artifact: RawArtifact, frame: pl.DataFrame) -> ValidatedSource:
-    checked = check_contract(RAW_SCHEMAS[name], frame)
-    logger.info("%s valid: %d rows (%s)", name, checked.height, artifact.partition.name)
+def _checked(
+    contract: pa.DataFrameSchema, artifact: RawArtifact, frame: pl.DataFrame
+) -> ValidatedSource:
+    checked = check_contract(contract, frame)
+    logger.info(
+        "%s valid: %d rows (%s)", artifact.manifest.source, checked.height, artifact.partition.name
+    )
     return ValidatedSource(artifact, checked)
-
-
-def _json_sources(config: DomainConfig) -> Iterator[tuple[str, JsonReader]]:
-    """Each API source and the reader that knows its payload's shape."""
-    if config.denue is not None:
-        yield config.denue.name, denue.to_frame
-    if config.overpass is not None:
-        yield config.overpass.name, overpass.to_frame
-    if config.fas is not None:
-        yield config.fas.name, fas.to_frame

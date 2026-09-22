@@ -1,17 +1,17 @@
 from pathlib import Path
 
+from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.catalog import connect
-from mlops_core.config import DomainConfig
 from mlops_core.data.clean import build_clean
 from mlops_core.ml.features import build_features
 
 
 def test_every_built_table_is_queryable_by_layer(
-    coffee_config: DomainConfig, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
     data_dir = raw_dir.parent
-    build_clean(coffee_config, data_dir)
-    build_features(coffee_config, data_dir)
+    build_clean(coffee_adapter, data_dir)
+    build_features(coffee_adapter, data_dir)
 
     con = connect(data_dir)
 
@@ -29,9 +29,9 @@ def test_every_built_table_is_queryable_by_layer(
 
 
 def test_partition_folder_is_not_exposed_as_a_column(
-    coffee_config: DomainConfig, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
-    build_clean(coffee_config, raw_dir.parent)
+    build_clean(coffee_adapter, raw_dir.parent)
 
     columns = [
         row[0] for row in connect(raw_dir.parent).sql("DESCRIBE clean.coffee_reviews").fetchall()

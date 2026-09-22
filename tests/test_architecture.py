@@ -1,26 +1,50 @@
-"""The pipelines stay decoupled: they exchange Parquet on disk, never imports.
+"""The boundaries hold because tests hold them, not because they are documented.
 
-Without this test the boundary erodes one convenient import at a time, and with it
-goes the ability to run, deploy and install either pipeline on its own.
+Two kinds. The pipelines stay decoupled: they exchange Parquet on disk, never imports,
+so each can be installed and deployed on its own. And the core stays generic: it never
+imports a domain and never even names one, which is the whole claim of the framework -
+a new domain is a new package under `domains/` and nothing in `mlops_core` changes.
+Without these tests, both boundaries erode one convenient import at a time.
 """
 
 import ast
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "mlops_core"
-SHARED = ["config.py", "contracts.py", "storage.py", "catalog.py"]
+SRC = Path(__file__).resolve().parents[1] / "src"
+CORE = SRC / "mlops_core"
+DOMAINS = SRC / "domains"
+SHARED = ["config.py", "contracts.py", "storage.py", "catalog.py", "adapter.py"]
+# Words that belong to a domain. The core naming any of them - in code, a comment or a
+# docstring - is how a domain's assumptions start leaking into what should be generic.
+DOMAIN_WORDS = re.compile(
+    r"coffee|caf[eé]|\bcqi\b|\bpsd\b|denue|overpass|inegi|borough|alcald|cup.?points|"
+    r"grading|arabica|videogame|\bsteam\b|\brawg\b",
+    re.IGNORECASE,
+)
 
 
 def imported_modules(path: Path) -> set[str]:
-    modules = set()
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            modules |= {alias.name for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            modules.add(node.module)
+    """What a module imports at runtime. `if TYPE_CHECKING:` blocks are skipped: an import
+    only a type checker ever executes couples nothing at install or run time."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules: set[str] = set()
+
+    def visit(nodes: list[ast.stmt]) -> None:
+        for node in nodes:
+            if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING":
+                visit(node.orelse)
+                continue
+            for child in ast.walk(node):
+                if isinstance(child, ast.Import):
+                    modules.update(alias.name for alias in child.names)
+                elif isinstance(child, ast.ImportFrom) and child.module:
+                    modules.add(child.module)
+
+    visit(tree.body)
     return modules
 
 
@@ -29,7 +53,7 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         f"{path.relative_to(SRC).as_posix()} imports {module}"
         for path in paths
         for module in imported_modules(path)
-        if module.startswith(forbidden)
+        if module == forbidden or module.startswith(f"{forbidden}.")
     ]
 
 
@@ -45,27 +69,52 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:
-    assert offenders(list((SRC / package).rglob("*.py")), forbidden) == []
+    assert offenders(list((CORE / package).rglob("*.py")), forbidden) == []
 
 
 @pytest.mark.parametrize("forbidden", ["mlops_core.data", "mlops_core.ml"])
 def test_shared_modules_do_not_depend_on_a_pipeline(forbidden: str) -> None:
-    # The CLI is the one place allowed to know about both.
-    assert offenders([SRC / name for name in SHARED], forbidden) == []
+    # The CLI and the orchestrator are the places allowed to know about both.
+    assert offenders([CORE / name for name in SHARED], forbidden) == []
+
+
+def test_the_core_never_imports_a_domain() -> None:
+    """Domains are found by name at runtime (`load_adapter`); a static import of one
+    would make the core depend on the very thing it must stay free of."""
+    assert offenders(list(CORE.rglob("*.py")), "domains") == []
+
+
+def test_the_core_never_names_a_domain() -> None:
+    mentions = [
+        f"{path.relative_to(SRC).as_posix()}:{number}: {line.strip()}"
+        for path in sorted(CORE.rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if DOMAIN_WORDS.search(line)
+    ]
+
+    assert mentions == []
+
+
+def test_every_domain_exposes_an_adapter() -> None:
+    """The one thing the core asks a domain package for."""
+    for package in sorted(p for p in DOMAINS.iterdir() if (p / "__init__.py").is_file()):
+        tree = ast.parse((package / "__init__.py").read_text(encoding="utf-8"))
+        functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        assert "adapter" in functions, f"domains/{package.name} has no adapter()"
 
 
 def test_every_source_file_is_actually_in_the_repository() -> None:
-    """A too-broad ignore rule (`data/` also matches src/mlops_core/data/) kept four
+    """A too-broad ignore rule (`data/` also matched src/mlops_core/data/) kept four
     modules out of the repository: everything worked locally and CI failed on an import.
     """
     tracked = subprocess.run(
         ["git", "ls-files", "src"],
-        cwd=SRC.parents[1],
+        cwd=SRC.parent,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.split()
-    committed = {Path(path).resolve() for path in (SRC.parents[1] / p for p in tracked)}
+    committed = {(SRC.parent / path).resolve() for path in tracked}
 
     on_disk = {path.resolve() for path in SRC.rglob("*.py")}
 

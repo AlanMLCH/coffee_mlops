@@ -14,8 +14,8 @@ COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --extra serving --no-dev --no-install-project
 
+# The domain's config ships inside its package (src/domains/<name>/config.yaml).
 COPY src ./src
-COPY configs ./configs
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --extra serving --no-dev
 

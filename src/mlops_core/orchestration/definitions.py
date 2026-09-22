@@ -1,15 +1,14 @@
-"""Dagster assets, one graph per domain config.
+"""Dagster assets, one graph per installed domain.
 
 The orchestrator is a thin layer: every asset calls the same function the CLI calls,
-so nothing here is required to run the pipelines. Adding `configs/<domain>.yaml` adds
-a whole graph, which is how the framework proves it is domain-parameterized.
+so nothing here is required to run the pipelines. Installing a package under `domains/`
+adds a whole graph, which is how the framework proves it is domain-parameterized.
 
 Assets manage their own storage (immutable Parquet partitions), so they return
 `MaterializeResult` metadata instead of handing values to an IO manager.
 """
 
-from collections.abc import Iterator
-from pathlib import Path
+from collections.abc import Sequence
 
 from dagster import (
     AssetCheckResult,
@@ -23,10 +22,10 @@ from dagster import (
     define_asset_job,
 )
 
-from mlops_core.config import CONFIGS_DIR, DomainConfig, Settings, load_domain_config
+from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
+from mlops_core.config import Settings
 from mlops_core.data.clean import build_clean
 from mlops_core.data.extract import extract_all, http_client
-from mlops_core.data.sources import extract_api_sources
 from mlops_core.data.validate import validate_raw
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
@@ -36,11 +35,20 @@ from mlops_core.storage import read_table
 # Assets write their own Parquet, so they hand Dagster metadata, not a value.
 Materialized = MaterializeResult[None]
 
-DATA_ASSETS = ["raw_sources", "clean_tables"]
-ML_ASSETS = ["review_features", "trained_model", "review_predictions"]
+
+def pipeline_assets(adapter: DomainAdapter) -> dict[str, list[str]]:
+    """Asset names per pipeline, mirroring `mlops data run` and `mlops ml run`. The model
+    tables keep the domain's own names, so the graph reads in its vocabulary."""
+    items = adapter.config.items
+    return {
+        "data": ["raw_sources", "clean_tables"],
+        "ml": [items.features_table, "trained_model", items.predictions_table],
+    }
 
 
-def domain_assets(config: DomainConfig, settings: Settings) -> list[AssetsDefinition]:
+def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefinition]:
+    config = adapter.config
+    items = config.items
     data_dir = settings.data_dir / config.name
     prefix = [config.name]
     group = config.name
@@ -54,7 +62,7 @@ def domain_assets(config: DomainConfig, settings: Settings) -> list[AssetsDefini
         """
         with http_client() as client:
             artifacts = extract_all(config, data_dir / "raw", client)
-            api = extract_api_sources(config, settings, data_dir, client)
+            api = adapter.extract(data_dir, client)
         artifacts |= api.artifacts
         return MaterializeResult(
             metadata={
@@ -68,15 +76,15 @@ def domain_assets(config: DomainConfig, settings: Settings) -> list[AssetsDefini
     @asset(name="clean_tables", key_prefix=prefix, group_name=group, deps=[raw_sources])
     def clean_tables() -> Materialized:
         """Canonical, model-agnostic tables. Contract violations stop the run."""
-        paths = build_clean(config, data_dir)
+        paths = build_clean(adapter, data_dir)
         return MaterializeResult(metadata={name: str(path) for name, path in paths.items()})
 
-    @asset(name="review_features", key_prefix=prefix, group_name=group, deps=[clean_tables])
-    def review_features() -> Materialized:
-        """Model-ready table: clean items plus point-in-time market context."""
-        return MaterializeResult(metadata={"path": str(build_features(config, data_dir))})
+    @asset(name=items.features_table, key_prefix=prefix, group_name=group, deps=[clean_tables])
+    def features() -> Materialized:
+        """Model-ready table: the items enriched with the context they may see."""
+        return MaterializeResult(metadata={"path": str(build_features(adapter, data_dir))})
 
-    @asset(name="trained_model", key_prefix=prefix, group_name=group, deps=[review_features])
+    @asset(name="trained_model", key_prefix=prefix, group_name=group, deps=[features])
     def trained_model() -> Materialized:
         """A tuned, tracked model; promoted to champion only if it passes the gate."""
         result = train_model(config, data_dir, settings.mlflow_tracking_uri)
@@ -85,31 +93,33 @@ def domain_assets(config: DomainConfig, settings: Settings) -> list[AssetsDefini
             | {k: round(v, 4) for k, v in result.metrics.items()}
         )
 
-    @asset(name="review_predictions", key_prefix=prefix, group_name=group, deps=[trained_model])
-    def review_predictions() -> Materialized:
+    @asset(name=items.predictions_table, key_prefix=prefix, group_name=group, deps=[trained_model])
+    def predictions() -> Materialized:
         """Batch scores for every row of the feature table."""
         path = batch_predict(config, data_dir, settings.mlflow_tracking_uri)
         return MaterializeResult(metadata={"path": str(path)})
 
-    return [raw_sources, clean_tables, review_features, trained_model, review_predictions]
+    return [raw_sources, clean_tables, features, trained_model, predictions]
 
 
 def domain_checks(
-    config: DomainConfig, settings: Settings, assets: list[AssetsDefinition]
+    adapter: DomainAdapter, settings: Settings, assets: list[AssetsDefinition]
 ) -> list[AssetChecksDefinition]:
+    config = adapter.config
+    items = config.items
     data_dir = settings.data_dir / config.name
     by_name = {a.key.path[-1]: a for a in assets}
 
     @asset_check(asset=by_name["raw_sources"], name="sources_match_their_contracts")
     def sources_match_their_contracts() -> AssetCheckResult:
-        validated = validate_raw(config, data_dir / "raw")
+        validated = validate_raw(adapter, data_dir / "raw")
         return AssetCheckResult(
             passed=True, metadata={name: s.frame.height for name, s in validated.items()}
         )
 
-    @asset_check(asset=by_name["review_features"], name="no_leaking_columns")
+    @asset_check(asset=by_name[items.features_table], name="no_leaking_columns")
     def no_leaking_columns() -> AssetCheckResult:
-        columns = set(read_table(data_dir / "features" / "review_features").columns)
+        columns = set(read_table(data_dir / "features" / items.features_table).columns)
         leaked = sorted(columns & set(config.model.leakage))
         return AssetCheckResult(passed=not leaked, metadata={"leaked": ", ".join(leaked)})
 
@@ -117,31 +127,28 @@ def domain_checks(
 
 
 def build_definitions(
-    configs_dir: Path = CONFIGS_DIR, settings: Settings | None = None
+    adapters: Sequence[DomainAdapter] | None = None, settings: Settings | None = None
 ) -> Definitions:
+    """Every installed domain's graph, or the ones given."""
     settings = settings or Settings()
-    domains = list(_domains(configs_dir))
+    if adapters is None:
+        adapters = [load_adapter(name) for name in available_domains()]
     assets: list[AssetsDefinition] = []
     checks: list[AssetChecksDefinition] = []
-    for config in domains:
-        domain = domain_assets(config, settings)
+    for adapter in adapters:
+        domain = domain_assets(adapter, settings)
         assets += domain
-        checks += domain_checks(config, settings, domain)
+        checks += domain_checks(adapter, settings, domain)
     # One job per pipeline, mirroring `mlops data run` and `ml run`.
     jobs = [
         define_asset_job(
-            name=f"{config.name}_{pipeline}",
-            selection=AssetSelection.assets(*[[config.name, name] for name in names]),
+            name=f"{adapter.config.name}_{pipeline}",
+            selection=AssetSelection.assets(*[[adapter.config.name, name] for name in names]),
         )
-        for config in domains
-        for pipeline, names in (("data", DATA_ASSETS), ("ml", ML_ASSETS))
+        for adapter in adapters
+        for pipeline, names in pipeline_assets(adapter).items()
     ]
     return Definitions(assets=assets, asset_checks=checks, jobs=jobs)
-
-
-def _domains(configs_dir: Path) -> Iterator[DomainConfig]:
-    for path in sorted(configs_dir.glob("*.yaml")):
-        yield load_domain_config(path.stem, configs_dir)
 
 
 defs = build_definitions()

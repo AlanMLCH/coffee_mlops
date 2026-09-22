@@ -54,6 +54,10 @@ orchestration = [
     "dagster-webserver>=1.13.23",
 ]
 
+[project.urls]
+# Sent in the user agent, so a service that sees trouble knows who to contact.
+Repository = "https://github.com/AlanMLCH/coffee_mlops"
+
 [project.scripts]
 mlops = "mlops_core.cli:app"
 
@@ -64,7 +68,7 @@ build-backend = "uv_build"
 # The distribution keeps the repository's name; the code inside it is named for what it
 # is. `mlops_core` knows no domain; each domain is a package of its own under `domains`.
 [tool.uv.build-backend]
-module-name = "mlops_core"
+module-name = ["mlops_core", "domains"]
 
 [tool.ruff]
 line-length = 100
@@ -87,7 +91,7 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 # Experiments are typed too: they are read as evidence, so they must be correct.
-files = ["src/mlops_core", "experiments"]
+files = ["src/mlops_core", "src/domains", "experiments"]
 
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "scipy.*"] # ship no type information

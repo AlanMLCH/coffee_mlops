@@ -97,7 +97,7 @@ def test_recalibration_is_measured_on_rows_it_never_saw(coffee_config: DomainCon
     test = frame(["Mexico"] * 20, [84.0] * 20)
     prediction = np.full(20, 82.5)
 
-    gain = recalibration_gain(test, prediction, coffee_config.model, window=5)
+    gain = recalibration_gain(test, prediction, coffee_config.model, 5, "grading_date")
 
     assert gain["recalibration_offset"] == pytest.approx(-1.5)
     assert gain["recalibration_n_holdout"] == 15
@@ -108,4 +108,4 @@ def test_recalibration_is_measured_on_rows_it_never_saw(coffee_config: DomainCon
 def test_recalibration_needs_more_rows_than_the_window(coffee_config: DomainConfig) -> None:
     test = frame(["Mexico"] * 5, [84.0] * 5)
 
-    assert recalibration_gain(test, np.full(5, 82.5), coffee_config.model, window=30) == {}
+    assert recalibration_gain(test, np.full(5, 82.5), coffee_config.model, 30, "grading_date") == {}

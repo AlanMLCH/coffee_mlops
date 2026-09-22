@@ -1,9 +1,9 @@
 """Target transforms for experiments that ask a different question.
 
-The raw cup score mixes two things: how good a lot is *relative to its peers*, and the
+A raw score mixes two things: how good an item is *relative to its peers*, and the
 level of the period it was graded in. The evaluation showed the second dominates the
 error, so a within-period percentile is the right target when the question is "can these
-features rank coffees at all?" — it removes the level by construction.
+features rank items at all?" — it removes the level by construction.
 
 Predictions in percentile space are not interpretable to a buyer, so the inverse maps
 them back to points using the **training** distribution. Using the test distribution

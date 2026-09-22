@@ -13,9 +13,9 @@ from typing import Any
 import httpx
 import pytest
 
-from mlops_core.config import OverpassConfig
+from domains.coffee.config import OverpassConfig
+from domains.coffee.sources.overpass import COUNT, build_query, fetch, ingest_places
 from mlops_core.data.api import ApiClient
-from mlops_core.data.sources.overpass import COUNT, build_query, fetch, ingest_places
 from mlops_core.storage import MANIFEST_NAME
 
 # A real answer, trimmed: three cafes mapped as nodes and two mapped as buildings.

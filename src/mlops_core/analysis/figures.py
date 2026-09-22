@@ -24,8 +24,6 @@ import polars as pl
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from mlops_core.analysis.studies import QUALITY_BANDS
-
 logger = logging.getLogger(__name__)
 
 SURFACE = "#fcfcfb"
@@ -40,7 +38,7 @@ FIGURE_SIZE = (7.2, 4.2)
 DPI = 160
 
 
-def _canvas(title: str, subtitle: str = "") -> tuple[Figure, Axes]:
+def canvas(title: str, subtitle: str = "") -> tuple[Figure, Axes]:
     figure, ax = plt.subplots(figsize=FIGURE_SIZE, dpi=DPI)
     figure.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
@@ -55,7 +53,7 @@ def _canvas(title: str, subtitle: str = "") -> tuple[Figure, Axes]:
     return figure, ax
 
 
-def _value_grid(ax: Axes, axis: Literal["x", "y"] = "x") -> None:
+def value_grid(ax: Axes, axis: Literal["x", "y"] = "x") -> None:
     """A hairline grid on the value axis only: it helps reading, never competes."""
     ax.grid(axis=axis, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
@@ -64,7 +62,7 @@ def _value_grid(ax: Axes, axis: Literal["x", "y"] = "x") -> None:
 def target_distribution_figure(table: pl.DataFrame, period: str, target: str) -> Figure:
     """Box per period from the already-computed quartiles: the shape of each period
     side by side is what shows a truncated sample, which a mean alone hides."""
-    figure, ax = _canvas(
+    figure, ax = canvas(
         f"{target.replace('_', ' ')} by period",
         "box = quartiles, whiskers = min and max",
     )
@@ -88,7 +86,7 @@ def target_distribution_figure(table: pl.DataFrame, period: str, target: str) ->
     for part in ("whiskers", "caps"):
         for artist in boxes[part]:
             artist.set(color=BASELINE, linewidth=1.2)
-    _value_grid(ax, axis="y")
+    value_grid(ax, axis="y")
     figure.tight_layout()
     return figure
 
@@ -97,33 +95,33 @@ def feature_importance_figure(table: pl.DataFrame) -> Figure:
     """Permutation importance, signed: bars to the right are features the model relies
     on, bars to the left are features whose removal would *help* on the test split."""
     ranked = table.drop_nulls("permutation_importance").sort("permutation_importance")
-    figure, ax = _canvas(
+    figure, ax = canvas(
         "What the champion actually relies on",
         "increase in error when the feature is shuffled (test split)",
     )
     colours = [BETTER if value > 0 else WORSE for value in ranked["permutation_importance"]]
     ax.barh(ranked["feature"], ranked["permutation_importance"], color=colours, height=0.62)
     ax.axvline(0, color=BASELINE, linewidth=1)
-    _value_grid(ax)
+    value_grid(ax)
     ax.set_xlabel("MAE increase when shuffled", color=SECONDARY, fontsize=9)
     figure.tight_layout()
     return figure
 
 
-def residual_bias_figure(table: pl.DataFrame, period: str) -> Figure:
-    """Bias by quality band in the most recent period: the compression a weak regressor
-    shows, made visible. Only the newest period, because error on the data the model
-    trained on flatters it."""
-    order = {label: position for position, (*_, label) in enumerate(QUALITY_BANDS)}
+def residual_bias_figure(table: pl.DataFrame, period: str, band_labels: list[str]) -> Figure:
+    """Bias by band of the target in the most recent period: the compression a weak
+    regressor shows, made visible. Only the newest period, because error on the data the
+    model trained on flatters it."""
+    order = {label: position for position, label in enumerate(band_labels)}
     latest = str(table[period].max())  # polars types a max() as any scalar
     bands = (
         table.filter((pl.col("kind") == "quality_band") & (pl.col(period) == latest))
         .with_columns(pl.col("level").replace_strict(order, return_dtype=pl.Int32).alias("_order"))
         .sort("_order", descending=True)
     )
-    figure, ax = _canvas(
+    figure, ax = canvas(
         f"Where the model is wrong ({latest})",
-        "mean signed error; negative = the model under-rates the lot",
+        "mean signed error; negative = the model under-rates the item",
     )
     colours = [WORSE if value < 0 else BETTER for value in bands["bias"]]
     ax.barh(bands["level"], bands["bias"], color=colours, height=0.45)
@@ -140,64 +138,7 @@ def residual_bias_figure(table: pl.DataFrame, period: str) -> Figure:
             fontsize=9,
         )
     ax.margins(x=0.45)  # room for the value labels at both ends
-    _value_grid(ax)
-    figure.tight_layout()
-    return figure
-
-
-def market_share_figure(table: pl.DataFrame, year: int) -> Figure:
-    """Pure magnitude, so one hue and a ranked bar: who grows the world's coffee."""
-    ranked = table.sort("production")
-    figure, ax = _canvas(
-        f"World coffee production, market year {year}",
-        "thousands of 60 kg bags",
-    )
-    ax.barh(ranked["country"], ranked["production"], color=SERIES[0], height=0.62)
-    for country, production, share in zip(
-        ranked["country"], ranked["production"], ranked["world_share_pct"], strict=True
-    ):
-        ax.text(production, country, f"  {share:.1f}%", va="center", color=SECONDARY, fontsize=9)
-    ax.margins(x=0.12)
-    _value_grid(ax)
-    figure.tight_layout()
-    return figure
-
-
-def market_history_figure(table: pl.DataFrame, country: str) -> Figure:
-    """Four series in one unit, so one axis. Labelled at the line end rather than in a
-    legend box, which also supplies the relief the low-contrast hues require."""
-    figure, ax = _canvas(
-        f"{country}: production, trade and consumption",
-        "thousands of 60 kg bags",
-    )
-    years = table["market_year"].to_list()
-    series = ["production", "exports", "domestic_consumption", "imports"]
-    for name, colour in zip(series, SERIES, strict=True):
-        values = table[name].to_list()
-        ax.plot(years, values, color=colour, linewidth=2, marker="o", markersize=4)
-        ax.text(
-            years[-1],
-            values[-1],
-            f"  {name.replace('_', ' ')}",
-            color=colour,
-            fontsize=9,
-            va="center",
-        )
-    # Legend below the plot: the lines already carry their name at the end, and a box
-    # inside the axes would sit on top of the data.
-    ax.legend(
-        [name.replace("_", " ") for name in series],
-        frameon=False,
-        fontsize=9,
-        labelcolor=SECONDARY,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.12),
-        ncols=4,
-    )
-    # Ticks on the years that exist, and room on the right for the end labels.
-    ax.set_xticks(years[:: max(len(years) // 6, 1)])
-    ax.set_xlim(min(years) - 0.3, max(years) + (max(years) - min(years)) * 0.28)
-    _value_grid(ax, axis="y")
+    value_grid(ax)
     figure.tight_layout()
     return figure
 
@@ -205,26 +146,26 @@ def market_history_figure(table: pl.DataFrame, country: str) -> Figure:
 def numeric_signal_figure(table: pl.DataFrame) -> Figure:
     """Signed correlation with the target: direction matters as much as size."""
     ranked = table.drop_nulls("correlation_with_target").sort("correlation_with_target")
-    figure, ax = _canvas(
+    figure, ax = canvas(
         "How each numeric feature moves with the score",
         "correlation with the target across both periods",
     )
     colours = [BETTER if value > 0 else WORSE for value in ranked["correlation_with_target"]]
     ax.barh(ranked["feature"], ranked["correlation_with_target"], color=colours, height=0.62)
     ax.axvline(0, color=BASELINE, linewidth=1)
-    _value_grid(ax)
+    value_grid(ax)
     figure.tight_layout()
     return figure
 
 
 def render_all(
-    tables: dict[str, pl.DataFrame], period: str, target: str, country: str, year: int
+    tables: dict[str, pl.DataFrame], period: str, target: str, band_labels: list[str]
 ) -> dict[str, Figure]:
-    """Every figure that can be drawn from the studies just computed.
+    """Every figure the core draws from the studies just computed.
 
-    A study can legitimately come out empty (a market year the data does not cover yet).
-    That is reported by the pipeline and skipped here: one empty table must not take the
-    whole run down with it.
+    A study can legitimately come out empty (say, no predictions yet). That is reported
+    by the pipeline and skipped here: one empty table must not take the whole run down
+    with it. A domain's own figures are drawn by the domain.
     """
     drawings: list[tuple[str, str, Callable[[pl.DataFrame], Figure]]] = [
         (
@@ -233,14 +174,16 @@ def render_all(
             lambda table: target_distribution_figure(table, period, target),
         ),
         ("numeric_signal", "numeric_profile", numeric_signal_figure),
-        ("market_share", "market_summary", lambda table: market_share_figure(table, year)),
-        ("market_history", "market_history", lambda table: market_history_figure(table, country)),
         (
             "feature_importance",
             "feature_recommendation",
             lambda table: feature_importance_figure(table),
         ),
-        ("residual_bias", "residuals", lambda table: residual_bias_figure(table, period)),
+        (
+            "residual_bias",
+            "residuals",
+            lambda table: residual_bias_figure(table, period, band_labels),
+        ),
     ]
     figures = {}
     for name, source, draw in drawings:

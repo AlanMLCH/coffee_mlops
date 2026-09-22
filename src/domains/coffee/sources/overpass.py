@@ -25,7 +25,7 @@ from urllib.parse import quote
 
 import polars as pl
 
-from mlops_core.config import OverpassConfig
+from domains.coffee.config import OverpassConfig
 from mlops_core.data.api import ApiClient
 from mlops_core.data.extract import RawArtifact, store_payload
 

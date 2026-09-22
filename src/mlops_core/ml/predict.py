@@ -12,37 +12,37 @@ from pathlib import Path
 import pandera.polars as pa
 import polars as pl
 
-from mlops_core.config import DomainConfig, ModelSpec
+from mlops_core.config import DomainConfig, ItemsConfig, ModelSpec
 from mlops_core.contracts import check_contract
 from mlops_core.ml.registry import ServedModel, load_champion
 from mlops_core.storage import latest_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 
-FEATURES_TABLE = "review_features"
-PREDICTIONS_TABLE = "review_predictions"
 
-PREDICTIONS = pa.DataFrameSchema(
-    name=PREDICTIONS_TABLE,
-    strict=True,
-    unique=["review_id"],
-    columns={
-        "review_id": pa.Column(pl.String),
-        "snapshot": pa.Column(pl.String),
-        "grading_date": pa.Column(pl.Date),
-        "prediction": pa.Column(pl.Float64),
-        # Which model produced the row: the join key for monitoring in stage 4.
-        "model_version": pa.Column(pl.String),
-        "predicted_at": pa.Column(pl.Datetime(time_unit="us", time_zone="UTC")),
-    },
-)
+def predictions_schema(items: ItemsConfig) -> pa.DataFrameSchema:
+    """One row per scored item, carrying the item's keys."""
+    return pa.DataFrameSchema(
+        name=items.predictions_table,
+        strict=True,
+        unique=[items.id],
+        columns={
+            items.id: pa.Column(pl.String),
+            items.period: pa.Column(pl.String),
+            items.time: pa.Column(pl.Date),
+            "prediction": pa.Column(pl.Float64),
+            # Which model produced the row: the join key for monitoring in stage 4.
+            "model_version": pa.Column(pl.String),
+            "predicted_at": pa.Column(pl.Datetime(time_unit="us", time_zone="UTC")),
+        },
+    )
 
 
 def score(
-    features: pl.DataFrame, served: ServedModel, spec: ModelSpec, at: datetime
+    features: pl.DataFrame, served: ServedModel, items: ItemsConfig, spec: ModelSpec, at: datetime
 ) -> pl.DataFrame:
     predictions = served.model.predict(features.select(spec.features).to_pandas())
-    return features.select("review_id", "snapshot", "grading_date").with_columns(
+    return features.select(items.keys).with_columns(
         pl.Series("prediction", predictions, dtype=pl.Float64),
         pl.lit(served.version).alias("model_version"),
         pl.lit(at).dt.replace_time_zone("UTC").alias("predicted_at"),
@@ -52,12 +52,15 @@ def score(
 def batch_predict(
     config: DomainConfig, data_dir: Path, tracking_uri: str, at: datetime | None = None
 ) -> Path:
-    features_dir = data_dir / "features" / FEATURES_TABLE
+    items = config.items
+    features_dir = data_dir / "features" / items.features_table
     features = read_table(features_dir)
     partition = latest_partition(features_dir)
     served = load_champion(config.training.registered_model, tracking_uri, data_dir / "model_cache")
     predicted_at = at or datetime.now(UTC)
-    predictions = check_contract(PREDICTIONS, score(features, served, config.model, predicted_at))
+    predictions = check_contract(
+        predictions_schema(items), score(features, served, items, config.model, predicted_at)
+    )
     logger.info(
         "Scored %d rows with %s v%s (%s)",
         predictions.height,
@@ -67,9 +70,9 @@ def batch_predict(
     )
     return write_table(
         predictions,
-        data_dir / "predictions" / PREDICTIONS_TABLE,
+        data_dir / "predictions" / items.predictions_table,
         {
-            FEATURES_TABLE: partition.name if partition else "",
+            items.features_table: partition.name if partition else "",
             "model": f"{config.training.registered_model} v{served.version}",
         },
         predicted_at,

@@ -4,15 +4,16 @@ End-to-end ML/AI engineering platform — extraction → validation → cleaning
 features → training → batch & online inference → agent/RAG — bootstrapped on the
 **coffee** domain (quality, world market, distribution in Mexico City).
 
-The long-term goal is a **domain-reusable framework**: pointing it at a new domain
-(video games is next) should cost one adapter plus one config file, not a new project.
-That abstraction is deliberately *not* built yet — see [Roadmap](#roadmap).
+It is a **domain-reusable framework**: a generic core (`mlops_core`) runs the whole
+cycle, and a domain is a package under `domains/` that answers what the core cannot
+know. Pointing it at a new domain (video games is next) should cost one adapter plus
+one config file, and never an edit to the core - see [Adding a domain](#adding-a-domain).
 
 Everything runs locally. No cloud, no recurring costs.
 
 ## Status
 
-**Stage 1 — static sources (in progress).**
+**Stage 2 — APIs, geospatial, and the core extracted.** Stage 1 is complete.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -77,9 +78,62 @@ Layers are immutable Parquet partitions; DuckDB exposes each one as a view over 
 newest complete partition, so a writer never blocks the readers.
 
 **Orchestration** (Dagster) is a thin layer over the same functions: every layer is an
-asset, the Pandera contracts run as asset checks, and each `configs/<domain>.yaml`
-generates its own graph and its own `<domain>_data` / `<domain>_ml` jobs. Nothing needs
-it — the CLI runs every step on its own.
+asset, the Pandera contracts run as asset checks, and each installed domain generates
+its own graph and its own `<domain>_data` / `<domain>_ml` jobs. Nothing needs it — the
+CLI runs every step on its own.
+
+### The core and the domains
+
+```
+src/
+├── mlops_core/          # generic: never imports a domain, never even names one
+│   ├── adapter.py       # the contract: DomainAdapter, found by name at runtime
+│   ├── data/            # file + API extraction, validation routing, geo, clean driver
+│   ├── ml/              # features, temporal split, tuning, gate, registry, batch
+│   ├── serving/         # FastAPI: the request body is whatever the domain declares
+│   ├── analysis/        # profiles, drift, feature evidence, residuals, dashboard
+│   └── orchestration/   # one Dagster graph per installed domain
+└── domains/
+    └── coffee/          # config.yaml, sources, contracts, clean, enrich, own studies
+```
+
+What is **data** lives in the domain's YAML: sources, what one item is (`items`: its
+table, id, time and period columns), the model's features and the leakage list,
+training and analysis settings. What needs **code** is the adapter's:
+
+| The core asks | Coffee answers |
+|---|---|
+| `raw_contracts`, `json_readers` | a Pandera contract per source; how each API's stored JSON flattens |
+| `extract` | DENUE (paged, token in the path), Overpass (a query), FAS (key in a header) |
+| `clean`, `clean_contracts` | four tables, each with a strict contract and its lineage |
+| `enrich` | the point-in-time market context: a lot graded in Y sees market year Y-1 |
+| `request_model` | `Lot`: what a buyer knows before the cupping |
+| `studies`, `figures` | the world-market studies only a commodity has |
+| `credentials` | its own keys, under its own prefix (`COFFEE_*`) |
+
+`enrich` is the piece that matters most: the batch feature table and every API request
+go through that one function, so online and batch cannot compute a feature
+differently (a test holds them to it). Tests also hold the core to its claim: it never
+imports a domain, and no file in it may contain a domain's vocabulary.
+
+### Adding a domain
+
+1. Create `src/domains/<name>/` with a `config.yaml` and an `adapter()` function
+   returning an object that satisfies `mlops_core.adapter.DomainAdapter`.
+2. Run anything with `--domain <name>` (or set `MLOPS_DOMAIN`). Dagster picks it up.
+
+What that costs today, as a baseline for the next domain (code lines: no blanks,
+comments or docstrings):
+
+| | Files | Code lines |
+|---|---:|---:|
+| `mlops_core` (shared by every domain) | 30 | 2,173 |
+| `domains/coffee` | 13 | 1,101 |
+| ↳ the adapter's own glue (`adapter.py`, `__init__.py`, `request.py`, `features.py`) | 4 | 111 |
+
+Most of coffee's lines are knowledge no framework can supply: six sources, their
+contracts, and how two CQI scrapes that disagree about spelling become one table. The
+number to watch is the second domain's, and whether `mlops_core` had to change for it.
 
 ## Quickstart
 
@@ -246,9 +300,19 @@ The evaluation is built to survive a small test set:
   crashed long ago.
 - The API image installs `mlflow-skinny`, not full MLflow: a client only loads models,
   while the full package ships the tracking server (1.48 GB instead of 2.26 GB).
+- The image has no httpx, DuckDB or matplotlib, so a domain's adapter imports what its
+  data pipeline needs inside the methods that use it. CI runs the API's tests in exactly
+  that environment; it caught `validate.py` pulling DuckDB in at import time.
+- `POST /predict` answers `{"target", "prediction", "context", "model_version", ...}`:
+  the response names what it predicted instead of assuming it, and `context` holds
+  every feature the domain looked up for the request.
+- Settings are `MLOPS_*` (data dir, MLflow URI, which domain); a domain's credentials
+  use its own prefix, so the core never holds another project's keys.
 
 ## Roadmap
 
-See the stage table above. The generic `core/` package and `DomainAdapter`
-contract are extracted **at the end of stage 2**, once two extractor archetypes
-exist — abstracting before having working cases produces the wrong interfaces.
+See the stage table above. The core was extracted at the end of stage 2, once the file
+and API archetypes existed - abstracting before having working cases produces the
+wrong interfaces - and the contract freezes at the end of stage 3, once a third
+archetype (scraping) has been through it. Video games follows, and its line count goes
+in the table above.

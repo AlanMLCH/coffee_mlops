@@ -12,12 +12,17 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
-from mlops_core.config import DomainConfig, Settings
-from mlops_core.data.clean import build_clean
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.clean import clean_market_context, clean_reviews
+from domains.coffee.schemas import RAW_SCHEMAS
+from mlops_core.config import Settings
+from mlops_core.contracts import check_contract
+from mlops_core.data.extract import latest_ingestion
+from mlops_core.data.validate import read_raw
 from mlops_core.ml.features import build_features
 from mlops_core.ml.registry import ServedModel
 from mlops_core.serving import api
-from mlops_core.storage import read_table
+from mlops_core.storage import read_table, write_table
 
 LOT_FIELDS = [
     "country",
@@ -42,25 +47,36 @@ class RecordingModel:
 
 
 @pytest.fixture
-def data_dir(coffee_config: DomainConfig, raw_dir: Path) -> Path:
-    build_clean(coffee_config, raw_dir.parent)
-    build_features(coffee_config, raw_dir.parent)
+def data_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
+    """Only the tables the model reads: items and market context, cleaned by the domain's
+    own functions. Parity is a question about features, not about the map - and this
+    test also runs where the API is deployed, which has no spatial engine installed."""
+    config = coffee_adapter.config
+    frames = {}
+    for name in ("cqi_2018", "cqi_2023", "psd_coffee"):
+        artifact = latest_ingestion(raw_dir, name)
+        assert artifact is not None
+        frames[name] = check_contract(RAW_SCHEMAS[name], read_raw(artifact, config.sources[name]))
+    clean_dir = raw_dir.parent / "clean"
+    write_table(clean_reviews(frames, config.cleaning), clean_dir / "coffee_reviews", {})
+    write_table(clean_market_context(frames["psd_coffee"]), clean_dir / "market_context", {})
+    build_features(coffee_adapter, raw_dir.parent)
     return raw_dir.parent
 
 
 @pytest.fixture
 def online(
-    coffee_config: DomainConfig, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+    coffee_adapter: CoffeeAdapter, data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[tuple[TestClient, RecordingModel]]:
     model = RecordingModel()
     monkeypatch.setattr(api, "load_champion", lambda *_: ServedModel(model, "7", "registry"))
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(data_dir.parent))
-    with TestClient(api.create_app(coffee_config, Settings())) as client:
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(data_dir.parent))
+    with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         yield client, model
 
 
 def test_the_api_reproduces_the_batch_feature_row(
-    coffee_config: DomainConfig, data_dir: Path, online: tuple[TestClient, RecordingModel]
+    coffee_adapter: CoffeeAdapter, data_dir: Path, online: tuple[TestClient, RecordingModel]
 ) -> None:
     client, model = online
     reviews = read_table(data_dir / "clean" / "coffee_reviews")
@@ -77,7 +93,7 @@ def test_the_api_reproduces_the_batch_feature_row(
     assert model.seen is not None
     expected = (
         features.filter(pl.col("review_id") == review["review_id"])
-        .select(coffee_config.model.features)
+        .select(coffee_adapter.config.model.features)
         .to_pandas()
     )
     # dtypes included: the API builds its frame differently from the batch path, and a

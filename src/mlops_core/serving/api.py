@@ -1,55 +1,40 @@
 """Prediction API.
 
-Online and batch inference must agree, so both build features with the same
-`add_market_context`: a lot graded in year Y sees market year Y-1. The API never
-computes features of its own.
+Online and batch inference must agree, so both build features with the domain's
+`enrich` - the same function, fed the same context tables. The API never computes a
+feature of its own, and it never knows what an item is: the request body is the model
+the domain declares, and the response names the target instead of assuming one.
 """
 
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 import pandas as pd
 import polars as pl
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from mlops_core.config import DomainConfig, Settings, load_domain_config
-from mlops_core.ml.features import add_market_context
+from mlops_core.adapter import DomainAdapter, ItemRequest, load_adapter
+from mlops_core.config import Settings
 from mlops_core.ml.registry import ServedModel, load_champion
 from mlops_core.storage import read_table
 
 logger = logging.getLogger(__name__)
 
-CONTEXT_TABLE = "market_context"
-
-
-class Lot(BaseModel):
-    """What a caller knows about a green coffee lot before it is cupped."""
-
-    country: str
-    variety: str | None = None
-    processing_method: str | None = None
-    color: str | None = None
-    altitude_m: float | None = Field(None, ge=0, le=9000)
-    moisture_pct: float | None = Field(None, ge=0, le=100)
-    category_one_defects: int = Field(0, ge=0)
-    category_two_defects: int = Field(0, ge=0)
-    quakers: int | None = Field(None, ge=0)
-    graded_on: date | None = Field(None, description="Defaults to today (UTC).")
-
 
 class Prediction(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
-    total_cup_points: float
+    target: str  # what was predicted, named as the domain names it
+    prediction: float
     model_version: str
     model_source: str
-    # The context the model actually saw, so a surprising prediction can be explained.
-    market_context: dict[str, float | None]
+    # Every feature the request did not supply: what the domain looked up for it, so a
+    # surprising prediction can be explained.
+    context: dict[str, float | str | None]
 
 
 class ModelStatus(BaseModel):
@@ -62,21 +47,32 @@ class ModelStatus(BaseModel):
 
 
 class Service:
-    """Holds what is expensive to load: the champion model and the market context."""
+    """Holds what is expensive to load: the champion model and the context tables."""
 
-    def __init__(self, config: DomainConfig, settings: Settings) -> None:
-        self.config = config
-        self.data_dir = settings.data_dir / config.name
+    def __init__(self, adapter: DomainAdapter, settings: Settings) -> None:
+        self.adapter = adapter
+        self.config = adapter.config
+        self.data_dir = settings.data_dir / self.config.name
         self.tracking_uri = settings.mlflow_tracking_uri
         self._cache_dir = settings.model_cache_dir
         self.model: ServedModel | None = None
-        self.context = pl.DataFrame()
+        self.context: dict[str, pl.DataFrame] = {}
 
     def reload(self) -> None:
-        self.model = load_champion(
+        """Load the champion and its context together, or neither.
+
+        Both are read before either is kept: a model whose context failed to load would
+        report itself healthy on /health and fail every /predict. That happened, when a
+        mounted data path was wrong.
+        """
+        model = load_champion(
             self.config.training.registered_model, self.tracking_uri, self.cache_dir
         )
-        self.context = read_table(self.data_dir / "clean" / CONTEXT_TABLE)
+        context = {
+            table: read_table(self.data_dir / "clean" / table)
+            for table in self.adapter.context_tables()
+        }
+        self.model, self.context = model, context
 
     @property
     def cache_dir(self) -> Path:
@@ -89,13 +85,11 @@ class Service:
             )
         return self.model
 
-    def predict(self, lot: Lot) -> Prediction:
+    def predict(self, request: ItemRequest) -> Prediction:
         served = self.ready()
         spec = self.config.model
-        item = lot.model_dump(exclude={"graded_on"}) | {
-            "grading_date": lot.graded_on or datetime.now(UTC).date()
-        }
-        features = add_market_context(pl.DataFrame([item]), self.context).with_columns(
+        item = request.to_item()
+        features = self.adapter.enrich(pl.DataFrame([item]), self.context).with_columns(
             pl.col(c).cast(pl.Float64) for c in spec.numeric
         )
         # Built from rows rather than polars.to_pandas(), which needs pyarrow: 156 MB in
@@ -105,17 +99,20 @@ class Service:
             {column: "float64" for column in spec.numeric}
         )
         prediction = served.model.predict(model_input)
-        context = {c: features[c].item() for c in spec.numeric if c.startswith("ctx_")}
+        looked_up = [c for c in spec.features if c not in item]
         return Prediction(
-            total_cup_points=float(prediction[0]),
+            target=spec.target,
+            prediction=float(prediction[0]),
             model_version=served.version,
             model_source=served.source,
-            market_context=context,
+            context={c: features[c].item() for c in looked_up},
         )
 
 
-def create_app(config: DomainConfig, settings: Settings) -> FastAPI:
-    service = Service(config, settings)
+def create_app(adapter: DomainAdapter, settings: Settings) -> FastAPI:
+    service = Service(adapter, settings)
+    config = adapter.config
+    request_model = adapter.request_model()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -127,7 +124,7 @@ def create_app(config: DomainConfig, settings: Settings) -> FastAPI:
 
     app = FastAPI(
         title=f"{config.name} predictions",
-        summary=f"Predicts {config.model.target} for a single lot.",
+        summary=f"Predicts {config.model.target} for a single {config.items.noun}.",
         lifespan=lifespan,
     )
 
@@ -151,7 +148,7 @@ def create_app(config: DomainConfig, settings: Settings) -> FastAPI:
             registered_model=service.config.training.registered_model,
             model_version=served.version,
             model_source=served.source,
-            context_rows=service.context.height,
+            context_rows=sum(table.height for table in service.context.values()),
         )
 
     @app.post("/reload", response_model=ModelStatus)
@@ -160,12 +157,14 @@ def create_app(config: DomainConfig, settings: Settings) -> FastAPI:
         service.reload()
         return model_status(service)
 
+    # The body's type is the domain's, known only at runtime: FastAPI reads it from the
+    # annotation to validate and document the request, which a static checker cannot follow.
     @app.post("/predict", response_model=Prediction)
-    def predict(lot: Lot, service: Injected) -> Prediction:
-        return service.predict(lot)
+    def predict(request: request_model, service: Injected) -> Prediction:  # type: ignore[valid-type]
+        return service.predict(request)
 
     return app
 
 
 settings = Settings()
-app = create_app(load_domain_config(settings.domain), settings)
+app = create_app(load_adapter(settings.domain), settings)

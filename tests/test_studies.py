@@ -3,16 +3,15 @@ from datetime import date
 import polars as pl
 import pytest
 
+from domains.coffee.analysis import market_history, market_summary
 from mlops_core.analysis.studies import (
     categorical_profile,
     feature_recommendation,
-    market_history,
-    market_summary,
     numeric_profile,
     residuals_by_group,
     target_distribution,
 )
-from mlops_core.config import DomainConfig, ModelSpec
+from mlops_core.config import DomainConfig, ModelSpec, TargetBands
 
 SPEC = ModelSpec(
     target="total_cup_points",
@@ -20,6 +19,7 @@ SPEC = ModelSpec(
     numeric=["altitude_m", "moisture_pct"],
     leakage=["aroma"],
 )
+BANDS = TargetBands(edges=[82, 85], labels=["low (<82)", "mid (82-85)", "high (>=85)"])
 
 
 def features_frame() -> pl.DataFrame:
@@ -47,7 +47,9 @@ def features_frame() -> pl.DataFrame:
 
 
 def test_target_distribution_shows_the_shape_of_each_period() -> None:
-    rows = target_distribution(features_frame(), "total_cup_points", "snapshot").rows(named=True)
+    rows = target_distribution(
+        features_frame(), "total_cup_points", "snapshot", "grading_date"
+    ).rows(named=True)
 
     old, new = rows
     assert (old["snapshot"], old["n"], old["mean"]) == ("old", 4, 81.5)
@@ -55,7 +57,7 @@ def test_target_distribution_shows_the_shape_of_each_period() -> None:
 
 
 def test_numeric_profile_reports_missingness_signal_and_drift() -> None:
-    profile = numeric_profile(features_frame(), SPEC, "snapshot").rows(named=True)
+    profile = numeric_profile(features_frame(), SPEC, "snapshot", "grading_date").rows(named=True)
 
     altitude = next(row for row in profile if row["feature"] == "altitude_m")
     moisture = next(row for row in profile if row["feature"] == "moisture_pct")
@@ -65,7 +67,7 @@ def test_numeric_profile_reports_missingness_signal_and_drift() -> None:
 
 
 def test_categorical_profile_exposes_a_changing_mix() -> None:
-    profile = categorical_profile(features_frame(), SPEC, "snapshot", min_rows=1)
+    profile = categorical_profile(features_frame(), SPEC, "snapshot", "grading_date", min_rows=1)
 
     taiwan = profile.filter(pl.col("level") == "Taiwan").row(0, named=True)
     assert taiwan["share_first"] == pytest.approx(0.25)
@@ -78,7 +80,7 @@ def test_rare_levels_are_left_out_of_the_profile() -> None:
         pl.when(pl.col("review_id") == "r0").then(pl.lit("Laos")).otherwise(pl.col("country"))
     )
 
-    profile = categorical_profile(frame, SPEC, "snapshot", min_rows=2)
+    profile = categorical_profile(frame, SPEC, "snapshot", "grading_date", min_rows=2)
 
     assert "Laos" not in profile["level"].to_list()
 
@@ -95,7 +97,14 @@ def test_residuals_are_reported_by_group_and_by_quality_band() -> None:
     )
 
     residuals = residuals_by_group(
-        predictions, features, SPEC, "country", min_rows=1, period="snapshot"
+        predictions,
+        features,
+        SPEC,
+        "country",
+        min_rows=1,
+        period="snapshot",
+        item_id="review_id",
+        bands=BANDS,
     )
 
     assert set(residuals["kind"]) == {"group", "quality_band"}
@@ -106,6 +115,16 @@ def test_residuals_are_reported_by_group_and_by_quality_band() -> None:
     assert high["n"] == 3  # 85, 86, 87, all in the newer period
     assert high["bias"] < 0  # the flat prediction under-rates the good lots
     assert residuals.filter(pl.col("snapshot") == "old")["n"].sum() > 0
+    # A score on an edge belongs to the band above it: 82 is mid, not low.
+    old = residuals.filter((pl.col("kind") == "quality_band") & (pl.col("snapshot") == "old"))
+    assert dict(zip(old["level"], old["n"], strict=True)) == {"low (<82)": 2, "mid (82-85)": 2}
+
+
+def test_band_edges_and_labels_must_agree() -> None:
+    with pytest.raises(ValueError, match="2 edges make 3 bands"):
+        TargetBands(edges=[82, 85], labels=["low", "high"])
+    with pytest.raises(ValueError, match="ascending"):
+        TargetBands(edges=[85, 82], labels=["a", "b", "c"])
 
 
 @pytest.mark.parametrize(
@@ -192,5 +211,5 @@ def test_market_history_follows_one_country_through_time() -> None:
 
 def test_studies_run_on_the_real_domain_config(coffee_config: DomainConfig) -> None:
     """The configured columns must exist in the frames the pipeline passes."""
-    assert coffee_config.analysis.period_column == "snapshot"
+    assert coffee_config.items.period == "snapshot"
     assert coffee_config.training.stratify_by in coffee_config.model.categorical

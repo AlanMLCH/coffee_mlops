@@ -6,11 +6,12 @@ import pandas as pd
 import polars as pl
 import pytest
 
+from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.config import DomainConfig
 from mlops_core.data.clean import build_clean
 from mlops_core.ml import predict as batch
 from mlops_core.ml.features import build_features
-from mlops_core.ml.predict import PREDICTIONS, batch_predict, score
+from mlops_core.ml.predict import batch_predict, predictions_schema, score
 from mlops_core.ml.registry import ServedModel
 from mlops_core.storage import MANIFEST_NAME, read_table
 
@@ -25,9 +26,9 @@ class CountingModel:
 
 
 @pytest.fixture
-def data_dir(coffee_config: DomainConfig, raw_dir: Path) -> Path:
-    build_clean(coffee_config, raw_dir.parent)
-    build_features(coffee_config, raw_dir.parent)
+def data_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
+    build_clean(coffee_adapter, raw_dir.parent)
+    build_features(coffee_adapter, raw_dir.parent)
     return raw_dir.parent
 
 
@@ -43,9 +44,9 @@ def test_every_row_is_scored_and_keeps_its_key(
 ) -> None:
     features = read_table(data_dir / "features" / "review_features")
 
-    scored = score(features, champion, coffee_config.model, AT)
+    scored = score(features, champion, coffee_config.items, coffee_config.model, AT)
 
-    PREDICTIONS.validate(scored, lazy=True)
+    predictions_schema(coffee_config.items).validate(scored, lazy=True)
     assert scored["review_id"].to_list() == features["review_id"].to_list()
     assert scored["prediction"].to_list() == [80.0 + i for i in range(features.height)]
     assert scored["model_version"].unique().to_list() == ["7"]

@@ -47,7 +47,7 @@ typecheck:
 	uv run mypy
 
 test:
-	uv run pytest --cov=mlops_core --cov-report=term-missing
+	uv run pytest --cov=mlops_core --cov=domains --cov-report=term-missing
 
 test-network:
 	uv run pytest -m network

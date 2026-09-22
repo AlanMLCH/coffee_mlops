@@ -15,7 +15,7 @@ LAYERS = ("clean", "features", "predictions", "analysis")
 
 
 def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:
-    """One schema per layer, one view per table: `SELECT * FROM clean.coffee_reviews`."""
+    """One schema per layer, one view per table: `SELECT * FROM clean.<table>`."""
     con = duckdb.connect()
     for layer in LAYERS:
         layer_dir = data_dir / layer

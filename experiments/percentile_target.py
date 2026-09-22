@@ -15,7 +15,8 @@ import mlflow
 import numpy as np
 from scipy.stats import spearmanr
 
-from mlops_core.config import Settings, load_domain_config
+from mlops_core.adapter import load_adapter
+from mlops_core.config import Settings
 from mlops_core.ml.evaluation import absolute_errors
 from mlops_core.ml.targets import percentile_within, points_from_percentile
 from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
@@ -28,11 +29,13 @@ logger = logging.getLogger("percentile-target")
 
 
 def main() -> None:
-    config = load_domain_config("coffee")
+    config = load_adapter("coffee").config
     settings = Settings()
     spec, cfg = config.model, config.training
-    features = read_table(settings.data_dir / config.name / "features" / "review_features")
-    train, test = temporal_split(features, cfg)
+    features = read_table(
+        settings.data_dir / config.name / "features" / config.items.features_table
+    )
+    train, test = temporal_split(features, cfg, config.items.time)
 
     x_train, y_train = xy(train, spec)
     x_test, y_test = xy(test, spec)

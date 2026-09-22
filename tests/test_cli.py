@@ -14,8 +14,9 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+import domains.coffee
+from domains.coffee.adapter import CoffeeAdapter
 from mlops_core import cli
-from mlops_core.config import load_domain_config
 from mlops_core.data.extract import http_client
 from mlops_core.ml.registry import ServedModel
 from mlops_core.ml.train import TrainResult
@@ -33,9 +34,11 @@ def data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, server: RecordedSe
             yield client
 
     monkeypatch.setattr(cli, "http_client", recorded_client)
-    fast = without_rate_limits(load_domain_config("coffee"))
-    monkeypatch.setattr(cli, "load_domain_config", lambda domain: fast)
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    # The real domain, minus its politeness delays; credentials come from the environment
+    # each test sets, exactly as they would from a `.env`.
+    fast = CoffeeAdapter(without_rate_limits(domains.coffee.adapter().config))
+    monkeypatch.setattr(cli, "load_adapter", lambda domain: fast)
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     return tmp_path
 
 
@@ -134,7 +137,7 @@ def test_train_reports_version_and_gate_decision(
         return TrainResult("run-1", "3", True, {"test_mae": 1.5})
 
     monkeypatch.setattr("mlops_core.ml.train.train_model", fake_train_model)
-    monkeypatch.setenv("COFFEE_MLFLOW_TRACKING_URI", "sqlite:///somewhere.db")
+    monkeypatch.setenv("MLOPS_MLFLOW_TRACKING_URI", "sqlite:///somewhere.db")
 
     result = CliRunner().invoke(cli.app, ["ml", "train"])
 
@@ -226,7 +229,7 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
 
 
 def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     table = tmp_path / "coffee" / "clean" / "coffee_reviews"
     for day in (1, 2, 3):
         frame = pl.DataFrame({"v": [day]})
@@ -241,7 +244,7 @@ def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.Monke
 def test_prune_says_so_when_there_is_nothing_to_drop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     (tmp_path / "coffee").mkdir(parents=True)
 
     result = CliRunner().invoke(cli.app, ["prune"])
@@ -294,7 +297,7 @@ def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.M
 
     assert "--server.headless" in launched["argv"]  # type: ignore[operator]
     assert "9999" in launched["argv"]  # type: ignore[operator]
-    assert os.environ["COFFEE_DOMAIN"] == "coffee"
+    assert os.environ["MLOPS_DOMAIN"] == "coffee"
 
 
 def test_secrets_reports_what_is_configured_without_printing_it(
@@ -309,3 +312,14 @@ def test_secrets_reports_what_is_configured_without_printing_it(
     assert "set (18 characters)" in result.output
     assert "super-secret-token" not in result.output
     assert "USDA FAS key (COFFEE_USDA_FAS_API_KEY): missing" in result.output
+
+
+def test_secrets_says_so_when_a_domain_needs_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    open_domain = domains.coffee.adapter()
+    monkeypatch.setattr(open_domain, "credentials", dict)
+    monkeypatch.setattr(cli, "load_adapter", lambda domain: open_domain)
+
+    result = CliRunner().invoke(cli.app, ["secrets"])
+
+    assert result.exit_code == 0, result.output
+    assert "this domain needs no credentials" in result.output

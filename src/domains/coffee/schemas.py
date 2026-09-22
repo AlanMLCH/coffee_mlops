@@ -15,7 +15,7 @@ contract with every downstream consumer (features, the agent's SQL, the API).
 import pandera.polars as pa
 import polars as pl
 
-from mlops_core.config import CleaningConfig
+from domains.coffee.config import CleaningConfig
 
 SENSORY_SCORES = [
     "Aroma",
@@ -284,3 +284,13 @@ COFFEE_SHOPS = pa.DataFrameSchema(
         "declared_borough_id": pa.Column(pl.String, nullable=True),
     },
 )
+
+
+def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
+    """One strict contract per clean table: the domain's promise to every reader."""
+    return {
+        "coffee_reviews": coffee_reviews_schema(rules),
+        "market_context": MARKET_CONTEXT,
+        "boroughs": BOROUGHS,
+        "coffee_shops": COFFEE_SHOPS,
+    }

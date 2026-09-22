@@ -6,7 +6,13 @@ import httpx
 import pytest
 
 from mlops_core.config import DomainConfig
-from mlops_core.data.extract import MANIFEST_NAME, extract_all, ingest, latest_ingestion
+from mlops_core.data.extract import (
+    MANIFEST_NAME,
+    extract_all,
+    ingest,
+    latest_ingestion,
+    user_agent,
+)
 from tests.fakes import RecordedServer
 
 T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
@@ -85,3 +91,17 @@ def test_partition_without_manifest_is_ignored(tmp_path: Path) -> None:
     (tmp_path / "psd_coffee" / "ingested_at=20260919T120000Z").mkdir(parents=True)
 
     assert latest_ingestion(tmp_path, "psd_coffee") is None
+
+
+def test_the_user_agent_says_who_is_calling_and_how_to_reach_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read from the package metadata, not written into the core: the core does not know
+    which project ships it."""
+    user_agent.cache_clear()
+    assert user_agent().endswith("(+https://github.com/AlanMLCH/coffee_mlops)")
+
+    user_agent.cache_clear()
+    monkeypatch.setattr("mlops_core.data.extract.distributions", lambda: [])
+    assert user_agent() == "mlops_core"  # a bare source tree still says what is calling
+    user_agent.cache_clear()

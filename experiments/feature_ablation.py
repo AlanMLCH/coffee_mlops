@@ -14,7 +14,8 @@ import logging
 import mlflow
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
-from mlops_core.config import Settings, load_domain_config
+from mlops_core.adapter import load_adapter
+from mlops_core.config import Settings
 from mlops_core.ml.evaluation import absolute_errors, compare
 from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
 from mlops_core.storage import read_table
@@ -45,11 +46,13 @@ def candidates(
 
 
 def main() -> None:
-    config = load_domain_config("coffee")
+    config = load_adapter("coffee").config
     settings = Settings()
     spec, cfg = config.model, config.training
     train, test = temporal_split(
-        read_table(settings.data_dir / config.name / "features" / "review_features"), cfg
+        read_table(settings.data_dir / config.name / "features" / config.items.features_table),
+        cfg,
+        config.items.time,
     )
     folds = TimeSeriesSplit(n_splits=cfg.cv_folds)
 

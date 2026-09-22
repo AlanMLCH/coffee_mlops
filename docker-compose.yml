@@ -44,10 +44,13 @@ services:
     profiles: [api, all]
     build: .
     environment:
-      COFFEE_DATA_DIR: /data
+      # Named explicitly: with one domain installed the core would pick it anyway, but a
+      # second domain must not change what this container serves.
+      MLOPS_DOMAIN: coffee
+      MLOPS_DATA_DIR: /data
       # The data mount is read-only, so the champion copy lives in its own volume.
-      COFFEE_MODEL_CACHE_DIR: /cache
-      COFFEE_MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLOPS_MODEL_CACHE_DIR: /cache
+      MLOPS_MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
       - ./data:/data:ro
       - model-cache:/cache

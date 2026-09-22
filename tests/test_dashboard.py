@@ -9,9 +9,10 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.config import CoffeeConfig
 from mlops_core.analysis import pipeline
 from mlops_core.analysis.pipeline import build_analysis
-from mlops_core.config import DomainConfig
 from mlops_core.data.clean import build_clean
 from mlops_core.ml.features import build_features
 from mlops_core.ml.registry import ServedModel
@@ -22,11 +23,14 @@ DASHBOARD = Path(pipeline.__file__).with_name("dashboard.py")
 
 @pytest.fixture
 def built_analysis(
-    coffee_config: DomainConfig, raw_dir: Path, monkeypatch: pytest.MonkeyPatch
+    coffee_config: CoffeeConfig, raw_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
     """A data dir with the layers and the studies already built."""
-    analysis = coffee_config.analysis.model_copy(update={"market_year": 2022, "min_rows": 1})
-    config = coffee_config.model_copy(update={"analysis": analysis})
+    market = coffee_config.market_analysis.model_copy(update={"market_year": 2022})
+    analysis = coffee_config.analysis.model_copy(update={"min_rows": 1})
+    config = CoffeeAdapter(
+        coffee_config.model_copy(update={"analysis": analysis, "market_analysis": market})
+    )
     monkeypatch.setattr(
         pipeline, "load_champion", lambda *a, **k: ServedModel(ConstantModel(), "1", "cache")
     )
@@ -37,7 +41,7 @@ def built_analysis(
 
 
 def run_dashboard(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> AppTest:
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(data_dir))
     app = AppTest.from_file(str(DASHBOARD), default_timeout=60)
     app.run()
     return app
@@ -53,7 +57,9 @@ def test_the_dashboard_shows_the_studies_and_where_they_came_from(
     # The stamp says which partitions are on screen: a dashboard without it invites
     # someone to read last week's numbers as today's.
     assert "review_features: built_at=" in app.caption[0].value
-    assert [tab.label for tab in app.tabs] == ["Data", "Features", "Model", "Market"]
+    # The last tab is the domain's: the core does not know its studies by name.
+    assert [tab.label for tab in app.tabs] == ["Data", "Features", "Model", "Coffee"]
+    assert {"Market summary", "Market history"} <= {header.value for header in app.subheader}
     assert len(app.dataframe) >= 5
 
 

@@ -6,11 +6,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from mlops_core.config import DomainConfig
-from mlops_core.contracts import check_contract
-from mlops_core.data.clean import (
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.clean import (
     altitude_from_text,
-    build_clean,
     clean_boroughs,
     clean_coffee_shops,
     clean_market_context,
@@ -18,13 +16,16 @@ from mlops_core.data.clean import (
     parse_grading_date,
     reconcile_market_sources,
 )
-from mlops_core.data.schemas import (
+from domains.coffee.schemas import (
     BOROUGHS,
     COFFEE_SHOPS,
     MARKET_CONTEXT,
     PSD_ATTRIBUTES,
     coffee_reviews_schema,
 )
+from mlops_core.config import DomainConfig
+from mlops_core.contracts import check_contract
+from mlops_core.data.clean import build_clean
 from mlops_core.data.validate import validate_raw
 from mlops_core.storage import MANIFEST_NAME, read_table
 
@@ -32,8 +33,8 @@ Frames = dict[str, pl.DataFrame]
 
 
 @pytest.fixture
-def frames(coffee_config: DomainConfig, raw_dir: Path) -> Frames:
-    return {name: source.frame for name, source in validate_raw(coffee_config, raw_dir).items()}
+def frames(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Frames:
+    return {name: source.frame for name, source in validate_raw(coffee_adapter, raw_dir).items()}
 
 
 def set_first(df: pl.DataFrame, column: str, value: object) -> pl.DataFrame:
@@ -187,10 +188,10 @@ def test_attribute_missing_from_download_still_gets_a_null_column(frames: Frames
 
 
 def test_build_clean_writes_both_tables_with_lineage(
-    coffee_config: DomainConfig, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
     data_dir = raw_dir.parent
-    paths = build_clean(coffee_config, data_dir, at=datetime(2026, 9, 19, tzinfo=UTC))
+    paths = build_clean(coffee_adapter, data_dir, at=datetime(2026, 9, 19, tzinfo=UTC))
 
     assert set(paths) == {"coffee_reviews", "market_context", "boroughs", "coffee_shops"}
     assert read_table(data_dir / "clean" / "coffee_reviews").height == 25
@@ -321,14 +322,28 @@ def test_a_row_on_only_one_side_is_counted_on_that_side(frames: Frames) -> None:
 
 
 def test_market_context_is_built_from_the_file_whatever_the_api_says(
-    coffee_config: DomainConfig, raw_dir: Path, caplog: pytest.LogCaptureFixture
+    coffee_adapter: CoffeeAdapter, raw_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The keyless source feeds the table, so every clone builds the same one; the API
     is audited against it."""
     caplog.set_level(logging.INFO)
 
-    paths = build_clean(coffee_config, raw_dir.parent)
+    paths = build_clean(coffee_adapter, raw_dir.parent)
 
     manifest = json.loads((paths["market_context"].parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"psd_coffee"}
     assert "The FAS API and the PSD file agree on all 114 rows" in caplog.text
+
+
+def test_a_clean_table_without_a_contract_is_refused(
+    coffee_adapter: CoffeeAdapter, raw_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A table nobody promised anything about would reach readers unchecked."""
+    contracts = dict(coffee_adapter.clean_contracts())
+    del contracts["coffee_shops"]
+    monkeypatch.setattr(coffee_adapter, "clean_contracts", lambda: contracts)
+
+    with pytest.raises(ValueError, match="do not match their contracts"):
+        build_clean(coffee_adapter, raw_dir.parent)
+
+    assert not (raw_dir.parent / "clean").exists()  # nothing half-written

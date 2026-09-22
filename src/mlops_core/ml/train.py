@@ -58,11 +58,11 @@ class TrainResult:
 
 
 def temporal_split(
-    features: pl.DataFrame, cfg: TrainingConfig
+    features: pl.DataFrame, cfg: TrainingConfig, time: str
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Past trains, future evaluates: never a random split for data with a time axis."""
-    ordered = features.sort("grading_date")
-    is_test = pl.col("grading_date") >= cfg.test_from
+    ordered = features.sort(time)
+    is_test = pl.col(time) >= cfg.test_from
     return ordered.filter(~is_test), ordered.filter(is_test)
 
 
@@ -203,11 +203,11 @@ def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.nda
 
 
 def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> TrainResult:
-    spec, cfg = config.model, config.training
-    table_dir = data_dir / "features" / "review_features"
+    spec, cfg, items = config.model, config.training, config.items
+    table_dir = data_dir / "features" / items.features_table
     features = read_table(table_dir)
     partition = latest_partition(table_dir)
-    train, test = temporal_split(features, cfg)
+    train, test = temporal_split(features, cfg, items.time)
     x_train, y_train = xy(train, spec)
     x_test, y_test = xy(test, spec)
 
@@ -266,7 +266,7 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
             | {f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()}
             | versus_baseline.as_metrics("versus_baseline")
             | (versus_champion.as_metrics("versus_champion") if versus_champion else {})
-            | recalibration_gain(test, predictions, spec, cfg.recalibration_window)
+            | recalibration_gain(test, predictions, spec, cfg.recalibration_window, items.time)
         )
         mlflow.log_metrics(metrics)
         # Logged as a table, not as metrics: one row per group, and group names change.

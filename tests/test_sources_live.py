@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from mlops_core.config import load_domain_config
+import domains.coffee
+from domains.coffee.sources.overpass import COUNT, fetch
 from mlops_core.data.api import ApiClient
 from mlops_core.data.extract import http_client
-from mlops_core.data.sources.overpass import COUNT, fetch
 
-CONFIG = load_domain_config("coffee")
+CONFIG = domains.coffee.adapter().config
 SOURCES = CONFIG.sources
 
 

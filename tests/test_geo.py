@@ -17,7 +17,6 @@ import polars as pl
 import pytest
 
 from mlops_core.config import SpatialConfig
-from mlops_core.data import geo
 from mlops_core.data.geo import AREA_COLUMNS, attribute_points, read_areas, spatial_connection
 
 ARCHIVE = Path(__file__).parent / "fixtures" / "cdmx_boroughs_sample.zip"
@@ -112,7 +111,7 @@ def test_a_missing_extension_says_what_is_missing(monkeypatch: pytest.MonkeyPatc
         def close(self) -> None:
             pass
 
-    monkeypatch.setattr(geo.duckdb, "connect", Offline)
+    monkeypatch.setattr(duckdb, "connect", Offline)
 
     with pytest.raises(RuntimeError, match="spatial"):
         spatial_connection()

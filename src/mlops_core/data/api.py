@@ -1,16 +1,16 @@
-"""A polite HTTP client for the APIs stage 2 reads.
+"""A polite HTTP client for the APIs a domain reads.
 
 Three things every public API needs from a client, and none of them belong in the code
-that knows about coffee:
+that knows about one domain:
 
-- **A rate limit.** DENUE and Overpass are free services run for everyone; hammering
-  them is both rude and the fastest way to get blocked.
+- **A rate limit.** Free public services are run for everyone; hammering them is both
+  rude and the fastest way to get blocked.
 - **Retries that discriminate.** A timeout, a 429 or a 500 are worth trying again; a 404
   or a bad token never are, and retrying them only wastes someone's capacity.
 - **A cache on disk.** Re-running a pipeline must not re-download 99 pages. The cache is
-  keyed by a *sanitised* identity supplied by the caller, never by the raw URL: DENUE
-  carries its token in the URL path, and a cache keyed on that would write the
-  credential into a file name. It also **expires**: a live register cached forever is a
+  keyed by a *sanitised* identity supplied by the caller, never by the raw URL: some
+  services take their token as a URL path segment, and a cache keyed on that would
+  write the credential into a file name. It also **expires**: a live register cached forever is a
   snapshot that keeps reporting itself as a fresh pull.
 """
 
@@ -33,7 +33,8 @@ RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 def silence_request_urls() -> None:
     """Stop httpx from logging full request URLs at INFO.
 
-    DENUE carries its token in the URL path, so one INFO line is a leaked credential.
+    Some services take their token as a URL path segment, so one INFO line would be a
+    leaked credential. (It happened: see the incident notes.)
     This lives next to the client, not in the CLI, because a safeguard that depends on
     which entry point you came through is not a safeguard: a script, a notebook or an
     orchestrator would each have to remember it.

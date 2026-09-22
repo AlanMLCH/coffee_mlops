@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
+from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.config import DomainConfig, Settings
 from mlops_core.ml.registry import ServedModel
 from mlops_core.serving import api
@@ -60,7 +61,7 @@ def model() -> RecordingModel:
 
 @pytest.fixture
 def client(
-    coffee_config: DomainConfig,
+    coffee_adapter: CoffeeAdapter,
     tmp_path: Path,
     market_context: pl.DataFrame,
     model: RecordingModel,
@@ -70,8 +71,8 @@ def client(
         return ServedModel(model, "7", "registry")
 
     monkeypatch.setattr(api, "load_champion", fake_load)
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
-    with TestClient(api.create_app(coffee_config, Settings())) as test_client:
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
+    with TestClient(api.create_app(coffee_adapter, Settings())) as test_client:
         yield test_client
 
 
@@ -85,21 +86,22 @@ def test_prediction_uses_the_same_features_as_the_batch_path(
 ) -> None:
     body = client.post("/predict", json=LOT).json()
 
-    assert body["total_cup_points"] == 83.5
+    # The response names what was predicted instead of assuming it: the API is generic.
+    assert (body["target"], body["prediction"]) == ("total_cup_points", 83.5)
     assert body["model_version"] == "7"
     assert model.seen is not None
     # Exactly the declared features, in order, and no leaking sensory column.
     assert list(model.seen.columns) == coffee_config.model.features
     # Graded in 2023 -> market year 2022: the latest complete one, as in training.
-    assert body["market_context"]["ctx_production"] == 4100.0
-    assert body["market_context"]["ctx_arabica_share"] == pytest.approx(3700 / 4100)
+    assert body["context"]["ctx_production"] == 4100.0
+    assert body["context"]["ctx_arabica_share"] == pytest.approx(3700 / 4100)
 
 
 def test_a_lot_without_market_context_is_still_scored(client: TestClient) -> None:
     body = client.post("/predict", json={**LOT, "country": "Narnia"}).json()
 
-    assert body["total_cup_points"] == 83.5
-    assert body["market_context"]["ctx_production"] is None
+    assert body["prediction"] == 83.5
+    assert body["context"]["ctx_production"] is None
 
 
 def test_grading_date_defaults_to_today(client: TestClient, model: RecordingModel) -> None:
@@ -134,15 +136,15 @@ def test_reload_picks_up_a_newly_promoted_champion(
 
 
 def test_without_a_model_the_service_says_so_instead_of_crashing(
-    coffee_config: DomainConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    coffee_adapter: CoffeeAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def no_model(*_: object) -> ServedModel:
         raise FileNotFoundError("nothing trained yet")
 
     monkeypatch.setattr(api, "load_champion", no_model)
-    monkeypatch.setenv("COFFEE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
 
-    with TestClient(api.create_app(coffee_config, Settings())) as client:
+    with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         assert client.get("/health").json()["status"] == "no model"
         assert client.post("/predict", json=LOT).status_code == 503
 
@@ -152,3 +154,17 @@ def test_dates_are_not_silently_reinterpreted(client: TestClient, model: Recordi
 
     assert model.seen is not None
     assert model.seen["ctx_production"].iloc[0] == 4000.0  # 2022 -> market year 2021
+
+
+def test_a_model_without_its_context_is_not_reported_healthy(
+    coffee_adapter: CoffeeAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The champion loads, the context table is missing: the service must say it cannot
+    predict, not answer /health with "ok" and fail every request."""
+    model = RecordingModel()
+    monkeypatch.setattr(api, "load_champion", lambda *_: ServedModel(model, "7", "registry"))
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))  # no clean tables at all
+
+    with TestClient(api.create_app(coffee_adapter, Settings())) as client:
+        assert client.get("/health").json()["status"] == "no model"
+        assert client.post("/predict", json=LOT).status_code == 503

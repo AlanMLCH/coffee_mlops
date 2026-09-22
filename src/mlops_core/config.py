@@ -1,22 +1,32 @@
-"""Runtime settings (environment) and domain config (YAML), both validated with pydantic."""
+"""Runtime settings (environment) and the generic half of a domain's config (YAML).
+
+A domain's YAML has two kinds of section. The ones every domain has - its file
+downloads, what one item is, the model, training and analysis - are defined here,
+because the core runs them. The ones only one domain has (an API's paging, a cleaning
+vocabulary) are defined by that domain, which extends `DomainConfig` with them; pydantic
+still refuses any key that nobody declared.
+"""
 
 from datetime import date
 from pathlib import Path
 from typing import Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, HttpUrl, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-CONFIGS_DIR = Path(__file__).resolve().parents[2] / "configs"
 
 
 class Settings(BaseSettings):
-    """Machine-specific values: read from environment variables or `.env`."""
+    """Machine-specific values: read from `MLOPS_*` environment variables or `.env`.
 
-    model_config = SettingsConfigDict(env_prefix="COFFEE_", env_file=".env", extra="ignore")
+    A domain's credentials are not here: they belong to the domain that uses them, which
+    reads them under its own prefix.
+    """
 
-    domain: str = "coffee"
+    model_config = SettingsConfigDict(env_prefix="MLOPS_", env_file=".env", extra="ignore")
+
+    # The domain a command runs when none is named. Unset, a lone installed domain is used.
+    domain: str | None = None
     data_dir: Path = Path("data")
     # The MLflow server from docker-compose. Tests point it at a throwaway SQLite file.
     mlflow_tracking_uri: str = "http://localhost:5000"
@@ -25,27 +35,6 @@ class Settings(BaseSettings):
     model_cache_dir: Path | None = None
     # Complete partitions kept per table when pruning; history explains past predictions.
     keep_partitions: int = 3
-
-    # Credentials for the stage 2 sources. SecretStr so the value cannot leak through a
-    # repr, a log line or a traceback: printing one shows `SecretStr('**********')`, and
-    # reading it takes an explicit `.get_secret_value()`. They live in `.env`, which is
-    # gitignored; `.env.example` documents them.
-    denue_token: SecretStr | None = None  # INEGI, free
-    usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
-
-
-class FasConfig(BaseModel):
-    """The USDA FAS balance to pull: one commodity, every market year from `first_year`."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    name: str  # the raw source name, and therefore its folder
-    base_url: str
-    commodity_code: str  # PSD commodity; "0711100" is "Coffee, Green"
-    first_year: int
-    filename: str
-    rate_limit_seconds: float
-    cache_hours: float  # see DenueConfig
 
 
 class SpatialConfig(BaseModel):
@@ -67,6 +56,8 @@ class SpatialConfig(BaseModel):
 
 
 class SourceConfig(BaseModel):
+    """A file the domain downloads as it is: a table, or a map layer inside an archive."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: HttpUrl
@@ -82,51 +73,39 @@ class SourceConfig(BaseModel):
     @model_validator(mode="after")
     def _zip_needs_member(self) -> Self:
         if self.filename.endswith(".zip") and self.member is None:
-            raise ValueError(f"'{self.filename}' is a ZIP: set `member` to the CSV inside it")
+            raise ValueError(f"'{self.filename}' is a ZIP: set `member` to the file inside it")
         return self
 
 
-class DenueConfig(BaseModel):
-    """The DENUE inventory to pull: one activity class in one state."""
+class ItemsConfig(BaseModel):
+    """What one item of the catalog is, in the domain's own vocabulary.
+
+    This is what lets the model pipeline run on any domain: it never names what an
+    item is, only "the id column" and "the time column" named here.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str  # the raw source name, and therefore its folder
-    base_url: str
-    entity: str  # INEGI state code; "09" is Mexico City
-    activity_class: str  # SCIAN class
-    page_size: int
-    filename: str
-    rate_limit_seconds: float
-    # How long a cached page stays true. Required on purpose: the default that needs no
-    # thought is "forever", which silently turns a live register into a snapshot.
-    cache_hours: float
+    noun: str  # names the model's tables: <noun>_features and <noun>_predictions
+    table: str  # the clean table that holds one row per item
+    id: str
+    # When the item was measured. It orders the temporal split, and it dates the
+    # context an item may see: nothing published after it.
+    time: str
+    period: str  # the column that separates periods, for drift and residuals
 
+    @property
+    def features_table(self) -> str:
+        return f"{self.noun}_features"
 
-class OverpassConfig(BaseModel):
-    """The OpenStreetMap inventory to pull: one amenity tag inside one administrative area."""
+    @property
+    def predictions_table(self) -> str:
+        return f"{self.noun}_predictions"
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    name: str  # the raw source name, and therefore its folder
-    base_url: str
-    area_iso: str  # ISO 3166-2 code of the area; "MX-CMX" is Mexico City
-    amenity: str  # OSM `amenity` value, e.g. "cafe"
-    filename: str
-    # Overpass' own budget for the query. Must stay under the HTTP read timeout so the
-    # server's explanation arrives before the client gives up without one.
-    timeout_s: int
-    rate_limit_seconds: float
-    cache_hours: float  # see DenueConfig
-
-
-class CleaningConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    altitude_m: tuple[float, float]
-    country_aliases: dict[str, str]
-    processing_methods: dict[str, str]
-    colors: dict[str, str | None]
+    @property
+    def keys(self) -> list[str]:
+        """Carried through every model table, for joins and for splitting."""
+        return [self.id, self.period, self.time]
 
 
 class ModelSpec(BaseModel):
@@ -166,38 +145,56 @@ class TrainingConfig(BaseModel):
     registered_model: str
 
 
-class AnalysisConfig(BaseModel):
+class TargetBands(BaseModel):
+    """Ranges of the target that mean something to a reader, for reporting error by band.
+
+    Deciles would be generic and useless: whoever reads the error cares about the ranges
+    their own field uses, so the domain names them.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    period_column: str
+    # Inner boundaries, ascending. A value equal to an edge belongs to the band above it.
+    edges: list[float]
+    labels: list[str]  # one more than the edges
+
+    @model_validator(mode="after")
+    def _one_label_per_band(self) -> Self:
+        if len(self.labels) != len(self.edges) + 1:
+            raise ValueError(f"{len(self.edges)} edges make {len(self.edges) + 1} bands")
+        if self.edges != sorted(self.edges):
+            raise ValueError("Band edges must be ascending")
+        return self
+
+
+class AnalysisConfig(BaseModel):
+    """The studies every domain gets. A domain adds its own in its own config section."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Groups and levels smaller than this are not reported: the numbers would be noise.
     min_rows: int
-    market_year: int
-    top_countries: int
-    spotlight_country: str
-    history_since: int
     permutation_repeats: int
+    target_bands: TargetBands
+    # Figures copied into docs/figures/ (committed, rendered on GitHub).
     published_figures: list[str]
 
 
 class DomainConfig(BaseModel):
+    """The sections the core runs. A domain subclasses this to add its own."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     sources: dict[str, SourceConfig]
-    # API sources are not plain downloads -- they page, they carry credentials, they
-    # speak their own query language -- so each is configured apart from the file
-    # sources until the contract is extracted (end of stage 2).
-    denue: DenueConfig | None = None
-    overpass: OverpassConfig | None = None
-    fas: FasConfig | None = None
-    cleaning: CleaningConfig
+    items: ItemsConfig
     model: ModelSpec
     training: TrainingConfig
     analysis: AnalysisConfig
 
 
-def load_domain_config(domain: str, configs_dir: Path = CONFIGS_DIR) -> DomainConfig:
-    path = configs_dir / f"{domain}.yaml"
+def load_config[Config: DomainConfig](path: Path, model: type[Config]) -> Config:
+    """Read a domain's YAML and validate it against that domain's config model."""
     if not path.is_file():
-        raise FileNotFoundError(f"No config for domain '{domain}' at {path}")
-    return DomainConfig.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+        raise FileNotFoundError(f"No domain config at {path}")
+    return model.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))

@@ -6,9 +6,10 @@ import pandera.errors
 import polars as pl
 import pytest
 
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.schemas import RAW_SCHEMAS
 from mlops_core.config import DomainConfig
 from mlops_core.data.extract import latest_ingestion
-from mlops_core.data.schemas import RAW_SCHEMAS
 from mlops_core.data.validate import check_contract, read_raw, validate_raw
 
 
@@ -27,9 +28,9 @@ def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> 
 
 
 def test_recorded_sources_pass_and_come_out_typed(
-    coffee_config: DomainConfig, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
-    frames = {name: s.frame for name, s in validate_raw(coffee_config, raw_dir).items()}
+    frames = {name: s.frame for name, s in validate_raw(coffee_adapter, raw_dir).items()}
 
     assert {name: df.height for name, df in frames.items()} == {
         "cqi_2018": 14,
@@ -55,9 +56,9 @@ def test_r_style_na_is_read_as_null(coffee_config: DomainConfig, raw_dir: Path) 
     assert df["altitude_mean_meters"].null_count() > 0
 
 
-def test_missing_ingestion_fails_with_a_hint(coffee_config: DomainConfig, tmp_path: Path) -> None:
+def test_missing_ingestion_fails_with_a_hint(coffee_adapter: CoffeeAdapter, tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="run extract first"):
-        validate_raw(coffee_config, tmp_path)
+        validate_raw(coffee_adapter, tmp_path)
 
 
 Mutation = Callable[[pl.DataFrame], pl.DataFrame]
@@ -131,12 +132,12 @@ def test_all_violations_are_reported_at_once(coffee_config: DomainConfig, raw_di
 
 
 def test_an_api_source_that_was_never_ingested_is_skipped_not_raised(
-    coffee_config: DomainConfig, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
     """A clone with no DENUE token still validates everything else."""
     shutil.rmtree(raw_dir / "denue_cafes")
 
-    validated = validate_raw(coffee_config, raw_dir)
+    validated = validate_raw(coffee_adapter, raw_dir)
 
     assert "denue_cafes" not in validated
     assert "osm_cafes" in validated

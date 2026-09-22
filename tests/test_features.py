@@ -5,15 +5,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from mlops_core.config import DomainConfig
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.features import add_market_context
+from domains.coffee.schemas import SENSORY_COLUMNS
 from mlops_core.data.clean import build_clean
-from mlops_core.data.schemas import SENSORY_COLUMNS
-from mlops_core.ml.features import (
-    add_market_context,
-    build_features,
-    build_review_features,
-    review_features_schema,
-)
+from mlops_core.ml.features import build_features, features_schema, select_features
 from mlops_core.storage import MANIFEST_NAME, read_table
 
 
@@ -64,29 +60,30 @@ def test_items_without_context_keep_their_row() -> None:
 
 
 @pytest.fixture
-def clean_dir(coffee_config: DomainConfig, raw_dir: Path) -> Path:
-    build_clean(coffee_config, raw_dir.parent)
+def clean_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
+    build_clean(coffee_adapter, raw_dir.parent)
     return raw_dir.parent / "clean"
 
 
 def test_feature_table_meets_its_contract_and_carries_no_leakage(
-    coffee_config: DomainConfig, clean_dir: Path
+    coffee_adapter: CoffeeAdapter, clean_dir: Path
 ) -> None:
-    features = build_review_features(
+    config = coffee_adapter.config
+    enriched = coffee_adapter.enrich(
         read_table(clean_dir / "coffee_reviews"),
-        read_table(clean_dir / "market_context"),
-        coffee_config.model,
+        {"market_context": read_table(clean_dir / "market_context")},
     )
+    features = select_features(enriched, config.items, config.model)
 
-    review_features_schema(coffee_config.model).validate(features, lazy=True)
+    features_schema(config.items, config.model).validate(features, lazy=True)
     assert not set(features.columns) & set(SENSORY_COLUMNS)
     assert features.height == 25
 
 
 def test_build_features_writes_with_lineage_to_clean_partitions(
-    coffee_config: DomainConfig, clean_dir: Path
+    coffee_adapter: CoffeeAdapter, clean_dir: Path
 ) -> None:
-    path = build_features(coffee_config, clean_dir.parent, at=datetime(2026, 9, 19, tzinfo=UTC))
+    path = build_features(coffee_adapter, clean_dir.parent, at=datetime(2026, 9, 19, tzinfo=UTC))
 
     manifest = json.loads((path.parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"coffee_reviews", "market_context"}

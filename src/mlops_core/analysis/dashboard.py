@@ -14,11 +14,21 @@ from pathlib import Path
 import polars as pl
 import streamlit as st
 
-from mlops_core.config import Settings, load_domain_config
+from mlops_core.adapter import load_adapter
+from mlops_core.config import Settings
 from mlops_core.storage import MANIFEST_NAME, latest_partition
 
 ANALYSIS = "analysis"
 FIGURES = "figures"
+# What the core computes for every domain. Anything else on disk is the domain's own.
+CORE_STUDIES = {
+    "target_distribution",
+    "categorical_profile",
+    "feature_recommendation",
+    "numeric_profile",
+    "residuals",
+}
+CORE_FIGURES = {"target_distribution", "feature_importance", "numeric_signal", "residual_bias"}
 
 
 def analysis_dir(settings: Settings, domain: str) -> Path:
@@ -55,6 +65,19 @@ def show(analysis: Path, name: str, caption: str, figure_name: str | None = None
     )
 
 
+def domain_studies(analysis: Path) -> list[str]:
+    """The studies the domain added, whatever they are called."""
+    built = (path.name for path in analysis.iterdir() if path.is_dir())
+    return sorted(name for name in built if name not in CORE_STUDIES | {FIGURES})
+
+
+def domain_figures(analysis: Path) -> list[Path]:
+    partition = latest_partition(analysis / FIGURES)
+    if partition is None:
+        return []
+    return sorted(path for path in partition.glob("*.png") if path.stem not in CORE_FIGURES)
+
+
 def lineage(analysis: Path) -> dict[str, str]:
     """Which partition of every input the studies on screen were computed from."""
     partition = latest_partition(analysis / "target_distribution")
@@ -66,8 +89,9 @@ def lineage(analysis: Path) -> dict[str, str]:
 
 def main() -> None:
     settings = Settings()
-    config = load_domain_config(settings.domain)
+    config = load_adapter(settings.domain).config
     analysis = analysis_dir(settings, config.name)
+    period = config.items.period
 
     st.set_page_config(page_title=f"{config.name} analysis", layout="wide")
     st.title(f"{config.name}: analysis")
@@ -78,7 +102,9 @@ def main() -> None:
         st.warning("No analysis has been built yet. Run `make analysis` first.")
         return
 
-    data_tab, features_tab, model_tab, market_tab = st.tabs(["Data", "Features", "Model", "Market"])
+    data_tab, features_tab, model_tab, domain_tab = st.tabs(
+        ["Data", "Features", "Model", config.name.capitalize()]
+    )
     with data_tab:
         show(analysis, "target_distribution", "The target, period by period", "target_distribution")
         show(analysis, "categorical_profile", "Which categories each period is made of")
@@ -102,23 +128,19 @@ def main() -> None:
             image = figure(analysis, "residual_bias")
             if image:
                 st.image(str(image))
-            period = st.selectbox("Period", sorted(residuals[config.analysis.period_column]))
-            st.dataframe(
-                residuals.filter(pl.col(config.analysis.period_column) == period),
-                width="stretch",
-            )
+            chosen = st.selectbox("Period", sorted(residuals[period]))
+            st.dataframe(residuals.filter(pl.col(period) == chosen), width="stretch")
             st.caption(
                 "Error on the period the model trained on is not a forecast of anything; "
                 "the newest period is the one to read."
             )
-    with market_tab:
-        show(analysis, "market_summary", "Who grows the world's coffee", "market_share")
-        show(
-            analysis,
-            "market_history",
-            f"{config.analysis.spotlight_country} through time",
-            "market_history",
-        )
+    with domain_tab:
+        # The domain's own studies: the core does not know their names, so it shows
+        # every figure and every table it did not compute itself.
+        for image in domain_figures(analysis):
+            st.image(str(image))
+        for name in domain_studies(analysis):
+            show(analysis, name, name.replace("_", " ").capitalize())
 
 
 if __name__ == "__main__":

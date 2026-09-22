@@ -1,5 +1,5 @@
-"""Dagster is a thin layer: adding a domain config must add a whole graph, and the
-asset checks must fail loudly when the data breaks its contract."""
+"""Dagster is a thin layer: adding a domain must add a whole graph, and the asset
+checks must fail loudly when the data breaks its contract."""
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,8 +9,9 @@ import polars as pl
 import pytest
 from dagster import AssetSelection, materialize
 
+from domains.coffee.adapter import CoffeeAdapter
+from mlops_core.adapter import ApiExtraction
 from mlops_core.config import Settings
-from mlops_core.data.sources import ApiExtraction
 from mlops_core.ml.train import TrainResult
 from mlops_core.orchestration import definitions
 from mlops_core.orchestration.definitions import build_definitions
@@ -20,17 +21,13 @@ FEATURES_TABLE = "review_features"
 
 
 @pytest.fixture
-def two_domains(tmp_path: Path) -> Path:
-    """A configs dir where the coffee config has been copied under another name."""
-    configs = tmp_path / "configs"
-    configs.mkdir()
-    coffee = (Path("configs") / "coffee.yaml").read_text(encoding="utf-8")
-    (configs / "coffee.yaml").write_text(coffee, encoding="utf-8")
-    (configs / "tea.yaml").write_text(coffee.replace("name: coffee", "name: tea", 1), "utf-8")
-    return configs
+def two_domains(coffee_adapter: CoffeeAdapter) -> list[CoffeeAdapter]:
+    """Coffee, and the same adapter answering to another name."""
+    tea = CoffeeAdapter(coffee_adapter.config.model_copy(update={"name": "tea"}))
+    return [coffee_adapter, tea]
 
 
-def test_each_domain_config_adds_its_own_graph(two_domains: Path, tmp_path: Path) -> None:
+def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_path: Path) -> None:
     defs = build_definitions(two_domains, Settings(data_dir=tmp_path))
 
     assert [a.key.to_user_string() for a in defs.assets if a.key.path[0] == "tea"] == [
@@ -43,9 +40,16 @@ def test_each_domain_config_adds_its_own_graph(two_domains: Path, tmp_path: Path
     assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
 
 
-def features_asset(tmp_path: Path) -> tuple[list, object]:
-    """Every asset and check, plus the key of the feature table asset."""
+def test_without_a_list_every_installed_domain_gets_a_graph(tmp_path: Path) -> None:
     defs = build_definitions(settings=Settings(data_dir=tmp_path))
+
+    assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml"]
+
+
+def features_asset(tmp_path: Path, adapter: CoffeeAdapter | None = None) -> tuple[list, object]:
+    """Every asset and check, plus the key of the feature table asset."""
+    adapters = [adapter] if adapter else None
+    defs = build_definitions(adapters, settings=Settings(data_dir=tmp_path))
     assets = [*defs.assets, *(defs.asset_checks or [])]
     key = next(a.key for a in defs.assets if a.key.path[-1] == FEATURES_TABLE)
     return assets, key
@@ -89,17 +93,18 @@ class Stub:
 
 
 def test_every_asset_runs_its_own_pipeline_step(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, coffee_adapter: CoffeeAdapter
 ) -> None:
     write_features(tmp_path, {})
     artifact = SimpleNamespace(manifest=SimpleNamespace(size_bytes=10))
+    # The orchestrator pulls the API sources too, through the domain's adapter, or DENUE
+    # and OSM would arrive only when someone typed the command.
+    extract = Stub(
+        ApiExtraction(artifacts={"osm_cafes": artifact}, skipped={"denue_cafes": "no token"})
+    )
+    monkeypatch.setattr(coffee_adapter, "extract", extract)
     stubs = {
         "extract_all": Stub({"cqi_2018": artifact}),
-        # The orchestrator pulls the API sources too, or DENUE and OSM would arrive
-        # only when someone typed the command.
-        "extract_api_sources": Stub(
-            ApiExtraction(artifacts={"osm_cafes": artifact}, skipped={"denue_cafes": "no token"})
-        ),
         "build_clean": Stub({"coffee_reviews": Path("reviews.parquet")}),
         "build_features": Stub(Path("features.parquet")),
         "train_model": Stub(TrainResult("run-1", "3", True, {"test_mae": 1.5})),
@@ -109,12 +114,13 @@ def test_every_asset_runs_its_own_pipeline_step(
     for name, stub in stubs.items():
         monkeypatch.setattr(definitions, name, stub)
     monkeypatch.setattr(definitions, "http_client", contextmanager(lambda: iter([None])))
-    assets, _ = features_asset(tmp_path)
+    assets, _ = features_asset(tmp_path, coffee_adapter)
 
     result = materialize(assets)
 
     assert result.success
     assert {name: stub.calls for name, stub in stubs.items()} == dict.fromkeys(stubs, 1)
+    assert extract.calls == 1
     model = result.asset_materializations_for_node("coffee__trained_model")[0]
     assert model.metadata["version"].value == "3"
     assert model.metadata["promoted"].value == "True"

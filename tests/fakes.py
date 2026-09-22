@@ -12,7 +12,7 @@ import httpx
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 
-from mlops_core.config import DomainConfig
+from domains.coffee.config import CoffeeConfig
 
 # A DENUE-shaped answer for the CLI tests: three establishments, and a count to match.
 # Every field the raw contract requires is here, with the shape the real service uses:
@@ -44,7 +44,7 @@ def denue_response(path: str) -> httpx.Response | None:
     return None
 
 
-def without_rate_limits(config: DomainConfig) -> DomainConfig:
+def without_rate_limits(config: CoffeeConfig) -> CoffeeConfig:
     """The real domain config minus the politeness delays.
 
     The tests' server is a MockTransport: FAS alone is ~70 requests a pull, and at the

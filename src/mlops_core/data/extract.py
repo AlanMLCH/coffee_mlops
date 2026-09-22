@@ -16,6 +16,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cache
+from importlib.metadata import distributions
 from pathlib import Path
 
 import httpx
@@ -26,8 +28,6 @@ from mlops_core.data.api import silence_request_urls
 from mlops_core.storage import MANIFEST_NAME, latest_partition, new_partition
 
 logger = logging.getLogger(__name__)
-
-USER_AGENT = "coffee-mlops/0.1 (+https://github.com/AlanMLCH/coffee_mlops)"
 
 
 class Manifest(BaseModel):
@@ -55,12 +55,31 @@ class RawArtifact:
 def http_client(transport: httpx.BaseTransport | None = None) -> Iterator[httpx.Client]:
     silence_request_urls()  # a redirect can land on a signed URL; never log one
     with httpx.Client(
-        headers={"User-Agent": USER_AGENT},
+        headers={"User-Agent": user_agent()},
         timeout=httpx.Timeout(60.0, connect=10.0),
         follow_redirects=True,
         transport=transport,
     ) as client:
         yield client
+
+
+@cache
+def user_agent() -> str:
+    """`<distribution>/<version> (+<repository>)`, from the installed package's metadata.
+
+    Identifiable on purpose - an upstream that sees trouble can say who to contact - and
+    read from packaging rather than written here, because it names the project that
+    ships this core, which the core itself does not know. The distribution is found by
+    the command it installs: an editable install records its entry points, not its
+    packages.
+    """
+    package = __name__.split(".")[0]
+    for dist in distributions():
+        if any(point.value.startswith(f"{package}.") for point in dist.entry_points):
+            links = dict(url.split(", ", 1) for url in dist.metadata.get_all("Project-URL") or [])
+            home = f" (+{links['Repository']})" if "Repository" in links else ""
+            return f"{dist.metadata['Name']}/{dist.version}{home}"
+    return package  # running from a bare source tree: still says what is calling
 
 
 def latest_ingestion(raw_dir: Path, source: str) -> RawArtifact | None:

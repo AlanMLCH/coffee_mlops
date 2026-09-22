@@ -19,27 +19,22 @@ import matplotlib.pyplot as plt
 import polars as pl
 from sklearn.inspection import permutation_importance
 
+from mlops_core.adapter import DomainAdapter
 from mlops_core.analysis.figures import render_all
 from mlops_core.analysis.studies import (
     categorical_profile,
     feature_recommendation,
-    market_history,
-    market_summary,
     numeric_profile,
     residuals_by_group,
     target_distribution,
 )
-from mlops_core.config import DomainConfig
+from mlops_core.config import DomainConfig, ItemsConfig
 from mlops_core.ml.registry import load_champion
 from mlops_core.ml.train import temporal_split, xy
 from mlops_core.storage import latest_partition, new_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 
-REVIEWS = "coffee_reviews"
-CONTEXT = "market_context"
-FEATURES = "review_features"
-PREDICTIONS = "review_predictions"
 FIGURES = "figures"
 
 
@@ -59,7 +54,7 @@ def champion_importance(
 
     Permutation importance on the test split, not the split counts LightGBM reports: a
     tree can spend half its splits on a feature that carries no signal, which is exactly
-    what the market-context features looked like until this was measured.
+    what an item's context features can look like until it is measured.
     """
     try:
         served = load_champion(
@@ -68,7 +63,9 @@ def champion_importance(
     except Exception as unavailable:  # nothing trained yet, or the registry is down
         logger.warning("Skipping permutation importance: %s", unavailable)
         return None
-    _, test = temporal_split(read_table(data_dir / "features" / FEATURES), config.training)
+    items = config.items
+    features = read_table(data_dir / "features" / items.features_table)
+    _, test = temporal_split(features, config.training, items.time)
     x_test, y_test = xy(test, config.model)
     result = permutation_importance(
         served.model,
@@ -89,34 +86,38 @@ def champion_importance(
 
 
 def build_analysis(
-    config: DomainConfig,
+    adapter: DomainAdapter,
     data_dir: Path,
     tracking_uri: str,
     at: datetime | None = None,
     publish_to: Path | None = None,
 ) -> AnalysisOutput:
-    """Compute every study from the latest layers, write it as Parquet and CSV, draw
-    the figures, and copy the published selection where the docs can reference it."""
-    analysis, spec = config.analysis, config.model
-    reviews = read_table(data_dir / "clean" / REVIEWS)
-    context = read_table(data_dir / "clean" / CONTEXT)
-    features = read_table(data_dir / "features" / FEATURES)
+    """Compute every study from the latest layers - the core's and the domain's - write
+    each as Parquet and CSV, draw the figures, and copy the published selection where
+    the docs can reference it."""
+    config = adapter.config
+    analysis, spec, items = config.analysis, config.model, config.items
+    clean = {
+        name: read_table(data_dir / "clean" / name)
+        for name in adapter.clean_contracts()
+        if latest_partition(data_dir / "clean" / name)
+    }
+    features = read_table(data_dir / "features" / items.features_table)
 
-    numeric = numeric_profile(features, spec, analysis.period_column)
-    categorical = categorical_profile(features, spec, analysis.period_column, analysis.min_rows)
+    numeric = numeric_profile(features, spec, items.period, items.time)
+    categorical = categorical_profile(features, spec, items.period, items.time, analysis.min_rows)
     importance = champion_importance(config, data_dir, tracking_uri)
 
     tables = {
-        "target_distribution": target_distribution(reviews, spec.target, analysis.period_column),
+        "target_distribution": target_distribution(
+            clean[items.table], spec.target, items.period, items.time
+        ),
         "numeric_profile": numeric,
         "categorical_profile": categorical,
         "feature_recommendation": feature_recommendation(numeric, categorical, importance),
-        "market_summary": market_summary(context, analysis.market_year, analysis.top_countries),
-        "market_history": market_history(
-            context, analysis.spotlight_country, analysis.history_since
-        ),
+        **adapter.studies(clean),
     }
-    predictions = _latest_predictions(data_dir)
+    predictions = _latest_predictions(data_dir, items)
     if predictions is not None:
         tables["residuals"] = residuals_by_group(
             predictions,
@@ -124,13 +125,15 @@ def build_analysis(
             spec,
             config.training.stratify_by,
             analysis.min_rows,
-            analysis.period_column,
+            items.period,
+            items.id,
+            analysis.target_bands,
         )
     else:
         logger.warning("No batch predictions yet: skipping the residual study")
 
     built_at = at or datetime.now(UTC)
-    lineage = _lineage(data_dir)
+    lineage = _lineage(data_dir, adapter)
     written: dict[str, Path] = {}
     for name, table in tables.items():
         written[name] = write_table(
@@ -138,28 +141,27 @@ def build_analysis(
         )
         if table.is_empty():
             # Usually a config asking for something the data does not have, such as a
-            # market year that has not been published yet. Silence would hide it.
+            # year that has not been published yet. Silence would hide it.
             logger.warning("%s came out empty: check the analysis config against the data", name)
         else:
             logger.info("%s: %d rows", name, table.height)
 
-    figures = _write_figures(tables, config, data_dir, built_at)
+    figures = _write_figures(tables, adapter, data_dir, built_at)
     published = _publish(figures, config.analysis.published_figures, publish_to)
     return AnalysisOutput(written, figures, published)
 
 
 def _write_figures(
-    tables: dict[str, pl.DataFrame], config: DomainConfig, data_dir: Path, built_at: datetime
+    tables: dict[str, pl.DataFrame], adapter: DomainAdapter, data_dir: Path, built_at: datetime
 ) -> dict[str, Path]:
     """One PNG per figure, in a partition beside the tables they were drawn from."""
-    analysis = config.analysis
+    config = adapter.config
     drawn = render_all(
         tables,
-        period=analysis.period_column,
+        period=config.items.period,
         target=config.model.target,
-        country=analysis.spotlight_country,
-        year=analysis.market_year,
-    )
+        band_labels=config.analysis.target_bands.labels,
+    ) | dict(adapter.figures(tables))
     partition = new_partition(data_dir / "analysis" / FIGURES, "built_at", built_at)
     paths = {}
     for name, figure in drawn.items():
@@ -188,18 +190,18 @@ def _publish(figures: dict[str, Path], selection: list[str], publish_to: Path | 
     return published
 
 
-def _latest_predictions(data_dir: Path) -> pl.DataFrame | None:
-    table_dir = data_dir / "predictions" / PREDICTIONS
+def _latest_predictions(data_dir: Path, items: ItemsConfig) -> pl.DataFrame | None:
+    table_dir = data_dir / "predictions" / items.predictions_table
     return read_table(table_dir) if latest_partition(table_dir) else None
 
 
-def _lineage(data_dir: Path) -> dict[str, str]:
+def _lineage(data_dir: Path, adapter: DomainAdapter) -> dict[str, str]:
     """Which partition of each input this analysis was computed from."""
+    items = adapter.config.items
     sources = {
-        REVIEWS: data_dir / "clean" / REVIEWS,
-        CONTEXT: data_dir / "clean" / CONTEXT,
-        FEATURES: data_dir / "features" / FEATURES,
-        PREDICTIONS: data_dir / "predictions" / PREDICTIONS,
+        **{name: data_dir / "clean" / name for name in adapter.clean_contracts()},
+        items.features_table: data_dir / "features" / items.features_table,
+        items.predictions_table: data_dir / "predictions" / items.predictions_table,
     }
     found = {name: latest_partition(path) for name, path in sources.items()}
     return {name: partition.name for name, partition in found.items() if partition}

@@ -1,4 +1,5 @@
-"""Coffee MLOps: end-to-end ML/AI engineering platform, stage 1 (static sources)."""
+"""The domain-agnostic core: extraction, contracts, layers, training, serving and
+analysis. A domain plugs in through `mlops_core.adapter` and nothing here names it."""
 
 import os
 

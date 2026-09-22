@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from mlops_core.config import DomainConfig
-from mlops_core.data.schemas import (
+from domains.coffee.schemas import (
     BOROUGHS,
     COFFEE_SHOPS,
     MARKET_CONTEXT,
     coffee_reviews_schema,
 )
-from mlops_core.ml.features import review_features_schema
-from mlops_core.ml.predict import PREDICTIONS
+from mlops_core.config import DomainConfig
+from mlops_core.ml.features import features_schema
+from mlops_core.ml.predict import predictions_schema
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 DATA_DICTIONARY = (DOCS / "data-dictionary.md").read_text(encoding="utf-8")
@@ -29,8 +29,8 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "market_context": list(MARKET_CONTEXT.columns),
         "boroughs": list(BOROUGHS.columns),
         "coffee_shops": list(COFFEE_SHOPS.columns),
-        "review_features": list(review_features_schema(coffee_config.model).columns),
-        "review_predictions": list(PREDICTIONS.columns),
+        "review_features": list(features_schema(coffee_config.items, coffee_config.model).columns),
+        "review_predictions": list(predictions_schema(coffee_config.items).columns),
     }
 
 

@@ -14,11 +14,11 @@ import httpx
 import pandera.errors
 import pytest
 
-from mlops_core.config import FasConfig
+from domains.coffee.config import FasConfig
+from domains.coffee.schemas import PSD_COFFEE
+from domains.coffee.sources.fas import KEY_HEADER, fetch_rows, ingest_balance, to_frame
 from mlops_core.contracts import check_contract
 from mlops_core.data.api import ApiClient
-from mlops_core.data.schemas import PSD_COFFEE
-from mlops_core.data.sources.fas import KEY_HEADER, fetch_rows, ingest_balance, to_frame
 from mlops_core.storage import MANIFEST_NAME
 from tests.fakes import fas_recording, fas_response
 

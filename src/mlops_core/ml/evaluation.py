@@ -119,16 +119,16 @@ def stratified_metrics(
 
 
 def recalibration_gain(
-    test: pl.DataFrame, prediction: np.ndarray, spec: ModelSpec, window: int
+    test: pl.DataFrame, prediction: np.ndarray, spec: ModelSpec, window: int, time: str
 ) -> dict[str, float]:
     """What a deployed recalibration would buy, measured honestly.
 
-    Simulates what a monitoring loop does: take the first `window` graded lots of the
-    new period, estimate the level shift from them alone, and apply that offset to
+    Simulates what a monitoring loop does: take the first `window` items of the new
+    period (in `time` order), estimate the level shift from them alone, and apply that offset to
     everything after. Both metrics are computed on the rows *after* the window, so the
     offset is never estimated on the rows it is scored against.
     """
-    ordered = test.with_columns(pl.Series("_prediction", prediction)).sort("grading_date")
+    ordered = test.with_columns(pl.Series("_prediction", prediction)).sort(time)
     if ordered.height <= window:
         return {}
     observed = ordered[spec.target].to_numpy()

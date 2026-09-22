@@ -15,7 +15,10 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
-from mlops_core.config import DomainConfig, Settings, load_domain_config
+import domains.coffee
+from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.config import CoffeeConfig, CoffeeCredentials
+from mlops_core.config import Settings
 from tests.fakes import RecordedServer, fas_recording, without_rate_limits
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -38,14 +41,29 @@ def isolate_from_the_developers_machine(monkeypatch: pytest.MonkeyPatch, tmp_pat
     exercise: no local MLflow, and no reading the developer's `.env`, which holds real
     credentials and would make a test about a missing one pass or fail by accident."""
     monkeypatch.setenv(
-        "COFFEE_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'unused-mlflow.db').as_posix()}"
+        "MLOPS_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'unused-mlflow.db').as_posix()}"
     )
-    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for settings in (Settings, CoffeeCredentials):
+        monkeypatch.setitem(settings.model_config, "env_file", None)
+    # Which domain runs must come from the test, never from the machine it runs on.
+    monkeypatch.delenv("MLOPS_DOMAIN", raising=False)
 
 
 @pytest.fixture
-def coffee_config() -> DomainConfig:
-    return load_domain_config("coffee")
+def coffee_adapter() -> CoffeeAdapter:
+    """The real coffee domain, as the core loads it."""
+    return domains.coffee.adapter()
+
+
+@pytest.fixture
+def coffee_config(coffee_adapter: CoffeeAdapter) -> CoffeeConfig:
+    return coffee_adapter.config
+
+
+# Every credential the domain can use, so fixtures exercise every source.
+FIXTURE_CREDENTIALS = CoffeeCredentials(
+    denue_token=SecretStr("fixture-token"), usda_fas_api_key=SecretStr("fixture-key")
+)
 
 
 @pytest.fixture
@@ -62,7 +80,7 @@ def recorded() -> dict[str, bytes]:
 
 
 @pytest.fixture
-def server(coffee_config: DomainConfig, recorded: dict[str, bytes]) -> RecordedServer:
+def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedServer:
     urls = {name: str(source.url) for name, source in coffee_config.sources.items()}
     payloads = {urls[name]: body for name, body in recorded.items() if name != "cqi_2023"}
     payloads[SIGNED_URL] = recorded["cqi_2023"]
@@ -85,7 +103,7 @@ def client(server: RecordedServer) -> Iterator[Any]:
 
 
 @pytest.fixture
-def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
+def raw_dir(tmp_path: Path, coffee_config: CoffeeConfig, client: Any) -> Path:
     """A raw layer populated from the recorded payloads, in the real directory layout
     (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir.
 
@@ -93,12 +111,9 @@ def raw_dir(tmp_path: Path, coffee_config: DomainConfig, client: Any) -> Path:
     places is built from them, so a fixture without them would test half a pipeline.
     """
     from mlops_core.data.extract import extract_all
-    from mlops_core.data.sources import extract_api_sources
 
     data_dir = tmp_path / coffee_config.name
     extract_all(coffee_config, data_dir / "raw", client)
-    credentials = Settings(
-        denue_token=SecretStr("fixture-token"), usda_fas_api_key=SecretStr("fixture-key")
-    )
-    extract_api_sources(without_rate_limits(coffee_config), credentials, data_dir, client)
+    adapter = CoffeeAdapter(without_rate_limits(coffee_config), FIXTURE_CREDENTIALS)
+    adapter.extract(data_dir, client)
     return data_dir / "raw"
