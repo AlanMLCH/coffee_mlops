@@ -20,8 +20,13 @@ import polars as pl
 from pydantic import BaseModel, SecretStr
 
 from domains.coffee.config import CoffeeConfig, CoffeeCredentials
-from domains.coffee.features import CONTEXT_TABLE, add_market_context
-from domains.coffee.request import Lot
+from domains.coffee.features import (
+    CONTEXT_TABLE,
+    ORIGINS_TABLE,
+    add_coffee_origin,
+    add_market_context,
+)
+from domains.coffee.request import Lot, Offer
 from domains.coffee.schemas import RAW_SCHEMAS, clean_schemas
 from mlops_core.adapter import ApiExtraction, CleanTable, JsonReader
 
@@ -46,6 +51,12 @@ MODELS = {
         context_tables=(CONTEXT_TABLE,),
         enrich=lambda items, context: add_market_context(items, context[CONTEXT_TABLE]),
         request=Lot,
+    ),
+    # A bag on a shop's shelf is described by its coffee's sheet: where it grew, how.
+    "offer": ModelHooks(
+        context_tables=(ORIGINS_TABLE,),
+        enrich=lambda items, context: add_coffee_origin(items, context[ORIGINS_TABLE]),
+        request=Offer,
     ),
 }
 
@@ -99,10 +110,12 @@ class CoffeeAdapter:
             readers[config.roasters.name] = roasters.to_frame
         return readers
 
-    def clean(self, raw: Mapping[str, pl.DataFrame]) -> Mapping[str, CleanTable]:
+    def clean(
+        self, raw: Mapping[str, pl.DataFrame], read_at: Mapping[str, datetime]
+    ) -> Mapping[str, CleanTable]:
         from domains.coffee.clean import clean_tables
 
-        return clean_tables(raw, self.config.cleaning, self.config.production)
+        return clean_tables(raw, self.config.cleaning, self.config.production, read_at)
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
         return clean_schemas(self.config.cleaning)

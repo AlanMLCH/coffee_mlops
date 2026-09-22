@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 
 from domains.coffee.adapter import CoffeeAdapter
-from domains.coffee.features import add_market_context
+from domains.coffee.features import MULTIPLE, add_coffee_origin, add_market_context, coffee_origins
 from domains.coffee.schemas import SENSORY_COLUMNS
 from mlops_core.data.clean import build_clean
 from mlops_core.ml.features import build_features, features_schema, select_features
@@ -97,3 +97,88 @@ def test_a_model_without_code_in_the_domain_is_named(coffee_adapter: CoffeeAdapt
     """A model declared in the YAML but given no hooks is a config error, said plainly."""
     with pytest.raises(ValueError, match="no code for model 'tasting'"):
         coffee_adapter.context_tables("tasting")
+
+
+def origin_row(coffee: str, **values: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "coffee_id": coffee,
+        "country": None,
+        "state": None,
+        "processing_method": None,
+        "varieties": None,
+        "altitude_min_m": None,
+        "altitude_max_m": None,
+    }
+    return row | values
+
+
+ORIGINS = pl.DataFrame(
+    [
+        origin_row(
+            "single",
+            country="Mexico",
+            state="Oaxaca",
+            varieties=["typica"],
+            processing_method="washed",
+            altitude_min_m=1400.0,
+            altitude_max_m=1500.0,
+        ),
+        # A blend: two arabicas from two states and a robusta, like Buna's Guarumbo.
+        origin_row(
+            "blend",
+            country="Mexico",
+            state="Oaxaca",
+            varieties=["bourbon", "typica"],
+            processing_method="washed",
+            altitude_min_m=1400.0,
+            altitude_max_m=1500.0,
+        ),
+        origin_row(
+            "blend",
+            country="Mexico",
+            state="Chiapas",
+            varieties=["bourbon"],
+            processing_method="washed",
+            altitude_min_m=700.0,
+            altitude_max_m=700.0,
+        ),
+        origin_row("silent"),
+    ],
+    schema_overrides={"varieties": pl.List(pl.String)},
+)
+
+
+def test_a_coffee_is_what_its_origins_agree_on() -> None:
+    summary = {row["coffee_id"]: row for row in coffee_origins(ORIGINS).iter_rows(named=True)}
+
+    assert (summary["single"]["variety"], summary["single"]["altitude_m"]) == ("typica", 1450.0)
+    # The blend agrees on country and process, not on state or variety.
+    blend = summary["blend"]
+    assert (blend["country"], blend["processing_method"]) == ("Mexico", "washed")
+    assert (blend["state"], blend["variety"]) == (MULTIPLE, MULTIPLE)
+    assert blend["altitude_m"] == (1450.0 + 700.0) / 2
+    # A sheet that states nothing gives nothing: unknown, not "multiple".
+    assert summary["silent"]["country"] is None and summary["silent"]["variety"] is None
+
+
+def test_offers_are_examples_only_with_a_price_to_learn_from() -> None:
+    offers = pl.DataFrame(
+        {
+            "offer_id": ["a", "b", "c"],
+            "coffee_id": ["single", "single", "single"],
+            "price_mxn_per_kg": [1100.0, None, 8640.0],  # priced, a kit, a copied price
+            "price_outlier": [False, None, True],
+        }
+    )
+
+    enriched = add_coffee_origin(offers, ORIGINS)
+
+    assert enriched["offer_id"].to_list() == ["a"]
+    assert enriched.row(0, named=True)["state"] == "Oaxaca"
+
+
+def test_a_request_keeps_the_origin_it_states() -> None:
+    """Online, the caller describes the coffee: nothing in the catalogue overrides it."""
+    request = pl.DataFrame({"shop": ["buna"], "country": ["Kenya"], "bag_grams": [340.0]})
+
+    assert add_coffee_origin(request, ORIGINS).equals(request)

@@ -112,3 +112,26 @@ def test_recalibration_needs_more_rows_than_the_window(spec: ModelSpec) -> None:
     test = frame(["Mexico"] * 5, [84.0] * 5)
 
     assert recalibration_gain(test, np.full(5, 82.5), spec, 30, "grading_date") == {}
+
+
+def test_families_are_resampled_whole() -> None:
+    """Five sizes of one product share its error: counted as five pieces of evidence,
+    the interval would be far narrower than what the data can support."""
+    rng = np.random.default_rng(0)
+    per_family = rng.normal(0.0, 1.0, size=40)
+    errors = np.repeat(per_family, 5)
+    families = np.repeat(np.arange(40), 5)
+
+    rows_low, rows_high = mae_interval(errors, RESAMPLES, seed=1)
+    families_low, families_high = mae_interval(errors, RESAMPLES, seed=1, groups=families)
+
+    assert (families_high - families_low) > 1.8 * (rows_high - rows_low)
+
+
+def test_families_of_one_are_just_rows() -> None:
+    candidate, reference = np.array([1.0, 2.0, 3.0, 4.0]), np.array([2.0, 2.0, 2.0, 5.0])
+
+    by_rows = compare(candidate, reference, RESAMPLES, seed=3)
+    by_families = compare(candidate, reference, RESAMPLES, seed=3, groups=np.arange(4))
+
+    assert by_rows == by_families

@@ -69,7 +69,8 @@ def _from_cache(cache_dir: Path) -> ServedModel:
     metadata_path = cache_dir / CACHED_METADATA
     if not metadata_path.is_file():
         raise FileNotFoundError(
-            f"No champion in the registry and no cached model in {cache_dir}: train one first"
+            f"No champion in the registry and no cached model in {cache_dir}: train one, "
+            "or read the `gate` tag of the last version to see why it was not promoted"
         )
     version = str(json.loads(metadata_path.read_text())["version"])
     logger.warning("Serving cached v%s: it may be behind the registry", version)

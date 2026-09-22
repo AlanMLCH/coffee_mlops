@@ -379,6 +379,44 @@ models:
       edges: [82, 85]
       labels: ["low (<82)", "mid (82-85)", "high (>=85)"]
 
+  # What a kilo of roasted coffee costs on a Mexico City shelf (stage 3), from what its
+  # shop and its sheet say. 130 of the 167 coffees are Almanegra's: read as Almanegra's
+  # pricing first.
+  - name: offer # -> offer_features, offer_predictions
+    # One item is one coffee in one size, as a shop lists it.
+    items:
+      table: roaster_offers
+      id: offer_id
+      time: observed_on # when the catalogue was read
+      period: snapshot # which read: drift across reads is stage 4
+    spec:
+      target: price_mxn_per_kg
+      categorical: [shop, country, state, processing_method, variety]
+      numeric: [altitude_m, bag_grams] # the size, for the discount a bigger bag gets
+      # The listed price is the target times the size.
+      leakage: [price_mxn]
+    training:
+      # The sizes of one coffee are priced together: each coffee is on one side only,
+      # and the gate's bootstrap resamples coffees, not bags.
+      split:
+        kind: group
+        column: coffee_id
+        test_share: 0.25
+      cv_folds: 5
+      trials: 40
+      seed: 42
+      # To be promoted it must beat pricing every bag at its shop's average.
+      baseline_group: shop
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      stratify_by: shop
+      min_group_size: 5
+      registered_model: coffee-price-per-kg
+    # Pesos per kilogram; the median offer sits near $1,000.
+    target_bands:
+      edges: [800, 1200]
+      labels: ["under $800/kg", "$800-1,200/kg", "over $1,200/kg"]
+
 # Mexico's own coffee, from SIAP: which crop to read and in what unit. A different
 # name or unit for the same id stops the run - it would change what the numbers mean.
 production:

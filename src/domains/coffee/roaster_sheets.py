@@ -5,7 +5,11 @@ Three tables, because a shop describes three different things:
 - `roaster_coffees`: one row per product a shop sells as coffee - the catalog's item.
 - `roaster_origins`: one row per origin a product's sheet describes. Most name one; a
   blend lists each component in turn (Buna's Guarumbo: two arabicas and a robusta).
-- `roaster_offers`: one row per product in one size, with its price per kilogram.
+- `roaster_offers`: one row per product in one size, with its price per kilogram and
+  the day it was observed: when the shops' catalogues were read.
+
+`coffee_id` ("<shop>-<product id>") joins the three, and `offer_id` names an offer; a
+platform's own ids are only unique within a shop.
 
 The sheets are read by the core (`mlops_core.data.sheets`). What the labels mean, and
 how a place, a variety or a process is written in Spanish, is `cleaning.roaster_sheets`
@@ -24,6 +28,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 import polars as pl
@@ -35,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 COFFEES = pl.Schema(
     {
+        "coffee_id": pl.String,
         "shop": pl.String,
         "product_id": pl.String,
         "title": pl.String,
@@ -46,6 +52,7 @@ COFFEES = pl.Schema(
 # Instances throughout: a List among bare classes would not type-check.
 ORIGINS = pl.Schema(
     {
+        "coffee_id": pl.String(),
         "shop": pl.String(),
         "product_id": pl.String(),
         "origin": pl.Int64(),  # 1, 2, ... in the order the sheet lists them
@@ -65,6 +72,8 @@ ORIGINS = pl.Schema(
 )
 OFFERS = pl.Schema(
     {
+        "offer_id": pl.String,
+        "coffee_id": pl.String,
         "shop": pl.String,
         "product_id": pl.String,
         "variant_id": pl.String,
@@ -72,6 +81,10 @@ OFFERS = pl.Schema(
         "price_mxn": pl.Float64,
         "bag_grams": pl.Float64,  # everything in the offer: 12 bags of 340 g are 4,080 g
         "price_mxn_per_kg": pl.Float64,  # none for a bundle: its price pays for more
+        # When the catalogue was read: the first ingestion of this exact content, so an
+        # unchanged catalogue read again keeps its date.
+        "observed_on": pl.Date,
+        "snapshot": pl.String,  # that read, as the period the model's studies compare
     }
 )
 
@@ -157,8 +170,11 @@ def bag_grams(variant_title: str | None, title: str) -> float | None:
     return size * (_pack(title) or _pack(variant_title or "") or 1)
 
 
-def clean_roasters(offers: pl.DataFrame | None, rules: CleaningConfig) -> dict[str, pl.DataFrame]:
-    """The raw offers -> `roaster_coffees`, `roaster_origins` and `roaster_offers`.
+def clean_roasters(
+    offers: pl.DataFrame | None, rules: CleaningConfig, read_at: datetime | None = None
+) -> dict[str, pl.DataFrame]:
+    """The raw offers, read at `read_at` -> `roaster_coffees`, `roaster_origins` and
+    `roaster_offers`.
 
     `offers` is None when the shops were never read: the tables are then empty, with
     their columns, and everything else still builds.
@@ -166,6 +182,8 @@ def clean_roasters(offers: pl.DataFrame | None, rules: CleaningConfig) -> dict[s
     if offers is None:
         logger.info("roaster_catalogs was never ingested: its clean tables are empty")
         offers = pl.DataFrame()
+    elif read_at is None:
+        raise ValueError("Offers need the time their catalogue was read")
     sheets = rules.roaster_sheets
     coffees, origins = [], []
     unmapped: set[str] = set()
@@ -176,7 +194,11 @@ def clean_roasters(offers: pl.DataFrame | None, rules: CleaningConfig) -> dict[s
     )
     for product in products.iter_rows(named=True):
         described = _sheet(product, sheets)
-        key = {"shop": product["shop"], "product_id": product["product_id"]}
+        key = {
+            "coffee_id": f"{product['shop']}-{product['product_id']}",
+            "shop": product["shop"],
+            "product_id": product["product_id"],
+        }
         for number, record in enumerate(described, start=1):
             origin = _origin(record, rules)
             if "country" in record and origin["country"] is None:
@@ -201,7 +223,7 @@ def clean_roasters(offers: pl.DataFrame | None, rules: CleaningConfig) -> dict[s
         "roaster_origins": pl.DataFrame(origins, schema=ORIGINS).sort(
             "shop", "product_id", "origin"
         ),
-        "roaster_offers": _priced(offers, sheets),
+        "roaster_offers": _priced(offers, sheets, read_at),
     }
 
 
@@ -243,7 +265,9 @@ def _origin(record: Mapping[str, str], rules: CleaningConfig) -> dict[str, Any]:
     }
 
 
-def _priced(offers: pl.DataFrame, sheets: RoasterSheetRules) -> pl.DataFrame:
+def _priced(
+    offers: pl.DataFrame, sheets: RoasterSheetRules, read_at: datetime | None
+) -> pl.DataFrame:
     """Each offer with the grams its titles state, the price per kilogram, and whether
     that price is so far from the product's other offers that it was entered wrong.
 
@@ -259,6 +283,8 @@ def _priced(offers: pl.DataFrame, sheets: RoasterSheetRules) -> pl.DataFrame:
             contradicted += 1
         rows.append(
             {
+                "offer_id": f"{offer['shop']}-{offer['variant_id']}",
+                "coffee_id": f"{offer['shop']}-{offer['product_id']}",
                 "shop": offer["shop"],
                 "product_id": offer["product_id"],
                 "variant_id": offer["variant_id"],
@@ -266,6 +292,8 @@ def _priced(offers: pl.DataFrame, sheets: RoasterSheetRules) -> pl.DataFrame:
                 "price_mxn": offer["price"],
                 "bag_grams": grams,
                 "price_mxn_per_kg": round(offer["price"] / grams * 1000, 2) if by_weight else None,
+                "observed_on": read_at.date() if read_at else None,
+                "snapshot": read_at.date().isoformat() if read_at else None,
             }
         )
     if contradicted:

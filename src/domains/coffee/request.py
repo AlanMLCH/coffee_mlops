@@ -1,4 +1,4 @@
-"""What the prediction API accepts for coffee: a lot, before it is cupped."""
+"""What the prediction API accepts for coffee: a lot before it is cupped, a bag on a shelf."""
 
 from datetime import UTC, date, datetime
 from typing import Any
@@ -24,4 +24,23 @@ class Lot(BaseModel):
         """The lot as a row of the item table: `graded_on` is its time column."""
         return self.model_dump(exclude={"graded_on"}) | {
             "grading_date": self.graded_on or datetime.now(UTC).date()
+        }
+
+
+class Offer(BaseModel):
+    """A bag of roasted coffee as a shop would list it, to price it per kilogram."""
+
+    shop: str = Field(description="The roaster, as the catalogues name it, e.g. almanegra")
+    bag_grams: float = Field(gt=0, le=20_000)
+    country: str | None = Field(None, description="As PSD names it, e.g. Mexico")
+    state: str | None = Field(None, description="As SIAP names it, e.g. Oaxaca")
+    processing_method: str | None = Field(None, description="washed, natural, honey, ...")
+    variety: str | None = Field(None, description="As the CQI spells it, e.g. gesha")
+    altitude_m: float | None = Field(None, ge=0, le=9000)
+    observed_on: date | None = Field(None, description="Defaults to today (UTC).")
+
+    def to_item(self) -> dict[str, Any]:
+        """The bag as a row of the offers table: `observed_on` is its time column."""
+        return self.model_dump(exclude={"observed_on"}) | {
+            "observed_on": self.observed_on or datetime.now(UTC).date()
         }

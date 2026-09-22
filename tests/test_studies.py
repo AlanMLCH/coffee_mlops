@@ -94,6 +94,20 @@ def test_rare_levels_are_left_out_of_the_profile() -> None:
     assert "Laos" not in profile["level"].to_list()
 
 
+def test_a_single_period_has_nothing_to_drift_from() -> None:
+    """One read of a catalogue: its studies must run, and say drift is unknown, not zero."""
+    one_read = features_frame().filter(pl.col("snapshot") == "new")
+
+    numeric = numeric_profile(one_read, SPEC, "snapshot", "grading_date")
+    categorical = categorical_profile(one_read, SPEC, "snapshot", "grading_date", min_rows=2)
+
+    assert numeric["drift_sd"].null_count() == numeric.height
+    taiwan = categorical.filter(pl.col("level") == "Taiwan").row(0, named=True)
+    assert (taiwan["n_first"], taiwan["share_change"]) == (3, 0.0)
+    # Mexico has one row: counted once, it is below min_rows, not two rows at 2.
+    assert "Mexico" not in categorical["level"].to_list()
+
+
 def test_residuals_are_reported_by_group_and_by_quality_band() -> None:
     features = features_frame()
     # The predictions table carries the period, exactly as the batch job writes it.

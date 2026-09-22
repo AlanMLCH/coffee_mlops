@@ -113,13 +113,15 @@ flowchart TD
     audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
+    offer_features["features/offer_features<br/>adapter.enrich: the coffee's origin<br/>split by coffee, not by bag"]
     train["mlops ml train<br/>the model's split: temporal or by group<br/>Optuna on folds of the same kind · LightGBM"]
-    gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion"}}
+    gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion<br/>whole groups resampled for a group split"}}
     mlflow[("MLflow<br/>runs + registry<br/>alias: champion")]
 
     subgraph USE["What reads the model and the layers"]
         direction LR
         review_predictions[("predictions/review_predictions<br/>batch scores + model version")]
+        offer_predictions[("predictions/offer_predictions<br/>price per kg, once a champion exists")]
         api["FastAPI POST /models/{name}/predict<br/>each model's request body<br/>the same enrich"]
         analysis["mlops analysis run<br/>core studies + the domain's"]
         dashboard["Streamlit dashboard"]
@@ -140,13 +142,16 @@ flowchart TD
     raw --> validate --> CLEAN
     CLEAN --- audits
     coffee_reviews & market_context --> review_features
-    review_features --> train --> gate
+    roaster_offers & roaster_origins --> offer_features
+    review_features & offer_features --> train --> gate
     gate -- "promoted only if it wins" --> mlflow
     review_features & mlflow --> review_predictions
+    offer_features & mlflow --> offer_predictions
     mlflow --> api
     market_context --> api
     review_predictions --> analysis --> dashboard
     CLEAN & review_features & review_predictions & analysis -.-> catalog
+    offer_features & offer_predictions -.-> catalog
 
     LATER -.-> corpus -.-> vectors -.-> agent
     roaster_coffees -. "descriptions" .-> corpus
@@ -158,10 +163,10 @@ flowchart TD
     classDef store fill:#eeeeea,stroke:#898781,color:#111
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
     class extract_files,validate,train,gate,api,analysis,dashboard core
-    class extract_apis,review_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
+    class extract_apis,review_features,offer_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
-    class raw,mlflow,review_predictions,catalog store
+    class raw,mlflow,review_predictions,offer_predictions,catalog store
     class documents,corpus,vectors,agent planned
 ```
 
@@ -442,6 +447,48 @@ new country or process does not stop the pipeline. It is logged by name, left em
 the canonical column (a process keeps its label as written beside it), and it shows up
 in the coverage table.
 
+## What a kilo costs (stage 3): the gate said no
+
+The second model, `offer`, asks what a kilo of roasted coffee costs on a Mexico City
+shelf, from what its shop and its sheet say: shop, country, state, process, variety,
+altitude, and the bag's size (a bigger bag is cheaper per kilo). One item is one coffee
+in one size; 510 offers of 157 coffees have a price to learn from (no size, a kit, or a
+price copied from another size are not examples).
+
+Two things are different from the cup-score model, and both are in the core now:
+
+- **The split is by coffee, not by bag.** The sizes of one coffee share almost
+  everything; with some in train and the rest in test the model would be graded on
+  memory. A seeded quarter of the *coffees* is held out, and tuning uses `GroupKFold`.
+- **The gate resamples coffees, not bags.** Four sizes of one mispriced coffee are one
+  mistake, not four pieces of evidence; resampling rows would make every interval too
+  narrow and the gate too easy (a cluster bootstrap).
+
+| Held-out coffees (39 of 157, 129 offers) | Value |
+|---|---|
+| Model MAE | 319.5 MXN/kg (95% CI 217 - 413) |
+| Best baseline: every bag at its shop's mean | 325.6 MXN/kg |
+| Paired difference vs baseline | -6.1 (95% CI -42.9 to 32.1), **60% sure** |
+| R² | -0.01 |
+| Cross-validated MAE inside training | 196.2 |
+
+**Not promoted, and correctly so.** On coffees it has not seen, the model does not
+price better than "what this shop usually charges" - 60% sure is a coin flip, and the
+gate asks for 95%. The gap between cross-validation (196) and the held-out coffees (319)
+is the split's draw as much as the model: the held-out Almanegra coffees are dearer
+(median 1,298 MXN/kg against 1,117 in training), and 39 coffees are few enough for one
+draw to matter.
+
+The data does carry signal the model cannot yet turn into held-out accuracy: price per
+kilo rises with altitude (correlation 0.42), falls with bag size (-0.23), and imported
+origins sit above Mexico's (Yemen 1,464 and Rwanda 1,373 MXN/kg against 1,094). What is
+missing is mostly coffees: 128 of the 157 are one shop's, and a variety summarised as
+"multiple" hides the Gesha in a coffee sold as several lots. Stage 4 re-reads the shops
+over time, which is also where a second period gives these studies drift to measure.
+
+Until a version passes the gate, `/models/offer/predict` answers 503 and `/health`
+reports `"partial"`: the cup-score model keeps serving.
+
 ## Results (stage 1)
 
 Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
@@ -465,7 +512,8 @@ The evaluation is built to survive a small test set:
 
 - **Every comparison is a paired bootstrap** on the same rows. A version is promoted to
   `champion` only if it wins in at least 95% of resamples against both the best baseline
-  and the current champion, so a better average alone never ships a model.
+  and the current champion, so a better average alone never ships a model. For a model
+  split by group, whole groups are resampled.
 - **Metrics are stratified** by country and logged with each group's weight in train vs
   test. That is how the real story surfaced: Taiwan went from 5.7% of training to 29.5%
   of test, so the temporal split mixes drift with a different population.

@@ -385,6 +385,7 @@ ROASTER_COFFEES = pa.DataFrameSchema(
     strict=True,
     unique=["shop", "product_id"],
     columns={
+        "coffee_id": pa.Column(pl.String, unique=True),  # "<shop>-<product id>"
         "shop": pa.Column(pl.String),
         "product_id": pa.Column(pl.String),
         "title": pa.Column(pl.String),
@@ -410,6 +411,7 @@ def roaster_origins_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
         strict=True,
         unique=["shop", "product_id", "origin"],
         columns={
+            "coffee_id": pa.Column(pl.String),
             "shop": pa.Column(pl.String),
             "product_id": pa.Column(pl.String),
             "origin": pa.Column(pl.Int64, pa.Check.ge(1)),
@@ -443,6 +445,8 @@ ROASTER_OFFERS = pa.DataFrameSchema(
     strict=True,
     unique=["shop", "variant_id"],
     columns={
+        "offer_id": pa.Column(pl.String, unique=True),  # "<shop>-<variant id>"
+        "coffee_id": pa.Column(pl.String),
         "shop": pa.Column(pl.String),
         "product_id": pa.Column(pl.String),
         "variant_id": pa.Column(pl.String),
@@ -453,6 +457,8 @@ ROASTER_OFFERS = pa.DataFrameSchema(
         "price_mxn_per_kg": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
         # Listed as the shop lists it, but most likely a price copied from another size.
         "price_outlier": pa.Column(pl.Boolean, nullable=True),
+        "observed_on": pa.Column(pl.Date),  # when the catalogue was read
+        "snapshot": pa.Column(pl.String),
     },
 )
 

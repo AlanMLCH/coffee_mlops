@@ -44,7 +44,8 @@ def numeric_profile(
     features: pl.DataFrame, spec: ModelSpec, period: str, time: str
 ) -> pl.DataFrame:
     """Per numeric feature: how often it is missing, how it moves with the target, and
-    how far its distribution drifted between periods (in standard deviations)."""
+    how far its distribution drifted between periods (in standard deviations). With a
+    single period there is nothing to drift from: the drift is null, not zero."""
     periods = periods_in_order(features, period, time)
     rows = []
     for column in spec.numeric:
@@ -63,20 +64,36 @@ def numeric_profile(
                 "correlation_with_target": _correlation(features, column, spec.target),
                 # Standardised difference of means: 0.5 already means a different population.
                 "drift_sd": (
-                    abs(_scalar(last.mean()) - _scalar(first.mean())) / spread if spread else None
+                    abs(_scalar(last.mean()) - _scalar(first.mean())) / spread
+                    if spread and len(periods) > 1
+                    else None
                 ),
             }
         )
-    return pl.DataFrame(rows).sort("correlation_with_target", descending=True, nulls_last=True)
+    # Typed up front: a column that is null for every feature (drift, with one period)
+    # would otherwise be inferred as Null and refuse to join anything typed.
+    schema = {
+        "feature": pl.String,
+        "missing_pct": pl.Float64,
+        "mean": pl.Float64,
+        "sd": pl.Float64,
+        "correlation_with_target": pl.Float64,
+        "drift_sd": pl.Float64,
+    }
+    return pl.DataFrame(rows, schema=schema).sort(
+        "correlation_with_target", descending=True, nulls_last=True
+    )
 
 
 def categorical_profile(
     features: pl.DataFrame, spec: ModelSpec, period: str, time: str, min_rows: int
 ) -> pl.DataFrame:
     """Per level of each categorical feature: its weight in each period and its mean
-    target. A level that grows from 6% to 30% is a composition change, not drift."""
+    target. A level that grows from 6% to 30% is a composition change, not drift. With a
+    single period, first and last are the same one, and its rows are counted once."""
     periods = periods_in_order(features, period, time)
     first, last = periods[0], periods[-1]
+    rows = pl.col("n_first") if first == last else pl.col("n_first") + pl.col("n_last")
     frames = []
     for column in spec.categorical:
         counts = (
@@ -88,10 +105,7 @@ def categorical_profile(
         frames.append(
             counts.rename({column: "level"})
             .with_columns(pl.lit(column).alias("feature"))
-            .with_columns(
-                pl.col(n_first).fill_null(0),
-                pl.col(n_last).fill_null(0),
-            )
+            .with_columns(pl.col(*dict.fromkeys([n_first, n_last])).fill_null(0))
             .with_columns(
                 (pl.col(n_first) / pl.col(n_first).sum()).alias("share_first"),
                 (pl.col(n_last) / pl.col(n_last).sum()).alias("share_last"),
@@ -106,7 +120,7 @@ def categorical_profile(
                 pl.col(f"mean_target_{first}").alias("mean_target_first"),
                 pl.col(f"mean_target_{last}").alias("mean_target_last"),
             )
-            .filter((pl.col("n_first") + pl.col("n_last")) >= min_rows)
+            .filter(rows >= min_rows)
         )
     return (
         pl.concat(frames)

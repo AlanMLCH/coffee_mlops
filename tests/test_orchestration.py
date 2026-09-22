@@ -36,6 +36,9 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/review_features",
         "tea/review_model",
         "tea/review_predictions",
+        "tea/offer_features",
+        "tea/offer_model",
+        "tea/offer_predictions",
     ]
     assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
 
@@ -55,9 +58,11 @@ def features_asset(tmp_path: Path, adapter: CoffeeAdapter | None = None) -> tupl
     return assets, key
 
 
-def write_features(tmp_path: Path, extra: dict[str, list[float]]) -> None:
-    table = pl.DataFrame({"review_id": ["a"], "total_cup_points": [83.0], **extra})
-    write_table(table, tmp_path / "coffee" / "features" / FEATURES_TABLE, inputs={})
+def write_features(
+    tmp_path: Path, extra: dict[str, list[float]], table: str = FEATURES_TABLE
+) -> None:
+    frame = pl.DataFrame({"item_id": ["a"], "target": [83.0], **extra})
+    write_table(frame, tmp_path / "coffee" / "features" / table, inputs={})
 
 
 @pytest.mark.parametrize(
@@ -95,7 +100,8 @@ class Stub:
 def test_every_asset_runs_its_own_pipeline_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, coffee_adapter: CoffeeAdapter
 ) -> None:
-    write_features(tmp_path, {})
+    for model in coffee_adapter.config.models:
+        write_features(tmp_path, {}, model.features_table)
     artifact = SimpleNamespace(manifest=SimpleNamespace(size_bytes=10))
     # The orchestrator pulls the API sources too, through the domain's adapter, or DENUE
     # and OSM would arrive only when someone typed the command.
@@ -119,7 +125,12 @@ def test_every_asset_runs_its_own_pipeline_step(
     result = materialize(assets)
 
     assert result.success
-    assert {name: stub.calls for name, stub in stubs.items()} == dict.fromkeys(stubs, 1)
+    # The data steps run once; each model step once per model.
+    models = len(coffee_adapter.config.models)
+    per_model = {"build_features", "train_model", "batch_predict"}
+    assert {name: stub.calls for name, stub in stubs.items()} == {
+        name: models if name in per_model else 1 for name in stubs
+    }
     assert extract.calls == 1
     model = result.asset_materializations_for_node("coffee__review_model")[0]
     assert model.metadata["version"].value == "3"

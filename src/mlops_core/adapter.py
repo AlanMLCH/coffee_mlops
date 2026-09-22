@@ -98,9 +98,16 @@ class DomainAdapter(Protocol):
         """How each API source's stored JSON becomes a frame for its contract."""
         ...
 
-    def clean(self, raw: Mapping[str, pl.DataFrame]) -> Mapping[str, CleanTable]:
+    def clean(
+        self, raw: Mapping[str, pl.DataFrame], read_at: Mapping[str, datetime]
+    ) -> Mapping[str, CleanTable]:
         """Validated raw frames -> the domain's canonical tables: the items and every
-        context table that describes their world."""
+        context table that describes their world.
+
+        `read_at` says when each frame's content was first ingested. A catalogue read
+        from a live source is an observation, and an observation needs its date - which
+        cannot live in the stored document without making every read look like new data.
+        """
         ...
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:

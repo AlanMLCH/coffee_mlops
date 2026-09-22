@@ -111,7 +111,8 @@ not a graded sample: nothing here was cupped by a third party.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `shop`, `product_id` | String | The shop (as named in the config) and the platform's own product id: the key |
+| `coffee_id` | String | `<shop>-<product id>`: the one-column key that joins the three roaster tables |
+| `shop`, `product_id` | String | The shop (as named in the config) and the platform's own product id |
 | `title` | String | As the shop titles it |
 | `url` | String | The product page |
 | `description` | String? | The shop's own text, markup stripped; the source of RAG documents later |
@@ -126,7 +127,7 @@ states as SIAP does, processing methods and varieties as the CQI spells them.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `shop`, `product_id`, `origin` | | Keys; `origin` is 1, 2, ... in the sheet's order |
+| `coffee_id`, `shop`, `product_id`, `origin` | | Keys; `origin` is 1, 2, ... in the sheet's order |
 | `country` | String? | PSD's name, from the country label, a state (which implies Mexico), or a place |
 | `state` | String? | The Mexican state as SIAP names it (Estado de México is `México`) |
 | `region` | String? | As written; the "origin" label when there is no region |
@@ -142,12 +143,15 @@ states as SIAP does, processing methods and varieties as the CQI spells them.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `shop`, `product_id`, `variant_id` | String | Keys; `variant_id` is the platform's |
+| `offer_id` | String | `<shop>-<variant id>`: a platform's ids are only unique within a shop |
+| `coffee_id`, `shop`, `product_id`, `variant_id` | String | Its coffee, and the platform's own ids |
 | `variant_title` | String? | Size, grind or lot, as the shop titles the variant |
 | `price_mxn` | Float | The listed price, pesos (Buna's pages state MXN; Squarespace's JSON does too) |
 | `bag_grams` | Float? | From the titles: the variant's size, else the product's, times the bags in a pack. Never the platform's own weight, which contradicts the titles in 77 offers |
 | `price_mxn_per_kg` | Float? | Null without a size, and for kits and samplers, whose price pays for more than coffee |
 | `price_outlier` | Bool? | More than 3x off its product's median per kilogram: the three found were a price copied from another size. Kept as listed, flagged |
+| `observed_on` | Date | When the catalogue was read: the first ingestion of this exact content, from the raw manifest (an unchanged catalogue read again keeps its date) |
+| `snapshot` | String | That read, as the period the offer model's studies compare; stage 4's re-reads add more |
 
 ## `features.review_features` — model input
 
@@ -172,6 +176,31 @@ sensory scores are dropped here, so no downstream consumer can pick them up.
 |---|---|---|
 | `review_id`, `snapshot`, `grading_date` | | Keys back to the feature table |
 | `prediction` | Float | Predicted `total_cup_points` |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.offer_features` — price model input
+
+`clean.roaster_offers` with a usable price (a size to divide by, no `price_outlier`),
+each joined to what its coffee's sheet says. A blend's origins are summarised per
+attribute: the value they agree on, `multiple` where they differ, null where no origin
+states it. The listed `price_mxn` is dropped: the target is it divided by the size.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `offer_id`, `snapshot`, `observed_on` | | Keys, carried for joins and studies |
+| `coffee_id` | String | The group of the split: every size of one coffee is on one side |
+| `shop`, `country`, `state`, `processing_method`, `variety` | String? | Categorical features; the origin ones summarised as above |
+| `altitude_m` | Float? | Mean of the midpoints of the coffee's origin altitude ranges |
+| `bag_grams` | Float? | The size, for the discount a bigger bag gets |
+| `price_mxn_per_kg` | Float | Target |
+
+## `predictions.offer_predictions` — batch price estimates
+
+| Column | Type | Meaning |
+|---|---|---|
+| `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys back to the feature table |
+| `prediction` | Float | Predicted `price_mxn_per_kg` |
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
 

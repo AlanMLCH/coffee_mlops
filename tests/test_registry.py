@@ -50,7 +50,7 @@ def test_cache_serves_when_the_registry_is_unreachable(registry: str, tmp_path: 
 
 
 def test_no_registry_and_no_cache_fails_with_what_to_do(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="train one first"):
+    with pytest.raises(FileNotFoundError, match="`gate` tag"):
         load_champion("m", UNREACHABLE, tmp_path / "cache")
 
 

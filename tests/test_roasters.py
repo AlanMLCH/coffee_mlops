@@ -144,7 +144,8 @@ def clean_tables(roasters: RoastersConfig, tmp_path: Path) -> dict[str, pl.DataF
     """The recorded shops, read and cleaned, each table held to its contract."""
     document, _ = ingest(Shops(), roasters, tmp_path)
     rules = domains.coffee.adapter().config.cleaning
-    tables = clean_roasters(check_contract(ROASTER_CATALOGS, to_frame(document)), rules)
+    offers = check_contract(ROASTER_CATALOGS, to_frame(document))
+    tables = clean_roasters(offers, rules, NOW)
     contracts = clean_schemas(rules)
     return {name: check_contract(contracts[name], table) for name, table in tables.items()}
 

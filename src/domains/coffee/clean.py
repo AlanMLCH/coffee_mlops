@@ -18,6 +18,7 @@ the domain config.
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 
 import polars as pl
 from polars.expr.whenthen import ChainedThen, Then
@@ -434,7 +435,10 @@ def clean_mexico_production(siap: pl.DataFrame, crop: ProductionConfig) -> pl.Da
 
 
 def clean_tables(
-    frames: Mapping[str, pl.DataFrame], rules: CleaningConfig, crop: ProductionConfig
+    frames: Mapping[str, pl.DataFrame],
+    rules: CleaningConfig,
+    crop: ProductionConfig,
+    read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
     if "fas_psd_coffee" in frames:  # absent without a key, and nothing depends on it
@@ -442,7 +446,9 @@ def clean_tables(
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
     shop_inputs = tuple(name for name in (*SHOP_SOURCES, "cdmx_boroughs") if name in frames)
-    roasters = clean_roasters(frames.get("roaster_catalogs"), rules)
+    roasters = clean_roasters(
+        frames.get("roaster_catalogs"), rules, read_at.get("roaster_catalogs")
+    )
     return {
         "coffee_reviews": CleanTable(clean_reviews(frames, rules), ("cqi_2018", "cqi_2023")),
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),

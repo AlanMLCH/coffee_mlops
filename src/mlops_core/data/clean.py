@@ -26,7 +26,8 @@ def build_clean(
     frames = {name: source.frame for name, source in sources.items()}
     lineage = {name: source.artifact.partition.name for name, source in sources.items()}
 
-    tables = adapter.clean(frames)
+    read_at = {name: source.artifact.manifest.ingested_at for name, source in sources.items()}
+    tables = adapter.clean(frames, read_at)
     contracts = adapter.clean_contracts()
     if tables.keys() != contracts.keys():
         # A table without a contract is a promise nobody made; a contract without a

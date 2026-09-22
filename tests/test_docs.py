@@ -74,6 +74,7 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "roaster_origins",
         "roaster_offers",
         "review_features",
+        "offer_features",
     ],
 )
 def test_each_table_has_its_own_section(table: str) -> None:

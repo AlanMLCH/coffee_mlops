@@ -306,13 +306,14 @@ def train_model(
         pipeline.fit(x_train, y_train, **fit_params(spec))
         predictions = pipeline.predict(x_test)
         errors = absolute_errors(y_test, predictions)
-        ci_low, ci_high = mae_interval(errors, cfg.bootstrap_resamples, cfg.seed)
-        versus_baseline = compare(errors, best_baseline, cfg.bootstrap_resamples, cfg.seed)
+        # Families are resampled whole: one product priced wrong is one mistake, not five.
+        families = test[split.column].to_numpy() if isinstance(split, GroupSplit) else None
+        resamples, seed = cfg.bootstrap_resamples, cfg.seed
+        ci_low, ci_high = mae_interval(errors, resamples, seed, families)
+        versus_baseline = compare(errors, best_baseline, resamples, seed, families)
         champion = champion_errors(cfg.registered_model, test, y_test)
         versus_champion = (
-            compare(errors, champion, cfg.bootstrap_resamples, cfg.seed)
-            if champion is not None
-            else None
+            compare(errors, champion, resamples, seed, families) if champion is not None else None
         )
 
         metrics = (

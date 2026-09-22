@@ -1,6 +1,7 @@
 """How a roaster's sheet is read: every case here was found in the shops' real sheets."""
 
 import logging
+from datetime import UTC, date, datetime
 
 import polars as pl
 import pytest
@@ -18,6 +19,7 @@ from domains.coffee.schemas import clean_schemas
 from mlops_core.contracts import check_contract
 
 RULES = domains.coffee.adapter().config.cleaning
+READ_AT = datetime(2026, 9, 21, 23, 14, tzinfo=UTC)
 SHEETS = RULES.roaster_sheets
 
 
@@ -142,7 +144,7 @@ def test_a_price_copied_from_another_size_is_flagged_not_fixed() -> None:
         ]
     )
 
-    offers = clean_roasters(raw, RULES)["roaster_offers"]
+    offers = clean_roasters(raw, RULES, READ_AT)["roaster_offers"]
 
     flagged = dict(offers.select("variant_id", "price_outlier").iter_rows())
     assert flagged == {"small": True, "medium": False, "large": False}
@@ -153,7 +155,7 @@ def test_a_kit_has_a_size_but_no_price_per_kilogram() -> None:
     """A kit's price pays for a book or chocolate as well as its coffee."""
     raw = pl.DataFrame([offer("k", "v", "Kit El monje de Moka y Café de Yemen", "5/32 kg", 599.0)])
 
-    row = clean_roasters(raw, RULES)["roaster_offers"].row(0, named=True)
+    row = clean_roasters(raw, RULES, READ_AT)["roaster_offers"].row(0, named=True)
 
     assert row["bag_grams"] == 156.25
     assert row["price_mxn_per_kg"] is None
@@ -167,7 +169,7 @@ def test_a_country_no_rule_maps_is_left_empty_and_named(
     raw = pl.DataFrame([offer("a", "v", "Atlantis Lavado", "250 g", 300.0, body_html=body)])
 
     with caplog.at_level(logging.WARNING):
-        origin = clean_roasters(raw, RULES)["roaster_origins"].row(0, named=True)
+        origin = clean_roasters(raw, RULES, READ_AT)["roaster_origins"].row(0, named=True)
 
     assert origin["country"] is None and origin["processing_method"] == "washed"
     assert "Atlantis" in caplog.text
@@ -180,3 +182,22 @@ def test_shops_never_read_leave_empty_tables_that_keep_their_contracts() -> None
     for name, table in tables.items():
         assert table.is_empty()
         check_contract(contracts[name], table)
+
+
+def test_offers_carry_one_column_keys_and_the_day_they_were_seen() -> None:
+    """A platform's ids repeat across shops; the read date is what stage 4 compares."""
+    raw = pl.DataFrame([offer("p", "v", "Korgua", "5/16 kg", 349.0)])
+
+    tables = clean_roasters(raw, RULES, READ_AT)
+
+    row = tables["roaster_offers"].row(0, named=True)
+    assert (row["offer_id"], row["coffee_id"]) == ("shop-v", "shop-p")
+    assert (row["observed_on"], row["snapshot"]) == (date(2026, 9, 21), "2026-09-21")
+    assert tables["roaster_coffees"]["coffee_id"].to_list() == ["shop-p"]
+
+
+def test_offers_without_the_time_they_were_read_are_refused() -> None:
+    raw = pl.DataFrame([offer("p", "v", "Korgua", "5/16 kg", 349.0)])
+
+    with pytest.raises(ValueError, match="read"):
+        clean_roasters(raw, RULES)

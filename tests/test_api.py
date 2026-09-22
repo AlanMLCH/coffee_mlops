@@ -8,7 +8,9 @@ import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
+import domains.coffee
 from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.roaster_sheets import clean_roasters
 from mlops_core.config import DomainConfig, Settings
 from mlops_core.ml.registry import ServedModel
 from mlops_core.serving import api
@@ -56,6 +58,13 @@ def market_context(tmp_path: Path) -> pl.DataFrame:
 
 
 @pytest.fixture
+def roaster_origins(tmp_path: Path) -> None:
+    """The offer model's context: no coffee has to be listed for a request to be priced."""
+    empty = clean_roasters(None, domains.coffee.adapter().config.cleaning)["roaster_origins"]
+    write_table(empty, tmp_path / "coffee" / "clean" / "roaster_origins", inputs={})
+
+
+@pytest.fixture
 def model() -> RecordingModel:
     return RecordingModel()
 
@@ -65,6 +74,7 @@ def client(
     coffee_adapter: CoffeeAdapter,
     tmp_path: Path,
     market_context: pl.DataFrame,
+    roaster_origins: None,
     model: RecordingModel,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
@@ -78,7 +88,10 @@ def client(
 
 
 def test_health_and_model_report_what_is_loaded(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok", "models": {"review": "7"}}
+    assert client.get("/health").json() == {
+        "status": "ok",
+        "models": {"review": "7", "offer": "7"},
+    }
     assert client.get("/models/review").json()["model_source"] == "registry"
 
 
@@ -133,7 +146,7 @@ def test_reload_picks_up_a_newly_promoted_champion(
     )
 
     assert client.post("/reload").json()["loaded"]["review"]["model_version"] == "8"
-    assert client.get("/health").json()["models"] == {"review": "8"}
+    assert client.get("/health").json()["models"] == {"review": "8", "offer": "8"}
 
 
 def test_without_a_model_the_service_says_so_instead_of_crashing(
@@ -187,5 +200,56 @@ def test_a_reload_that_fails_says_which_model_and_why(
 
     body = client.post("/reload").json()
 
-    assert body == {"loaded": {}, "failed": {"review": "registry down"}}
-    assert client.get("/health").json()["models"] == {"review": "7"}
+    assert body == {"loaded": {}, "failed": {"review": "registry down", "offer": "registry down"}}
+    assert client.get("/health").json()["models"] == {"review": "7", "offer": "7"}
+
+
+BAG = {
+    "shop": "almanegra",
+    "bag_grams": 312.5,
+    "country": "Mexico",
+    "state": "Oaxaca",
+    "processing_method": "washed",
+    "variety": "typica",
+    "altitude_m": 1650,
+}
+
+
+def test_a_bag_is_priced_from_what_the_request_states(
+    client: TestClient, model: RecordingModel, coffee_config: DomainConfig
+) -> None:
+    """A request describes a coffee no catalogue has to list: nothing is looked up."""
+    response = client.post("/models/offer/predict", json=BAG)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["target"] == "price_mxn_per_kg" and body["context"] == {}
+    assert model.seen is not None
+    assert list(model.seen.columns) == coffee_config.model_named("offer").spec.features
+    assert model.seen["bag_grams"].iloc[0] == 312.5
+
+
+def test_one_model_missing_leaves_the_other_serving(
+    coffee_adapter: CoffeeAdapter,
+    tmp_path: Path,
+    market_context: pl.DataFrame,
+    roaster_origins: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A price model the gate never promoted must not take the cup-score model down."""
+
+    def only_review(name: str, *_: object) -> ServedModel:
+        if name == "coffee-price-per-kg":
+            raise FileNotFoundError("never promoted")
+        return ServedModel(RecordingModel(), "7", "registry")
+
+    monkeypatch.setattr(api, "load_champion", only_review)
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
+
+    with TestClient(api.create_app(coffee_adapter, Settings())) as client:
+        assert client.get("/health").json() == {
+            "status": "partial",
+            "models": {"review": "7", "offer": None},
+        }
+        assert client.post(PREDICT, json=LOT).status_code == 200
+        assert client.post("/models/offer/predict", json=BAG).status_code == 503
