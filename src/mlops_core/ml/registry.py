@@ -2,7 +2,8 @@
 
 MLflow is the source of truth, but whoever loads a model keeps a local copy: a restart
 while the tracking server is down should keep serving the last known model instead of
-failing. `source` always says which one is in memory.
+failing. `source` always says which one is in memory. The cache holds one folder per
+registered model, so a domain's models never overwrite each other's copy.
 """
 
 import json
@@ -42,6 +43,7 @@ def load_champion(
     probe_timeout_s: int = 10,
 ) -> ServedModel:
     """Load the champion from the registry and refresh the cache; fall back to the cache."""
+    cache_dir = cache_dir / registered_model
     # MLflow defaults to 7 retries with exponential backoff and a 120 s timeout, so a
     # dead registry would take minutes to fall back to the cache instead of seconds.
     os.environ[MLFLOW_HTTP_REQUEST_MAX_RETRIES.name] = str(probe_retries)

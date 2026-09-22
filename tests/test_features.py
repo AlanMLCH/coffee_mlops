@@ -68,14 +68,15 @@ def clean_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
 def test_feature_table_meets_its_contract_and_carries_no_leakage(
     coffee_adapter: CoffeeAdapter, clean_dir: Path
 ) -> None:
-    config = coffee_adapter.config
+    review = coffee_adapter.config.model_named("review")
     enriched = coffee_adapter.enrich(
+        "review",
         read_table(clean_dir / "coffee_reviews"),
         {"market_context": read_table(clean_dir / "market_context")},
     )
-    features = select_features(enriched, config.items, config.model)
+    features = select_features(enriched, review)
 
-    features_schema(config.items, config.model).validate(features, lazy=True)
+    features_schema(review).validate(features, lazy=True)
     assert not set(features.columns) & set(SENSORY_COLUMNS)
     assert features.height == 25
 
@@ -83,8 +84,16 @@ def test_feature_table_meets_its_contract_and_carries_no_leakage(
 def test_build_features_writes_with_lineage_to_clean_partitions(
     coffee_adapter: CoffeeAdapter, clean_dir: Path
 ) -> None:
-    path = build_features(coffee_adapter, clean_dir.parent, at=datetime(2026, 9, 19, tzinfo=UTC))
+    path = build_features(
+        coffee_adapter, "review", clean_dir.parent, at=datetime(2026, 9, 19, tzinfo=UTC)
+    )
 
     manifest = json.loads((path.parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"coffee_reviews", "market_context"}
     assert all(p.startswith("built_at=") for p in manifest["inputs"].values())
+
+
+def test_a_model_without_code_in_the_domain_is_named(coffee_adapter: CoffeeAdapter) -> None:
+    """A model declared in the YAML but given no hooks is a config error, said plainly."""
+    with pytest.raises(ValueError, match="no code for model 'tasting'"):
+        coffee_adapter.context_tables("tasting")

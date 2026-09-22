@@ -122,7 +122,7 @@ def test_ml_run_chains_features_and_training(
     CliRunner().invoke(cli.app, ["data", "run"])
     monkeypatch.setattr(
         "mlops_core.ml.train.train_model",
-        lambda config, data, uri: TrainResult("run-1", "1", False, {"test_mae": 2.0}),
+        lambda config, model, data, uri: TrainResult("run-1", "1", False, {"test_mae": 2.0}),
     )
     monkeypatch.setattr(
         "mlops_core.ml.predict.load_champion",
@@ -142,17 +142,17 @@ def test_train_reports_version_and_gate_decision(
 ) -> None:
     calls = []
 
-    def fake_train_model(config: object, data: Path, tracking_uri: str) -> TrainResult:
-        calls.append((data, tracking_uri))
+    def fake_train_model(config: object, model: str, data: Path, tracking_uri: str) -> TrainResult:
+        calls.append((model, data, tracking_uri))
         return TrainResult("run-1", "3", True, {"test_mae": 1.5})
 
     monkeypatch.setattr("mlops_core.ml.train.train_model", fake_train_model)
     monkeypatch.setenv("MLOPS_MLFLOW_TRACKING_URI", "sqlite:///somewhere.db")
 
-    result = CliRunner().invoke(cli.app, ["ml", "train"])
+    result = CliRunner().invoke(cli.app, ["ml", "train", "--model", "review"])
 
     assert result.exit_code == 0, result.output
-    assert calls == [(data_dir / "coffee", "sqlite:///somewhere.db")]
+    assert calls == [("review", data_dir / "coffee", "sqlite:///somewhere.db")]
     assert "v3: promoted to champion" in result.output
 
 
@@ -281,14 +281,14 @@ def test_analysis_run_writes_studies_and_publishes_figures(
     result = runner.invoke(cli.app, ["analysis", "run"])
 
     assert result.exit_code == 0, result.output
-    assert "feature_recommendation:" in result.output
-    assert (data_dir / "coffee" / "analysis" / "feature_recommendation").is_dir()
+    assert "review_feature_recommendation:" in result.output
+    assert (data_dir / "coffee" / "analysis" / "review_feature_recommendation").is_dir()
     published = data_dir / "checkout" / "docs" / "figures"
     assert {path.name for path in published.iterdir()} == {
-        "target_distribution.png",
-        "feature_importance.png",
+        "review_target_distribution.png",
+        "review_feature_importance.png",
         "market_history.png",
-        "mexico_production.png",  # residual_bias needs predictions, which this run lacks
+        "mexico_production.png",  # review_residual_bias needs predictions; this run has none
         "roaster_coverage.png",
     }
 
@@ -335,3 +335,10 @@ def test_secrets_says_so_when_a_domain_needs_none(monkeypatch: pytest.MonkeyPatc
 
     assert result.exit_code == 0, result.output
     assert "this domain needs no credentials" in result.output
+
+
+def test_a_model_the_domain_does_not_declare_is_refused(data_dir: Path) -> None:
+    result = CliRunner().invoke(cli.app, ["ml", "features", "--model", "tasting"])
+
+    assert result.exit_code != 0
+    assert "No model 'tasting'" in str(result.exception)

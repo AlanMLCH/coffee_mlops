@@ -1,18 +1,18 @@
 """Runtime settings (environment) and the generic half of a domain's config (YAML).
 
 A domain's YAML has two kinds of section. The ones every domain has - its file
-downloads, what one item is, the model, training and analysis - are defined here,
-because the core runs them. The ones only one domain has (an API's paging, a cleaning
-vocabulary) are defined by that domain, which extends `DomainConfig` with them; pydantic
-still refuses any key that nobody declared.
+downloads, its models (what one item is, what is predicted, how it is trained) and
+its analysis - are defined here, because the core runs them. The ones only one domain
+has (an API's paging, a cleaning vocabulary) are defined by that domain, which extends
+`DomainConfig` with them; pydantic still refuses any key that nobody declared.
 """
 
 from datetime import date
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -81,7 +81,7 @@ class SourceConfig(BaseModel):
 
 
 class ItemsConfig(BaseModel):
-    """What one item of the catalog is, in the domain's own vocabulary.
+    """What one item of a model is, in the domain's own vocabulary.
 
     This is what lets the model pipeline run on any domain: it never names what an
     item is, only "the id column" and "the time column" named here.
@@ -89,26 +89,12 @@ class ItemsConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    noun: str  # names the model's tables: <noun>_features and <noun>_predictions
     table: str  # the clean table that holds one row per item
     id: str
-    # When the item was measured. It orders the temporal split, and it dates the
-    # context an item may see: nothing published after it.
+    # When the item was measured. It orders a temporal split, and it dates the context
+    # an item may see: nothing published after it.
     time: str
     period: str  # the column that separates periods, for drift and residuals
-
-    @property
-    def features_table(self) -> str:
-        return f"{self.noun}_features"
-
-    @property
-    def predictions_table(self) -> str:
-        return f"{self.noun}_predictions"
-
-    @property
-    def keys(self) -> list[str]:
-        """Carried through every model table, for joins and for splitting."""
-        return [self.id, self.period, self.time]
 
 
 class ModelSpec(BaseModel):
@@ -132,11 +118,40 @@ class ModelSpec(BaseModel):
         return self
 
 
+class TemporalSplit(BaseModel):
+    """Past trains, future evaluates: for items with a time axis worth predicting across."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["temporal"]
+    test_from: date
+    # Items used to estimate the level shift when simulating a deployed recalibration.
+    # Only a temporal split has a "next period" to recalibrate on.
+    recalibration_window: int
+
+
+class GroupSplit(BaseModel):
+    """Whole groups go to one side: for items that come in families.
+
+    Several items of one group (sizes of one product, say) share almost everything; with
+    some in train and the rest in test, the model would be scored on what it memorised.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["group"]
+    column: str  # items sharing a value never straddle train and test
+    test_share: float = Field(gt=0, lt=1)  # of the groups, not of the items
+
+
+Split = Annotated[TemporalSplit | GroupSplit, Field(discriminator="kind")]
+
+
 class TrainingConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    test_from: date
-    cv_folds: int
+    split: Split
+    cv_folds: int  # folds inside the training split, of the same kind as the split
     trials: int
     seed: int
     baseline_group: str
@@ -144,7 +159,6 @@ class TrainingConfig(BaseModel):
     min_probability_better: float
     stratify_by: str
     min_group_size: int
-    recalibration_window: int
     registered_model: str
 
 
@@ -170,6 +184,50 @@ class TargetBands(BaseModel):
         return self
 
 
+class ModelConfig(BaseModel):
+    """One model of a domain: its items, what it predicts, and how it is trained.
+
+    A domain can have several - one per question it asks of its data - and each gets its
+    own tables, MLflow experiment, registered model, API route and studies, all named
+    after it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # names its tables: <name>_features and <name>_predictions
+    items: ItemsConfig
+    spec: ModelSpec
+    training: TrainingConfig
+    # Error is reported by the target ranges the domain's readers use, not by deciles.
+    target_bands: TargetBands
+
+    @model_validator(mode="after")
+    def _group_is_its_own_column(self) -> Self:
+        split, items = self.training.split, self.items
+        taken = {items.id, items.period, items.time, self.spec.target, *self.spec.features}
+        if isinstance(split, GroupSplit) and split.column in taken:
+            raise ValueError(
+                f"{self.name}: split.column '{split.column}' must be a column of its own, "
+                "not a key, a feature or the target"
+            )
+        return self
+
+    @property
+    def features_table(self) -> str:
+        return f"{self.name}_features"
+
+    @property
+    def predictions_table(self) -> str:
+        return f"{self.name}_predictions"
+
+    @property
+    def keys(self) -> list[str]:
+        """Carried through every model table, for joins and for splitting."""
+        items, split = self.items, self.training.split
+        grouped = [split.column] if isinstance(split, GroupSplit) else []
+        return [items.id, items.period, items.time, *grouped]
+
+
 class AnalysisConfig(BaseModel):
     """The studies every domain gets. A domain adds its own in its own config section."""
 
@@ -178,8 +236,8 @@ class AnalysisConfig(BaseModel):
     # Groups and levels smaller than this are not reported: the numbers would be noise.
     min_rows: int
     permutation_repeats: int
-    target_bands: TargetBands
-    # Figures copied into docs/figures/ (committed, rendered on GitHub).
+    # Figures copied into docs/figures/ (committed, rendered on GitHub). A model's own
+    # figures are named after it: <model>_<figure>.
     published_figures: list[str]
 
 
@@ -190,10 +248,23 @@ class DomainConfig(BaseModel):
 
     name: str
     sources: dict[str, SourceConfig]
-    items: ItemsConfig
-    model: ModelSpec
-    training: TrainingConfig
+    models: list[ModelConfig] = Field(min_length=1)
     analysis: AnalysisConfig
+
+    @model_validator(mode="after")
+    def _models_are_named_once(self) -> Self:
+        names = [model.name for model in self.models]
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        if repeated:
+            raise ValueError(f"Model names must be unique; repeated: {repeated}")
+        return self
+
+    def model_named(self, name: str) -> ModelConfig:
+        """The model called `name`, or an error that lists the ones there are."""
+        for model in self.models:
+            if model.name == name:
+                return model
+        raise ValueError(f"No model '{name}'; {self.name} has {[m.name for m in self.models]}")
 
 
 def load_config[Config: DomainConfig](path: Path, model: type[Config]) -> Config:

@@ -9,7 +9,8 @@ none of them.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,6 +28,26 @@ from mlops_core.adapter import ApiExtraction, CleanTable, JsonReader
 if TYPE_CHECKING:
     import httpx
     from matplotlib.figure import Figure
+
+
+@dataclass(frozen=True)
+class ModelHooks:
+    """What one of the domain's models needs from code: its context, its enrichment and
+    the API's request body. The rest of a model is data, in the YAML."""
+
+    context_tables: tuple[str, ...]
+    enrich: Callable[[pl.DataFrame, Mapping[str, pl.DataFrame]], pl.DataFrame]
+    request: type[BaseModel]
+
+
+MODELS = {
+    # A graded lot sees its origin country's market balance of the year before grading.
+    "review": ModelHooks(
+        context_tables=(CONTEXT_TABLE,),
+        enrich=lambda items, context: add_market_context(items, context[CONTEXT_TABLE]),
+        request=Lot,
+    ),
+}
 
 
 class CoffeeAdapter:
@@ -86,14 +107,16 @@ class CoffeeAdapter:
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
         return clean_schemas(self.config.cleaning)
 
-    def context_tables(self) -> tuple[str, ...]:
-        return (CONTEXT_TABLE,)
+    def context_tables(self, model: str) -> tuple[str, ...]:
+        return hooks(model).context_tables
 
-    def enrich(self, items: pl.DataFrame, context: Mapping[str, pl.DataFrame]) -> pl.DataFrame:
-        return add_market_context(items, context[CONTEXT_TABLE])
+    def enrich(
+        self, model: str, items: pl.DataFrame, context: Mapping[str, pl.DataFrame]
+    ) -> pl.DataFrame:
+        return hooks(model).enrich(items, context)
 
-    def request_model(self) -> type[BaseModel]:
-        return Lot
+    def request_model(self, model: str) -> type[BaseModel]:
+        return hooks(model).request
 
     def studies(self, clean: Mapping[str, pl.DataFrame]) -> Mapping[str, pl.DataFrame]:
         from domains.coffee.analysis import studies
@@ -104,3 +127,10 @@ class CoffeeAdapter:
         from domains.coffee.analysis import figures
 
         return figures(tables, self.config.market_analysis)
+
+
+def hooks(model: str) -> ModelHooks:
+    """The code behind one of the YAML's models; a model with none is a config error."""
+    if model not in MODELS:
+        raise ValueError(f"Coffee has no code for model '{model}'; it has {list(MODELS)}")
+    return MODELS[model]

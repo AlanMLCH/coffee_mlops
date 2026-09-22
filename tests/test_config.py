@@ -27,14 +27,14 @@ def test_coffee_config_declares_its_file_sources() -> None:
     assert config.sources["psd_coffee"].spatial is None
 
 
-def test_the_items_section_names_the_model_tables() -> None:
-    items = load_adapter("coffee").config.items
+def test_each_model_names_its_own_tables() -> None:
+    review = load_adapter("coffee").config.model_named("review")
 
-    assert (items.features_table, items.predictions_table) == (
+    assert (review.features_table, review.predictions_table) == (
         "review_features",
         "review_predictions",
     )
-    assert items.keys == ["review_id", "snapshot", "grading_date"]
+    assert review.keys == ["review_id", "snapshot", "grading_date"]
 
 
 def test_a_lone_domain_is_used_when_none_is_named() -> None:
@@ -106,7 +106,7 @@ def test_the_roasters_processes_speak_the_cqi_vocabulary() -> None:
 
 @pytest.mark.parametrize("leaked", ["aroma", "total_cup_points"])
 def test_leaking_columns_cannot_be_declared_as_features(leaked: str) -> None:
-    model = load_adapter("coffee").config.model.model_dump()
+    model = load_adapter("coffee").config.model_named("review").spec.model_dump()
     model["numeric"] = [*model["numeric"], leaked]
 
     with pytest.raises(ValidationError, match=leaked):

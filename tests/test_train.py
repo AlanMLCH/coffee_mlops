@@ -12,7 +12,17 @@ from mlflow.models import infer_signature
 from sklearn.dummy import DummyRegressor
 
 from domains.coffee.adapter import CoffeeAdapter
-from mlops_core.config import DomainConfig
+from mlops_core.config import (
+    AnalysisConfig,
+    DomainConfig,
+    GroupSplit,
+    ItemsConfig,
+    ModelConfig,
+    ModelSpec,
+    TargetBands,
+    TemporalSplit,
+    TrainingConfig,
+)
 from mlops_core.data.clean import build_clean
 from mlops_core.ml.evaluation import Comparison
 from mlops_core.ml.features import build_features
@@ -21,26 +31,33 @@ from mlops_core.ml.train import (
     baseline_predictions,
     build_pipeline,
     champion_errors,
+    cv_folds,
+    experiment_name,
     fit_params,
+    group_split,
     promote_if_better,
+    split_items,
     temporal_split,
     train_model,
     xy,
 )
+from mlops_core.storage import write_table
+from tests.fakes import with_training
+
+REVIEW = "review"
 
 
 @pytest.fixture
 def fast_config(coffee_config: DomainConfig) -> DomainConfig:
     """Same config, but a tuning budget small enough for a unit test."""
-    training = coffee_config.training.model_copy(update={"trials": 2, "cv_folds": 2})
-    return coffee_config.model_copy(update={"training": training})
+    return with_training(coffee_config, REVIEW, trials=2, cv_folds=2)
 
 
 @pytest.fixture
 def data_dir(fast_config: DomainConfig, raw_dir: Path) -> Path:
     adapter = CoffeeAdapter(fast_config)  # type: ignore[arg-type]
     build_clean(adapter, raw_dir.parent)
-    build_features(adapter, raw_dir.parent)
+    build_features(adapter, REVIEW, raw_dir.parent)
     return raw_dir.parent
 
 
@@ -72,12 +89,13 @@ def features_frame(countries: list[str | None], points: list[float]) -> pl.DataF
     )
 
 
-def test_temporal_split_never_trains_on_the_future(fast_config: DomainConfig) -> None:
+def test_temporal_split_never_trains_on_the_future() -> None:
     features = pl.DataFrame(
         {"grading_date": [date(2023, 1, 1), date(2010, 1, 1), date(2018, 12, 31), date(2019, 1, 1)]}
     )
+    split = TemporalSplit(kind="temporal", test_from=date(2019, 1, 1), recalibration_window=30)
 
-    train, test = temporal_split(features, fast_config.training, fast_config.items.time)
+    train, test = temporal_split(features, split, "grading_date")
 
     assert train["grading_date"].to_list() == [date(2010, 1, 1), date(2018, 12, 31)]
     assert test["grading_date"].to_list() == [date(2019, 1, 1), date(2023, 1, 1)]
@@ -89,14 +107,14 @@ def test_group_baseline_falls_back_to_global_mean_for_unseen_groups(
     train = features_frame(["Mexico", "Mexico", "Kenya"], [80.0, 82.0, 84.0])
     test = features_frame(["Kenya", "Laos"], [85.0, 84.0])
 
-    baselines = baseline_predictions(train, test, fast_config.model, "country")
+    baselines = baseline_predictions(train, test, fast_config.model_named(REVIEW).spec, "country")
 
     assert baselines["global_mean"].tolist() == [82.0, 82.0]
     assert baselines["country_mean"].tolist() == [84.0, 82.0]
 
 
 def test_pipeline_serves_unseen_and_missing_categories(fast_config: DomainConfig) -> None:
-    spec = fast_config.model
+    spec = fast_config.model_named(REVIEW).spec
     train = features_frame(["Mexico", "Kenya"] * 10, [80.0, 86.0] * 10)
     pipeline = build_pipeline(spec, {"n_estimators": 10, "min_child_samples": 2}, seed=0)
     pipeline.fit(*xy(train, spec), **fit_params(spec))
@@ -159,7 +177,7 @@ def test_training_is_tracked_registered_and_servable(
     monkeypatch.chdir(tmp_path)  # MLflow writes local artifacts under the working dir
     tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
 
-    result = train_model(fast_config, data_dir, tracking_uri)
+    result = train_model(fast_config, REVIEW, data_dir, tracking_uri)
 
     client = MlflowClient(tracking_uri)
     run = client.get_run(result.run_id)
@@ -172,17 +190,13 @@ def test_training_is_tracked_registered_and_servable(
     )
     assert len(trials) == 2
 
-    name = fast_config.training.registered_model
+    review = fast_config.model_named(REVIEW)
+    name = review.training.registered_model
     model = mlflow.sklearn.load_model(f"models:/{name}/{result.model_version}")
-    x_test = xy(
-        temporal_split(
-            pl.read_parquet(next(data_dir.rglob("review_features.parquet"))),
-            fast_config.training,
-            fast_config.items.time,
-        )[1],
-        fast_config.model,
-    )[0]
+    features = pl.read_parquet(next(data_dir.rglob("review_features.parquet")))
+    x_test = xy(split_items(features, review)[1], review.spec)[0]
     assert len(model.predict(x_test)) == 12
+    assert run.data.params["split"] == "temporal"
     if result.promoted:
         assert client.get_model_version_by_alias(name, CHAMPION).version == result.model_version
 
@@ -285,3 +299,114 @@ def test_without_a_champion_there_is_nothing_to_compare(
     mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
 
     assert champion_errors("never-trained", pl.DataFrame({"a": [0.0]}), np.array([80.0])) is None
+
+
+GROUPED = GroupSplit(kind="group", column="lot", test_share=0.25)
+
+
+def lot_features(lots: int = 12, per_lot: int = 3) -> pl.DataFrame:
+    """Items that come in families: several sizes of each lot, priced alike."""
+    n = lots * per_lot
+    lot = [f"lot-{i // per_lot:02d}" for i in range(n)]
+    return pl.DataFrame(
+        {
+            "item_id": [f"item-{i:03d}" for i in range(n)],
+            "period": ["2026-09"] * n,
+            "observed_on": [date(2026, 9, 21)] * n,
+            "lot": lot,
+            "origin": [["north", "south", "east"][i // per_lot % 3] for i in range(n)],
+            "size": [float(250 * (1 + i % per_lot)) for i in range(n)],
+            "price": [100.0 + 10 * (i // per_lot % 3) + (i % per_lot) for i in range(n)],
+        }
+    )
+
+
+def test_a_group_never_straddles_train_and_test() -> None:
+    features = lot_features()
+
+    train, test = group_split(features, GROUPED, "item_id", seed=7)
+
+    assert set(train["lot"]).isdisjoint(set(test["lot"]))
+    assert test["lot"].n_unique() == 3  # a quarter of the 12 lots, not of the 36 items
+    assert train.height + test.height == features.height
+
+
+def test_the_group_split_does_not_depend_on_row_order() -> None:
+    features = lot_features()
+
+    _, test = group_split(features, GROUPED, "item_id", seed=7)
+    _, shuffled = group_split(
+        features.sample(fraction=1.0, shuffle=True, seed=1), GROUPED, "item_id", seed=7
+    )
+
+    assert test.equals(shuffled)
+
+
+def toy_model(split: TemporalSplit | GroupSplit = GROUPED) -> ModelConfig:
+    """A model no domain has: the core must train it from config alone."""
+    return ModelConfig(
+        name="price",
+        items=ItemsConfig(table="lots", id="item_id", time="observed_on", period="period"),
+        spec=ModelSpec(target="price", categorical=["origin"], numeric=["size"], leakage=[]),
+        training=TrainingConfig(
+            split=split,
+            cv_folds=2,
+            trials=2,
+            seed=0,
+            baseline_group="origin",
+            bootstrap_resamples=200,
+            min_probability_better=0.95,
+            stratify_by="origin",
+            min_group_size=1,
+            registered_model="toy-price",
+        ),
+        target_bands=TargetBands(edges=[110.0], labels=["cheap", "dear"]),
+    )
+
+
+def test_group_folds_keep_each_group_in_one_fold() -> None:
+    train = lot_features()
+
+    folds, groups = cv_folds(train, toy_model())
+
+    for fit_rows, score_rows in folds.split(train, groups=groups):
+        assert set(groups[fit_rows]).isdisjoint(set(groups[score_rows]))
+
+
+def test_a_group_split_model_trains_end_to_end_without_a_next_period(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No time axis to recalibrate across: the run says how it was split and skips it."""
+    monkeypatch.chdir(tmp_path)
+    model = toy_model()
+    config = DomainConfig(
+        name="toy",
+        sources={},
+        models=[model],
+        analysis=AnalysisConfig(min_rows=1, permutation_repeats=2, published_figures=[]),
+    )
+    write_table(lot_features(), tmp_path / "features" / model.features_table, {})
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+
+    result = train_model(config, "price", tmp_path, tracking_uri)
+
+    run = MlflowClient(tracking_uri).get_run(result.run_id)
+    assert run.data.params["split"] == "group" and run.data.params["split_column"] == "lot"
+    assert not any(name.startswith("recalibration") for name in run.data.metrics)
+    assert MlflowClient(tracking_uri).get_experiment(run.info.experiment_id).name == "toy-price"
+    assert experiment_name(config, model) == "toy-price"
+
+
+def test_a_group_column_that_is_also_a_feature_is_refused() -> None:
+    with pytest.raises(ValueError, match="column of its own"):
+        toy_model(GroupSplit(kind="group", column="origin", test_share=0.25))
+
+
+def test_model_names_are_unique_and_looked_up_by_name(coffee_config: DomainConfig) -> None:
+    with pytest.raises(ValueError, match="unique"):
+        coffee_config.model_validate(
+            coffee_config.model_dump()
+            | {"models": [m.model_dump() for m in coffee_config.models] * 2}
+        )
+    with pytest.raises(ValueError, match="No model 'nope'"):
+        coffee_config.model_named("nope")

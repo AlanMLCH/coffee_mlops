@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from mlops_core.config import DomainConfig
+from mlops_core.config import DomainConfig, ModelSpec
 from mlops_core.ml.evaluation import (
     absolute_errors,
     compare,
@@ -14,6 +14,11 @@ from mlops_core.ml.evaluation import (
 )
 
 RESAMPLES = 400  # enough to be stable, small enough to stay fast
+
+
+@pytest.fixture
+def spec(coffee_config: DomainConfig) -> ModelSpec:
+    return coffee_config.model_named("review").spec
 
 
 def test_a_consistently_better_candidate_is_reported_as_certain() -> None:
@@ -67,12 +72,12 @@ def frame(
     )
 
 
-def test_stratified_metrics_expose_a_composition_shift(coffee_config: DomainConfig) -> None:
+def test_stratified_metrics_expose_a_composition_shift(spec: ModelSpec) -> None:
     train = frame(["Mexico"] * 9 + ["Taiwan"], [82.0] * 10)
     test = frame(["Taiwan"] * 6 + ["Mexico"] * 4, [84.0] * 10)
     prediction = np.full(10, 82.0)
 
-    metrics = stratified_metrics(train, test, prediction, coffee_config.model, "country", 3)
+    metrics = stratified_metrics(train, test, prediction, spec, "country", 3)
 
     taiwan = metrics.filter(pl.col("country") == "Taiwan").row(0, named=True)
     assert taiwan["train_share"] == pytest.approx(0.1)
@@ -81,23 +86,21 @@ def test_stratified_metrics_expose_a_composition_shift(coffee_config: DomainConf
     assert taiwan["bias"] == -2.0  # the model under-predicts the new population
 
 
-def test_small_groups_are_left_out(coffee_config: DomainConfig) -> None:
+def test_small_groups_are_left_out(spec: ModelSpec) -> None:
     train = frame(["Mexico"] * 5, [82.0] * 5)
     test = frame(["Mexico"] * 5 + ["Laos"], [82.0] * 6)
 
-    metrics = stratified_metrics(
-        train, test, np.full(6, 82.0), coffee_config.model, "country", min_group_size=3
-    )
+    metrics = stratified_metrics(train, test, np.full(6, 82.0), spec, "country", min_group_size=3)
 
     assert metrics["country"].to_list() == ["Mexico"]
 
 
-def test_recalibration_is_measured_on_rows_it_never_saw(coffee_config: DomainConfig) -> None:
+def test_recalibration_is_measured_on_rows_it_never_saw(spec: ModelSpec) -> None:
     # Every prediction is 1.5 points low: a pure level shift, like the 2023 snapshot.
     test = frame(["Mexico"] * 20, [84.0] * 20)
     prediction = np.full(20, 82.5)
 
-    gain = recalibration_gain(test, prediction, coffee_config.model, 5, "grading_date")
+    gain = recalibration_gain(test, prediction, spec, 5, "grading_date")
 
     assert gain["recalibration_offset"] == pytest.approx(-1.5)
     assert gain["recalibration_n_holdout"] == 15
@@ -105,7 +108,7 @@ def test_recalibration_is_measured_on_rows_it_never_saw(coffee_config: DomainCon
     assert gain["mae_after_recalibration"] == pytest.approx(0.0, abs=1e-9)
 
 
-def test_recalibration_needs_more_rows_than_the_window(coffee_config: DomainConfig) -> None:
+def test_recalibration_needs_more_rows_than_the_window(spec: ModelSpec) -> None:
     test = frame(["Mexico"] * 5, [84.0] * 5)
 
-    assert recalibration_gain(test, np.full(5, 82.5), coffee_config.model, 30, "grading_date") == {}
+    assert recalibration_gain(test, np.full(5, 82.5), spec, 30, "grading_date") == {}

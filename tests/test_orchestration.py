@@ -34,7 +34,7 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/raw_sources",
         "tea/clean_tables",
         "tea/review_features",
-        "tea/trained_model",
+        "tea/review_model",
         "tea/review_predictions",
     ]
     assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
@@ -71,7 +71,7 @@ def test_the_leakage_check_guards_the_feature_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: dict[str, list[float]], passes: bool
 ) -> None:
     write_features(tmp_path, extra)
-    monkeypatch.setattr(definitions, "build_features", lambda config, data_dir: Path("written"))
+    monkeypatch.setattr(definitions, "build_features", lambda *_: Path("written"))
     assets, key = features_asset(tmp_path)
 
     result = materialize(assets, selection=AssetSelection.assets(key))
@@ -121,7 +121,7 @@ def test_every_asset_runs_its_own_pipeline_step(
     assert result.success
     assert {name: stub.calls for name, stub in stubs.items()} == dict.fromkeys(stubs, 1)
     assert extract.calls == 1
-    model = result.asset_materializations_for_node("coffee__trained_model")[0]
+    model = result.asset_materializations_for_node("coffee__review_model")[0]
     assert model.metadata["version"].value == "3"
     assert model.metadata["promoted"].value == "True"
     raw = result.asset_materializations_for_node("coffee__raw_sources")[0]

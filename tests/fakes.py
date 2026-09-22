@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from domains.coffee.config import CoffeeConfig
+from mlops_core.config import DomainConfig
 
 # A DENUE-shaped answer for the CLI tests: three establishments, and a count to match.
 # Every field the raw contract requires is here, with the shape the real service uses:
@@ -55,6 +56,17 @@ def denue_response(path: str) -> httpx.Response | None:
         start = int(path.split("/")[-4])
         return httpx.Response(200, json=DENUE_ESTABLISHMENTS if start == 1 else [])
     return None
+
+
+def with_training[Config: DomainConfig](config: Config, model: str, **update: Any) -> Config:
+    """The config with one model's training settings changed: a tiny tuning budget, say."""
+    models = [
+        m.model_copy(update={"training": m.training.model_copy(update=update)})
+        if m.name == model
+        else m
+        for m in config.models
+    ]
+    return config.model_copy(update={"models": models})
 
 
 def without_rate_limits(config: CoffeeConfig) -> CoffeeConfig:

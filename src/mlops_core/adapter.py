@@ -107,20 +107,23 @@ class DomainAdapter(Protocol):
         """One strict contract per clean table: the domain's promise to every reader."""
         ...
 
-    def context_tables(self) -> tuple[str, ...]:
-        """The clean tables `enrich` reads. Serving loads exactly these."""
+    def context_tables(self, model: str) -> tuple[str, ...]:
+        """The clean tables `enrich` reads for the named model. Serving loads exactly these."""
         ...
 
-    def enrich(self, items: pl.DataFrame, context: Mapping[str, pl.DataFrame]) -> pl.DataFrame:
-        """Add to each item the context it may see - nothing dated after its time column.
+    def enrich(
+        self, model: str, items: pl.DataFrame, context: Mapping[str, pl.DataFrame]
+    ) -> pl.DataFrame:
+        """Add to each of the named model's items the context it may see - nothing dated
+        after its time column.
 
         One function for the batch feature table and for every online request, so the
         two can never compute a feature differently.
         """
         ...
 
-    def request_model(self) -> type[BaseModel]:
-        """The prediction API's request body. It must implement `ItemRequest`."""
+    def request_model(self, model: str) -> type[BaseModel]:
+        """The named model's API request body. It must implement `ItemRequest`."""
         ...
 
     def studies(self, clean: Mapping[str, pl.DataFrame]) -> Mapping[str, pl.DataFrame]:

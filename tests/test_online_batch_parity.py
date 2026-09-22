@@ -60,7 +60,7 @@ def data_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
     clean_dir = raw_dir.parent / "clean"
     write_table(clean_reviews(frames, config.cleaning), clean_dir / "coffee_reviews", {})
     write_table(clean_market_context(frames["psd_coffee"]), clean_dir / "market_context", {})
-    build_features(coffee_adapter, raw_dir.parent)
+    build_features(coffee_adapter, "review", raw_dir.parent)
     return raw_dir.parent
 
 
@@ -87,13 +87,13 @@ def test_the_api_reproduces_the_batch_feature_row(
     payload = {field: review[field] for field in LOT_FIELDS} | {
         "graded_on": review["grading_date"].isoformat()
     }
-    response = client.post("/predict", json=payload)
+    response = client.post("/models/review/predict", json=payload)
 
     assert response.status_code == 200, response.text
     assert model.seen is not None
     expected = (
         features.filter(pl.col("review_id") == review["review_id"])
-        .select(coffee_adapter.config.model.features)
+        .select(coffee_adapter.config.model_named("review").spec.features)
         .to_pandas()
     )
     # dtypes included: the API builds its frame differently from the batch path, and a

@@ -58,7 +58,7 @@ Read those numbers together, not separately:
 
 ### Where the error concentrates
 
-![Bias by quality band](figures/residual_bias.png)
+![Bias by quality band](figures/review_residual_bias.png)
 
 | Group | n | Bias |
 |---|---|---|

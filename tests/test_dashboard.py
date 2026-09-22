@@ -35,7 +35,7 @@ def built_analysis(
         pipeline, "load_champion", lambda *a, **k: ServedModel(ConstantModel(), "1", "cache")
     )
     build_clean(config, raw_dir.parent)
-    build_features(config, raw_dir.parent)
+    build_features(config, "review", raw_dir.parent)
     build_analysis(config, raw_dir.parent, "sqlite:///unused")
     return raw_dir.parent.parent
 

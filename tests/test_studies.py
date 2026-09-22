@@ -220,8 +220,10 @@ def test_market_history_follows_one_country_through_time() -> None:
 
 def test_studies_run_on_the_real_domain_config(coffee_config: DomainConfig) -> None:
     """The configured columns must exist in the frames the pipeline passes."""
-    assert coffee_config.items.period == "snapshot"
-    assert coffee_config.training.stratify_by in coffee_config.model.categorical
+    for model in coffee_config.models:
+        assert model.training.stratify_by in model.spec.categorical
+        assert model.training.baseline_group in model.spec.categorical
+    assert coffee_config.model_named("review").items.period == "snapshot"
 
 
 def shops_frame() -> pl.DataFrame:

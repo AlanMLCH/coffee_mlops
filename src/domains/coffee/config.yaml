@@ -1,18 +1,8 @@
 # Domain config for coffee. Everything domain-specific that is data, not code, lives here.
-# The sections the core runs (sources, items, model, training, analysis) are validated by
+# The sections the core runs (sources, models, analysis) are validated by
 # mlops_core.config; coffee's own (the API sources, cleaning, market_analysis) by
 # domains.coffee.config.
 name: coffee
-
-# One item is one graded lot of green coffee.
-items:
-  noun: review # -> review_features, review_predictions
-  table: coffee_reviews
-  id: review_id
-  # When the lot was cupped: orders the temporal split, and dates the market context the
-  # lot may see (the previous market year, the latest one complete at grading time).
-  time: grading_date
-  period: snapshot # which CQI scrape: drift and residuals are measured across it
 
 sources:
   # CQI snapshot scraped in 2018 (1,311 arabica reviews, graded 2010-2018). MIT license.
@@ -328,48 +318,66 @@ cleaning:
     # different lots one product sells as variants stays within 0.5-1.7x.
     price_outlier_ratio: 3.0
 
-# What the model sees. Fitted transforms (encoding, rare-category grouping) live in
-# the model pipeline, learned on the training split only.
-model:
-  target: total_cup_points
-  # Dropping `country` and `variety` looked like a large win when every candidate used
-  # the same fixed hyperparameters (test MAE 1.808 -> 1.560). Tuned properly, the
-  # difference disappears: 1.656 against the champion's 1.648, 38% confidence. They stay.
-  # See experiments/feature_ablation.py and the model card.
-  categorical: [country, variety, processing_method, color]
-  numeric:
-    - altitude_m
-    - moisture_pct
-    - category_one_defects
-    - category_two_defects
-    - quakers
-    # Market context of the origin country, market year = grading year - 1 (point in time).
-    - ctx_production
-    - ctx_arabica_share
-    - ctx_export_share
-    - ctx_domestic_consumption
-  # Never features: the target is literally their sum (verified on both snapshots).
-  leakage:
-    [aroma, flavor, aftertaste, acidity, body, balance, uniformity, clean_cup, sweetness, overall]
-
-training:
-  # Temporal split: train on gradings up to 2018, evaluate on 2022-2023 (the 2023 snapshot).
-  test_from: 2019-01-01
-  cv_folds: 5 # time-ordered folds inside the training period, for tuning
-  trials: 40
-  seed: 42
-  # The model must beat predicting each group's training mean to be promoted.
-  baseline_group: country
-  # Promotion needs evidence, not a better point estimate: with ~200 test rows a gap of
-  # 0.1 MAE is noise. A candidate must win this share of paired bootstrap resamples.
-  bootstrap_resamples: 5000
-  min_probability_better: 0.95
-  # Per-group metrics and how each group's weight changed between train and test.
-  stratify_by: country
-  min_group_size: 5
-  # Lots used to estimate the level shift when simulating a deployed recalibration.
-  recalibration_window: 30
-  registered_model: coffee-total-cup-points
+# The questions the domain asks of its data, one model each. Each gets its own tables
+# (<name>_features, <name>_predictions), MLflow experiment, registered model, API route
+# and studies. `spec` is what the model sees; fitted transforms (encoding, rare-category
+# grouping) live in the model pipeline, learned on the training split only.
+models:
+  # How a lot cups: Total Cup Points from what is known before cupping.
+  - name: review # -> review_features, review_predictions
+    # One item is one graded lot of green coffee.
+    items:
+      table: coffee_reviews
+      id: review_id
+      # When the lot was cupped: orders the temporal split, and dates the market context
+      # the lot may see (the previous market year, the latest complete at grading time).
+      time: grading_date
+      period: snapshot # which CQI scrape: drift and residuals are measured across it
+    spec:
+      target: total_cup_points
+      # Dropping `country` and `variety` looked like a large win when every candidate used
+      # the same fixed hyperparameters (test MAE 1.808 -> 1.560). Tuned properly, the
+      # difference disappears: 1.656 against the champion's 1.648, 38% confidence. They stay.
+      # See experiments/feature_ablation.py and the model card.
+      categorical: [country, variety, processing_method, color]
+      numeric:
+        - altitude_m
+        - moisture_pct
+        - category_one_defects
+        - category_two_defects
+        - quakers
+        # Market context of the origin country, market year = grading year - 1 (point in time).
+        - ctx_production
+        - ctx_arabica_share
+        - ctx_export_share
+        - ctx_domestic_consumption
+      # Never features: the target is literally their sum (verified on both snapshots).
+      leakage:
+        [aroma, flavor, aftertaste, acidity, body, balance, uniformity, clean_cup, sweetness, overall]
+    training:
+      # Temporal split: train on gradings up to 2018, evaluate on 2022-2023 (the 2023 snapshot).
+      split:
+        kind: temporal
+        test_from: 2019-01-01
+        # Lots used to estimate the level shift when simulating a deployed recalibration.
+        recalibration_window: 30
+      cv_folds: 5 # time-ordered folds inside the training period, for tuning
+      trials: 40
+      seed: 42
+      # The model must beat predicting each group's training mean to be promoted.
+      baseline_group: country
+      # Promotion needs evidence, not a better point estimate: with ~200 test rows a gap of
+      # 0.1 MAE is noise. A candidate must win this share of paired bootstrap resamples.
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      # Per-group metrics and how each group's weight changed between train and test.
+      stratify_by: country
+      min_group_size: 5
+      registered_model: coffee-total-cup-points
+    # Error is reported by the score ranges a buyer uses, not by deciles.
+    target_bands:
+      edges: [82, 85]
+      labels: ["low (<82)", "mid (82-85)", "high (>=85)"]
 
 # Mexico's own coffee, from SIAP: which crop to read and in what unit. A different
 # name or unit for the same id stops the run - it would change what the numbers mean.
@@ -386,16 +394,12 @@ analysis:
   # Groups and levels smaller than this are not reported: the numbers would be noise.
   min_rows: 5
   permutation_repeats: 10
-  # Error is reported by the score ranges a buyer uses, not by deciles.
-  target_bands:
-    edges: [82, 85]
-    labels: ["low (<82)", "mid (82-85)", "high (>=85)"]
   # Figures copied into docs/figures/ (committed, rendered on GitHub). The rest stay
   # in data/, rebuildable and untracked.
   published_figures:
-    - target_distribution
-    - feature_importance
-    - residual_bias
+    - review_target_distribution
+    - review_feature_importance
+    - review_residual_bias
     - market_history
     - shop_kinds
     - mexico_production

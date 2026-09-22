@@ -17,7 +17,7 @@ from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from mlops_core.adapter import load_adapter
 from mlops_core.config import Settings
 from mlops_core.ml.evaluation import absolute_errors, compare
-from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
+from mlops_core.ml.train import build_pipeline, experiment_name, fit_params, split_items, xy
 from mlops_core.storage import read_table
 
 # Fixed parameters across candidates: tuning each one separately would confound "fewer
@@ -48,16 +48,15 @@ def candidates(
 def main() -> None:
     config = load_adapter("coffee").config
     settings = Settings()
-    spec, cfg = config.model, config.training
-    train, test = temporal_split(
-        read_table(settings.data_dir / config.name / "features" / config.items.features_table),
-        cfg,
-        config.items.time,
+    model = config.model_named("review")
+    spec, cfg = model.spec, model.training
+    train, test = split_items(
+        read_table(settings.data_dir / config.name / "features" / model.features_table), model
     )
     folds = TimeSeriesSplit(n_splits=cfg.cv_folds)
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment(config.name)
+    mlflow.set_experiment(experiment_name(config, model))
     scores: dict[str, float] = {}
     with mlflow.start_run(run_name="experiment-feature-ablation"):
         mlflow.set_tags({"experiment": "feature_ablation", "pipeline": "none"})

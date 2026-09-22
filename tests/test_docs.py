@@ -40,8 +40,14 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "roaster_coffees": list(ROASTER_COFFEES.columns),
         "roaster_origins": list(roaster_origins_schema(coffee_config.cleaning).columns),
         "roaster_offers": list(ROASTER_OFFERS.columns),
-        "review_features": list(features_schema(coffee_config.items, coffee_config.model).columns),
-        "review_predictions": list(predictions_schema(coffee_config.items).columns),
+        **{
+            model.features_table: list(features_schema(model).columns)
+            for model in coffee_config.models
+        },
+        **{
+            model.predictions_table: list(predictions_schema(model).columns)
+            for model in coffee_config.models
+        },
     }
 
 
@@ -77,7 +83,8 @@ def test_each_table_has_its_own_section(table: str) -> None:
 def test_the_model_card_names_the_features_the_model_actually_uses(
     coffee_config: DomainConfig,
 ) -> None:
-    undocumented = [f for f in coffee_config.model.features if f"`{f}`" not in MODEL_CARD]
+    spec = coffee_config.model_named("review").spec
+    undocumented = [f for f in spec.features if f"`{f}`" not in MODEL_CARD]
 
     assert undocumented == []
 
@@ -85,7 +92,8 @@ def test_the_model_card_names_the_features_the_model_actually_uses(
 def test_the_model_card_states_the_leakage_rule(coffee_config: DomainConfig) -> None:
     # The one thing a reader must not have to discover on their own.
     assert "excluded by contract" in MODEL_CARD
-    assert all(score in MODEL_CARD for score in coffee_config.model.leakage[:3])
+    leakage = coffee_config.model_named("review").spec.leakage
+    assert all(score in MODEL_CARD for score in leakage[:3])
 
 
 def architecture_diagram() -> str:
@@ -98,13 +106,12 @@ def test_the_architecture_diagram_shows_every_source_and_table(domain: str) -> N
     is wrong in a way nobody notices: it has to change in the feature that adds one."""
     diagram = architecture_diagram()
     adapter = load_adapter(domain)
-    items = adapter.config.items
     names = {
         *adapter.config.sources,
         *adapter.json_readers(),
         *adapter.clean_contracts(),
-        items.features_table,
-        items.predictions_table,
+        *[model.features_table for model in adapter.config.models],
+        *[model.predictions_table for model in adapter.config.models],
     }
 
     # Declared as a node - the name followed by its shape - not merely mentioned: a style

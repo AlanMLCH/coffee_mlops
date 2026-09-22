@@ -16,6 +16,7 @@ from mlops_core.ml.registry import ServedModel
 from mlops_core.storage import MANIFEST_NAME, read_table
 
 AT = datetime(2026, 9, 19, 12, tzinfo=UTC)
+REVIEW = "review"
 
 
 class CountingModel:
@@ -28,7 +29,7 @@ class CountingModel:
 @pytest.fixture
 def data_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
     build_clean(coffee_adapter, raw_dir.parent)
-    build_features(coffee_adapter, raw_dir.parent)
+    build_features(coffee_adapter, REVIEW, raw_dir.parent)
     return raw_dir.parent
 
 
@@ -44,9 +45,11 @@ def test_every_row_is_scored_and_keeps_its_key(
 ) -> None:
     features = read_table(data_dir / "features" / "review_features")
 
-    scored = score(features, champion, coffee_config.items, coffee_config.model, AT)
+    model = coffee_config.model_named(REVIEW)
 
-    predictions_schema(coffee_config.items).validate(scored, lazy=True)
+    scored = score(features, champion, model, AT)
+
+    predictions_schema(model).validate(scored, lazy=True)
     assert scored["review_id"].to_list() == features["review_id"].to_list()
     assert scored["prediction"].to_list() == [80.0 + i for i in range(features.height)]
     assert scored["model_version"].unique().to_list() == ["7"]
@@ -55,7 +58,7 @@ def test_every_row_is_scored_and_keeps_its_key(
 def test_predictions_are_written_with_model_and_data_lineage(
     coffee_config: DomainConfig, data_dir: Path, champion: ServedModel
 ) -> None:
-    path = batch_predict(coffee_config, data_dir, "sqlite:///unused", at=AT)
+    path = batch_predict(coffee_config, REVIEW, data_dir, "sqlite:///unused", at=AT)
 
     assert read_table(data_dir / "predictions" / "review_predictions").height == 25
     inputs = json.loads((path.parent / MANIFEST_NAME).read_text())["inputs"]
@@ -66,10 +69,14 @@ def test_predictions_are_written_with_model_and_data_lineage(
 def test_a_new_run_does_not_touch_the_previous_predictions(
     coffee_config: DomainConfig, data_dir: Path, champion: ServedModel
 ) -> None:
-    first = batch_predict(coffee_config, data_dir, "sqlite:///unused", at=AT)
+    first = batch_predict(coffee_config, REVIEW, data_dir, "sqlite:///unused", at=AT)
 
     second = batch_predict(
-        coffee_config, data_dir, "sqlite:///unused", at=datetime(2026, 9, 20, 12, tzinfo=UTC)
+        coffee_config,
+        REVIEW,
+        data_dir,
+        "sqlite:///unused",
+        at=datetime(2026, 9, 20, 12, tzinfo=UTC),
     )
 
     assert first.is_file() and second.parent != first.parent

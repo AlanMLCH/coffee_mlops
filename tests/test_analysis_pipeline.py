@@ -19,11 +19,12 @@ AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
 # The recorded PSD excerpt stops at market year 2023 and SIAP's file is 2025, so there
 # is legitimately nothing to set side by side: the study must come out empty, not fail.
 EMPTY_ON_THE_FIXTURES = {"production_crosscheck"}
+# The core's studies are computed per model and named after it; the domain's are not.
 ALWAYS_WRITTEN = {
-    "target_distribution",
-    "numeric_profile",
-    "categorical_profile",
-    "feature_recommendation",
+    "review_target_distribution",
+    "review_numeric_profile",
+    "review_categorical_profile",
+    "review_feature_recommendation",
     "market_summary",
     "market_history",
 }
@@ -46,7 +47,7 @@ def analysis_adapter(coffee_config: CoffeeConfig) -> CoffeeAdapter:
 @pytest.fixture
 def data_dir(analysis_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
     build_clean(analysis_adapter, raw_dir.parent)
-    build_features(analysis_adapter, raw_dir.parent)
+    build_features(analysis_adapter, "review", raw_dir.parent)
     return raw_dir.parent
 
 
@@ -76,7 +77,7 @@ def test_each_study_records_which_partitions_it_read(
 ) -> None:
     output = build_analysis(analysis_adapter, data_dir, "sqlite:///unused", at=AT)
 
-    manifest = output.tables["numeric_profile"].parent / MANIFEST_NAME
+    manifest = output.tables["review_numeric_profile"].parent / MANIFEST_NAME
     lineage = json.loads(manifest.read_text())["inputs"]
     assert {"coffee_reviews", "market_context", "review_features"} <= set(lineage)
     assert all(partition.startswith("built_at=") for partition in lineage.values())
@@ -89,30 +90,31 @@ def test_residuals_appear_once_there_are_predictions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     before = build_analysis(analysis_adapter, data_dir, "sqlite:///unused", at=AT)
-    assert "residuals" not in before.tables
+    assert "review_residuals" not in before.tables
 
     monkeypatch.setattr("mlops_core.ml.predict.load_champion", lambda *a, **k: champion)
-    batch_predict(analysis_adapter.config, data_dir, "sqlite:///unused")
+    batch_predict(analysis_adapter.config, "review", data_dir, "sqlite:///unused")
     after = build_analysis(
         analysis_adapter, data_dir, "sqlite:///unused", at=datetime(2026, 9, 21, 12, tzinfo=UTC)
     )
 
-    assert "residuals" in after.tables
-    assert "residual_bias" in after.figures
-    assert read_table(data_dir / "analysis" / "residuals").height > 0
+    assert "review_residuals" in after.tables
+    assert "review_residual_bias" in after.figures
+    assert read_table(data_dir / "analysis" / "review_residuals").height > 0
 
 
 def test_importance_is_measured_on_the_test_split(
     analysis_adapter: CoffeeAdapter, data_dir: Path, champion: ServedModel
 ) -> None:
-    importance = champion_importance(analysis_adapter.config, data_dir, "sqlite:///unused")
+    config = analysis_adapter.config
+    review = config.model_named("review")
+
+    importance = champion_importance(config, review, data_dir, "sqlite:///unused")
 
     assert importance is not None
-    assert importance["feature"].to_list() == analysis_adapter.config.model.features
+    assert importance["feature"].to_list() == review.spec.features
     # A model that ignores its input cannot lose accuracy when a feature is shuffled.
-    assert importance["permutation_importance"].to_list() == [0.0] * len(
-        analysis_adapter.config.model.features
-    )
+    assert importance["permutation_importance"].to_list() == [0.0] * len(review.spec.features)
 
 
 def test_without_a_champion_the_studies_still_run(
@@ -125,9 +127,9 @@ def test_without_a_champion_the_studies_still_run(
 
     output = build_analysis(analysis_adapter, data_dir, "sqlite:///unused", at=AT)
 
-    recommendations = read_table(data_dir / "analysis" / "feature_recommendation")
+    recommendations = read_table(data_dir / "analysis" / "review_feature_recommendation")
     assert set(output.tables) >= ALWAYS_WRITTEN
-    assert "feature_importance" not in output.figures  # nothing measured, nothing drawn
+    assert "review_feature_importance" not in output.figures  # nothing measured, nothing drawn
     assert recommendations["permutation_importance"].null_count() == recommendations.height
 
 
@@ -138,7 +140,9 @@ def test_figures_are_drawn_and_the_selection_is_published(
 
     output = build_analysis(analysis_adapter, data_dir, "sqlite:///unused", at=AT, publish_to=docs)
 
-    assert {"target_distribution", "market_history", "feature_importance"} <= set(output.figures)
+    assert {"review_target_distribution", "market_history", "review_feature_importance"} <= set(
+        output.figures
+    )
     for path in output.figures.values():
         assert path.suffix == ".png" and path.stat().st_size > 0
     # Only the configured selection is copied where the docs can reference it.
@@ -180,4 +184,22 @@ def test_an_empty_study_does_not_take_the_figures_down_with_it(
     output = build_analysis(unpublished_year, data_dir, "sqlite:///unused", at=AT)
 
     assert "market_share" not in output.figures
-    assert {"target_distribution", "numeric_signal"} <= set(output.figures)
+    assert {"review_target_distribution", "review_numeric_signal"} <= set(output.figures)
+
+
+def test_a_model_without_features_yet_is_skipped_not_fatal(
+    analysis_adapter: CoffeeAdapter,
+    data_dir: Path,
+    champion: ServedModel,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A model just added to the YAML has no tables until `ml features` runs for it."""
+    config = analysis_adapter.config
+    later = config.model_named("review").model_copy(update={"name": "later"})
+    two_models = CoffeeAdapter(config.model_copy(update={"models": [*config.models, later]}))
+
+    output = build_analysis(two_models, data_dir, "sqlite:///unused", at=AT)
+
+    assert "later has no feature table yet" in caplog.text
+    assert "review_numeric_profile" in output.tables
+    assert not any(name.startswith("later_") for name in output.tables)

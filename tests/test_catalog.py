@@ -11,7 +11,7 @@ def test_every_built_table_is_queryable_by_layer(
 ) -> None:
     data_dir = raw_dir.parent
     build_clean(coffee_adapter, data_dir)
-    build_features(coffee_adapter, data_dir)
+    build_features(coffee_adapter, "review", data_dir)
 
     con = connect(data_dir)
 

@@ -36,7 +36,7 @@ def test_champion_is_loaded_and_cached(registry: str, tmp_path: Path) -> None:
     served = load_champion("m", registry, cache)
 
     assert (served.version, served.source) == ("1", "registry")
-    assert (cache / CACHED_METADATA).is_file()
+    assert (cache / "m" / CACHED_METADATA).is_file()  # one folder per registered model
 
 
 def test_cache_serves_when_the_registry_is_unreachable(registry: str, tmp_path: Path) -> None:
@@ -57,7 +57,16 @@ def test_no_registry_and_no_cache_fails_with_what_to_do(tmp_path: Path) -> None:
 def test_a_half_copied_cache_is_not_served(registry: str, tmp_path: Path) -> None:
     cache = tmp_path / "cache"
     load_champion("m", registry, cache)
-    (cache / CACHED_METADATA).unlink()  # metadata is written last
+    (cache / "m" / CACHED_METADATA).unlink()  # metadata is written last
 
     with pytest.raises(FileNotFoundError):
         load_champion("m", UNREACHABLE, cache)
+
+
+def test_each_registered_model_keeps_its_own_copy(registry: str, tmp_path: Path) -> None:
+    """A domain with two models shares one cache directory: neither may overwrite the other."""
+    cache = tmp_path / "cache"
+    load_champion("m", registry, cache)
+
+    with pytest.raises(FileNotFoundError):
+        load_champion("other", UNREACHABLE, cache)  # m's copy is not other's

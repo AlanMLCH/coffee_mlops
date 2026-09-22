@@ -3,7 +3,8 @@
 Two independent pipelines, one command group each. `data` produces the canonical
 clean tables; `ml` consumes them from disk. Every step runs on its own; `run`
 chains the steps of one pipeline when that is what you want. Every command takes
-`--domain`: the CLI knows the pipeline, the domain's adapter knows the rest.
+`--domain`: the CLI knows the pipeline, the domain's adapter knows the rest. The `ml`
+steps also take `--model`; without it they run every model the domain declares.
 """
 
 import logging
@@ -39,6 +40,17 @@ Domain = Annotated[
         "--domain", "-d", help="A package under domains/; defaults to MLOPS_DOMAIN or the only one"
     ),
 ]
+
+
+ModelName = Annotated[
+    str | None,
+    typer.Option("--model", "-m", help="One of the domain's models; defaults to all of them"),
+]
+
+
+def _models(config: DomainConfig, model: str | None) -> list[str]:
+    """The named model, checked against the config, or every model in declared order."""
+    return [config.model_named(model).name] if model else [m.name for m in config.models]
 
 
 def _adapter(domain: str | None) -> DomainAdapter:
@@ -125,50 +137,55 @@ def data_run(domain: Domain = None) -> None:
 
 
 @ml_app.command()
-def features(domain: Domain = None) -> None:
-    """Build the model-ready feature table from the latest clean layer."""
+def features(domain: Domain = None, model: ModelName = None) -> None:
+    """Build each model's feature table from the latest clean layer."""
     with _needs_extra("ml"):
         from mlops_core.ml.features import build_features
 
     adapter = _adapter(domain)
     config = adapter.config
-    typer.echo(f"{config.items.features_table}: {build_features(adapter, _data_dir(config))}")
+    for name in _models(config, model):
+        path = build_features(adapter, name, _data_dir(config))
+        typer.echo(f"{config.model_named(name).features_table}: {path}")
 
 
 @ml_app.command()
-def train(domain: Domain = None) -> None:
-    """Tune and train a model, track it in MLflow, promote it if it passes the quality gate."""
+def train(domain: Domain = None, model: ModelName = None) -> None:
+    """Tune and train each model, track it in MLflow, promote it if it passes the gate."""
     # Imported here: MLflow and LightGBM take seconds to import and no other command needs them.
     with _needs_extra("ml"):
         from mlops_core.ml.train import train_model
 
     adapter = _adapter(domain)
     config = adapter.config
-    result = train_model(config, _data_dir(config), Settings().mlflow_tracking_uri)
-    metrics = ", ".join(f"{k}={v:.3f}" for k, v in sorted(result.metrics.items()))
-    status = "promoted to champion" if result.promoted else "not promoted"
-    typer.echo(f"{config.training.registered_model} v{result.model_version}: {status}")
-    typer.echo(f"run {result.run_id}: {metrics}")
+    for name in _models(config, model):
+        result = train_model(config, name, _data_dir(config), Settings().mlflow_tracking_uri)
+        metrics = ", ".join(f"{k}={v:.3f}" for k, v in sorted(result.metrics.items()))
+        status = "promoted to champion" if result.promoted else "not promoted"
+        registered = config.model_named(name).training.registered_model
+        typer.echo(f"{registered} v{result.model_version}: {status}")
+        typer.echo(f"run {result.run_id}: {metrics}")
 
 
 @ml_app.command()
-def predict(domain: Domain = None) -> None:
-    """Score the whole feature table with the champion and write the predictions."""
+def predict(domain: Domain = None, model: ModelName = None) -> None:
+    """Score each model's whole feature table with its champion and write the predictions."""
     with _needs_extra("ml"):
         from mlops_core.ml.predict import batch_predict
 
     adapter = _adapter(domain)
     config = adapter.config
-    path = batch_predict(config, _data_dir(config), Settings().mlflow_tracking_uri)
-    typer.echo(f"{config.items.predictions_table}: {path}")
+    for name in _models(config, model):
+        path = batch_predict(config, name, _data_dir(config), Settings().mlflow_tracking_uri)
+        typer.echo(f"{config.model_named(name).predictions_table}: {path}")
 
 
 @ml_app.command("run")
-def ml_run(domain: Domain = None) -> None:
+def ml_run(domain: Domain = None, model: ModelName = None) -> None:
     """Whole model pipeline: features, train, then batch predictions."""
-    features(domain)
-    train(domain)
-    predict(domain)
+    features(domain, model)
+    train(domain, model)
+    predict(domain, model)
 
 
 @analysis_app.command("run")

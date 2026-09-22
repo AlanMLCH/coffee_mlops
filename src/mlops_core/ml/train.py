@@ -1,5 +1,9 @@
-"""Training: temporal split, baselines, Optuna-tuned LightGBM pipeline, MLflow tracking,
-and a quality gate before a model version is promoted to the `champion` alias.
+"""Training: the model's split, baselines, Optuna-tuned LightGBM pipeline, MLflow
+tracking, and a quality gate before a model version is promoted to the `champion` alias.
+
+One named model at a time. How its items are split is part of its config: across time
+when the items have a time axis worth predicting across, by group when they come in
+families that must not straddle train and test.
 
 sklearn, LightGBM and MLflow speak pandas, so frames cross to pandas at this boundary.
 """
@@ -19,11 +23,17 @@ from mlflow import MlflowClient
 from mlflow.data.pandas_dataset import from_pandas
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import BaseCrossValidator, GroupKFold, TimeSeriesSplit, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
 
-from mlops_core.config import DomainConfig, ModelSpec, TrainingConfig
+from mlops_core.config import (
+    DomainConfig,
+    GroupSplit,
+    ModelConfig,
+    ModelSpec,
+    TemporalSplit,
+)
 from mlops_core.ml.evaluation import (
     Comparison,
     absolute_errors,
@@ -57,13 +67,47 @@ class TrainResult:
     metrics: dict[str, float]
 
 
+def split_items(features: pl.DataFrame, model: ModelConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """The model's own split into train and test, as its config declares it."""
+    split = model.training.split
+    if isinstance(split, TemporalSplit):
+        return temporal_split(features, split, model.items.time)
+    return group_split(features, split, model.items.id, model.training.seed)
+
+
 def temporal_split(
-    features: pl.DataFrame, cfg: TrainingConfig, time: str
+    features: pl.DataFrame, split: TemporalSplit, time: str
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Past trains, future evaluates: never a random split for data with a time axis."""
     ordered = features.sort(time)
-    is_test = pl.col(time) >= cfg.test_from
+    is_test = pl.col(time) >= split.test_from
     return ordered.filter(~is_test), ordered.filter(is_test)
+
+
+def group_split(
+    features: pl.DataFrame, split: GroupSplit, item_id: str, seed: int
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """A seeded share of the groups tests, the rest trains; no group is on both sides.
+
+    The draw is over sorted group values, so the same data and seed give the same split
+    on any machine and in any row order.
+    """
+    groups = sorted(features[split.column].unique().to_list())
+    n_test = max(1, round(len(groups) * split.test_share))
+    rng = np.random.default_rng(seed)
+    tested = [groups[i] for i in rng.permutation(len(groups))[:n_test]]
+    ordered = features.sort(item_id)
+    is_test = pl.col(split.column).is_in(tested)
+    return ordered.filter(~is_test), ordered.filter(is_test)
+
+
+def cv_folds(train: pl.DataFrame, model: ModelConfig) -> tuple[BaseCrossValidator, Any]:
+    """Folds inside the training split, of the same kind as the split itself: a model
+    tuned on random folds would be tuned for a problem it is not evaluated on."""
+    split, folds = model.training.split, model.training.cv_folds
+    if isinstance(split, TemporalSplit):
+        return TimeSeriesSplit(n_splits=folds), None  # `train` is already in time order
+    return GroupKFold(n_splits=folds), train[split.column].to_numpy()
 
 
 def build_pipeline(spec: ModelSpec, params: dict[str, Any], seed: int) -> Pipeline:
@@ -106,10 +150,11 @@ def baseline_predictions(
     }
 
 
-def tune(train: pl.DataFrame, spec: ModelSpec, cfg: TrainingConfig) -> tuple[dict[str, Any], float]:
-    """TPE search over time-ordered CV folds; each trial is a nested MLflow run."""
+def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float]:
+    """TPE search over the model's CV folds; each trial is a nested MLflow run."""
+    spec, cfg = model.spec, model.training
     x, y = xy(train, spec)
-    folds = TimeSeriesSplit(n_splits=cfg.cv_folds)
+    folds, groups = cv_folds(train, model)
 
     def objective(trial: optuna.Trial) -> float:
         params = {
@@ -125,6 +170,7 @@ def tune(train: pl.DataFrame, spec: ModelSpec, cfg: TrainingConfig) -> tuple[dic
             build_pipeline(spec, params, cfg.seed),
             x,
             y,
+            groups=groups,
             cv=folds,
             scoring="neg_mean_absolute_error",
             params=fit_params(spec),
@@ -202,17 +248,25 @@ def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.nda
     return absolute_errors(y_test, champion.predict(test.select(columns).to_pandas()))
 
 
-def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> TrainResult:
-    spec, cfg, items = config.model, config.training, config.items
-    table_dir = data_dir / "features" / items.features_table
+def experiment_name(config: DomainConfig, model: ModelConfig) -> str:
+    """One MLflow experiment per model: runs of different targets are not comparable."""
+    return f"{config.name}-{model.name}"
+
+
+def train_model(
+    config: DomainConfig, model_name: str, data_dir: Path, tracking_uri: str
+) -> TrainResult:
+    model = config.model_named(model_name)
+    spec, cfg, split = model.spec, model.training, model.training.split
+    table_dir = data_dir / "features" / model.features_table
     features = read_table(table_dir)
     partition = latest_partition(table_dir)
-    train, test = temporal_split(features, cfg, items.time)
+    train, test = split_items(features, model)
     x_train, y_train = xy(train, spec)
     x_test, y_test = xy(test, spec)
 
     mlflow.set_tracking_uri(tracking_uri)
-    mlflow.set_experiment(config.name)
+    mlflow.set_experiment(experiment_name(config, model))
     with mlflow.start_run(run_name=f"{spec.target}-lightgbm") as run:
         # Provenance: MLflow records the entry point but not the revision, and a run
         # made from a dirty tree cannot be reproduced.
@@ -226,10 +280,10 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
                 "target": spec.target,
                 "categorical": ",".join(spec.categorical),
                 "numeric": ",".join(spec.numeric),
-                "test_from": cfg.test_from.isoformat(),
                 "n_train": train.height,
                 "n_test": test.height,
             }
+            | split_params(split)
         )
         source = str(table_dir)
         mlflow.log_input(from_pandas(x_train, source=source, name="train"), "training")
@@ -245,7 +299,7 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         # The gate compares against the strongest baseline, not the most flattering one.
         best_baseline = min(baseline_errors.values(), key=lambda e: e.mean())
 
-        best_params, cv_mae = tune(train, spec, cfg)
+        best_params, cv_mae = tune(train, model)
         mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
 
         pipeline = build_pipeline(spec, best_params, cfg.seed)
@@ -266,7 +320,13 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
             | {f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()}
             | versus_baseline.as_metrics("versus_baseline")
             | (versus_champion.as_metrics("versus_champion") if versus_champion else {})
-            | recalibration_gain(test, predictions, spec, cfg.recalibration_window, items.time)
+            | (
+                recalibration_gain(
+                    test, predictions, spec, split.recalibration_window, model.items.time
+                )
+                if isinstance(split, TemporalSplit)
+                else {}  # no next period to recalibrate on
+            )
         )
         mlflow.log_metrics(metrics)
         # Logged as a table, not as metrics: one row per group, and group names change.
@@ -303,3 +363,10 @@ def train_model(config: DomainConfig, data_dir: Path, tracking_uri: str) -> Trai
         promoted,
         metrics | {"best_baseline_test_mae": float(best_baseline.mean())},
     )
+
+
+def split_params(split: TemporalSplit | GroupSplit) -> dict[str, str | float]:
+    """How the run was split, as MLflow params: two runs split differently do not compare."""
+    if isinstance(split, TemporalSplit):
+        return {"split": split.kind, "test_from": split.test_from.isoformat()}
+    return {"split": split.kind, "split_column": split.column, "test_share": split.test_share}

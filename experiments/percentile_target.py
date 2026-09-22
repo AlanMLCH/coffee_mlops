@@ -19,7 +19,7 @@ from mlops_core.adapter import load_adapter
 from mlops_core.config import Settings
 from mlops_core.ml.evaluation import absolute_errors
 from mlops_core.ml.targets import percentile_within, points_from_percentile
-from mlops_core.ml.train import build_pipeline, fit_params, temporal_split, xy
+from mlops_core.ml.train import build_pipeline, experiment_name, fit_params, split_items, xy
 from mlops_core.storage import read_table
 
 PARAMS = {"n_estimators": 300, "learning_rate": 0.03, "num_leaves": 15, "min_child_samples": 10}
@@ -31,11 +31,10 @@ logger = logging.getLogger("percentile-target")
 def main() -> None:
     config = load_adapter("coffee").config
     settings = Settings()
-    spec, cfg = config.model, config.training
-    features = read_table(
-        settings.data_dir / config.name / "features" / config.items.features_table
-    )
-    train, test = temporal_split(features, cfg, config.items.time)
+    model = config.model_named("review")
+    spec, cfg = model.spec, model.training
+    features = read_table(settings.data_dir / config.name / "features" / model.features_table)
+    train, test = split_items(features, model)
 
     x_train, y_train = xy(train, spec)
     x_test, y_test = xy(test, spec)
@@ -63,7 +62,7 @@ def main() -> None:
     }
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment(config.name)
+    mlflow.set_experiment(experiment_name(config, model))
     with mlflow.start_run(run_name="experiment-percentile-target"):
         mlflow.set_tags({"experiment": "percentile_target", "pipeline": "none"})
         mlflow.log_params(PARAMS | {"target": "percentile_within_snapshot"})

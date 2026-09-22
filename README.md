@@ -113,14 +113,14 @@ flowchart TD
     audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
-    train["mlops ml train<br/>temporal split · Optuna on<br/>time-ordered CV · LightGBM"]
+    train["mlops ml train<br/>the model's split: temporal or by group<br/>Optuna on folds of the same kind · LightGBM"]
     gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion"}}
     mlflow[("MLflow<br/>runs + registry<br/>alias: champion")]
 
     subgraph USE["What reads the model and the layers"]
         direction LR
         review_predictions[("predictions/review_predictions<br/>batch scores + model version")]
-        api["FastAPI POST /predict<br/>the adapter's request model<br/>the same enrich"]
+        api["FastAPI POST /models/{name}/predict<br/>each model's request body<br/>the same enrich"]
         analysis["mlops analysis run<br/>core studies + the domain's"]
         dashboard["Streamlit dashboard"]
         catalog[("DuckDB views over the<br/>newest partitions: mlops sql")]
@@ -129,7 +129,7 @@ flowchart TD
     subgraph AI["Stage 3, planned: RAG and agent"]
         direction LR
         corpus["corpus in English<br/>translated first if Spanish-only"]
-        vectors[("chunks + embeddings<br/>vector DB")]
+        vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
 
@@ -195,7 +195,7 @@ src/
 ├── mlops_core/          # generic: never imports a domain, never even names one
 │   ├── adapter.py       # the contract: DomainAdapter, found by name at runtime
 │   ├── data/            # file + API extraction, validation routing, geo, clean driver
-│   ├── ml/              # features, temporal split, tuning, gate, registry, batch
+│   ├── ml/              # features, the model's split, tuning, gate, registry, batch
 │   ├── serving/         # FastAPI: the request body is whatever the domain declares
 │   ├── analysis/        # profiles, drift, feature evidence, residuals, dashboard
 │   └── orchestration/   # one Dagster graph per installed domain
@@ -203,17 +203,23 @@ src/
     └── coffee/          # config.yaml, sources, contracts, clean, enrich, own studies
 ```
 
-What is **data** lives in the domain's YAML: sources, what one item is (`items`: its
-table, id, time and period columns), the model's features and the leakage list,
-training and analysis settings. What needs **code** is the adapter's:
+What is **data** lives in the domain's YAML: sources, analysis settings, and `models`:
+one model per question the domain asks of its data. Each declares what one item is
+(`items`: its table, id, time and period columns), its features and leakage list
+(`spec`), how it is trained - including its split: `temporal` when the items have a time
+axis worth predicting across, `group` when they come in families that must not straddle
+train and test - and the target bands its errors are reported by. Its tables, MLflow
+experiment, registered model, API route and studies are all named after it
+(`review_features`, `/models/review/predict`, `review_residuals`). What needs **code**
+is the adapter's:
 
 | The core asks | Coffee answers |
 |---|---|
 | `raw_contracts`, `json_readers` | a Pandera contract per source; how each API's stored JSON flattens |
 | `extract` | DENUE (paged, token in the path), Overpass (a query), FAS (key in a header) |
-| `clean`, `clean_contracts` | four tables, each with a strict contract and its lineage |
-| `enrich` | the point-in-time market context: a lot graded in Y sees market year Y-1 |
-| `request_model` | `Lot`: what a buyer knows before the cupping |
+| `clean`, `clean_contracts` | eight tables, each with a strict contract and its lineage |
+| `context_tables`, `enrich` (per model) | the point-in-time market context: a lot graded in Y sees market year Y-1 |
+| `request_model` (per model) | `Lot`: what a buyer knows before the cupping |
 | `studies`, `figures` | the world-market studies only a commodity has |
 | `credentials` | its own keys, under its own prefix (`COFFEE_*`) |
 
@@ -221,6 +227,13 @@ training and analysis settings. What needs **code** is the adapter's:
 go through that one function, so online and batch cannot compute a feature
 differently (a test holds them to it). Tests also hold the core to its claim: it never
 imports a domain, and no file in it may contain a domain's vocabulary.
+
+The contract changed once in stage 3, on purpose, before it freezes: it held one model
+per domain, and stage 3 asks coffee a second question (what a kilo costs) of a second
+item table, whose items have no time axis to split on. So a domain now declares named
+models, and the split is part of each model's config. Changing it now is the rule in
+action - a third archetype shows what the contract lacked - rather than a patch after
+the freeze.
 
 ### Adding a domain
 
@@ -252,7 +265,8 @@ make check                    # lint + typecheck + tests
 
 make data                     # ETL: download, validate, clean
 make services-up PROFILE=ml   # MLflow at http://localhost:5000
-make ml                       # features + tuned training + batch predictions
+make ml                       # features + tuned training + batch predictions, every model
+make train MODEL=review       # one model only (also: features, predict, ml)
 
 make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) AS bias \
   FROM predictions.review_predictions p JOIN features.review_features f USING (review_id) \
@@ -264,18 +278,18 @@ Run `make help` for every target, or `uv run mlops --help` for the CLI.
 ## What the data says
 
 `make analysis` rebuilds every table and figure below from the layers, writing each one
-as Parquet (queryable: `SELECT * FROM analysis.feature_recommendation`) and as CSV, next
+as Parquet (queryable: `SELECT * FROM analysis.review_feature_recommendation`) and as CSV, next
 to the figure drawn from it. `make dashboard` opens them with the partition they came
 from stamped on screen.
 
-![Total cup points by period](docs/figures/target_distribution.png)
+![Total cup points by period](docs/figures/review_target_distribution.png)
 
 The two CQI snapshots are not the same experiment. The 2023 sample is **truncated**:
 nothing below 78 points, while 2010-2018 reaches 59.8. The later lots are not better
 coffee so much as a narrower selection — which is what the model is then asked to
 predict.
 
-![What the champion relies on](docs/figures/feature_importance.png)
+![What the champion relies on](docs/figures/review_feature_importance.png)
 
 Permutation importance on the test split, not the tree's split counts. Altitude and the
 origin country's market context carry the model; shuffling `country`, `variety` or
@@ -516,9 +530,12 @@ The evaluation is built to survive a small test set:
 - The image has no httpx, DuckDB or matplotlib, so a domain's adapter imports what its
   data pipeline needs inside the methods that use it. CI runs the API's tests in exactly
   that environment; it caught `validate.py` pulling DuckDB in at import time.
-- `POST /predict` answers `{"target", "prediction", "context", "model_version", ...}`:
-  the response names what it predicted instead of assuming it, and `context` holds
-  every feature the domain looked up for the request.
+- `POST /models/<name>/predict` answers `{"target", "prediction", "context",
+  "model_version", ...}`: the response names what it predicted instead of assuming it,
+  and `context` holds every feature the domain looked up for the request. Each model has
+  its own route because each has its own request body, which FastAPI validates and
+  documents only when the route knows its type. `/health` reports every model's version,
+  and `/reload` reloads them all, saying which failed and why.
 - Settings are `MLOPS_*` (data dir, MLflow URI, which domain); a domain's credentials
   use its own prefix, so the core never holds another project's keys.
 

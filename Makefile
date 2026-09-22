@@ -19,8 +19,8 @@ help:
 	@echo "data       whole ETL: extract + validate + clean (DOMAIN=$(DOMAIN))"
 	@echo "extract    download DOMAIN sources to the raw layer"
 	@echo "validate   check the latest raw ingestion against its Pandera contracts"
-	@echo "clean-layer  build the clean layer (coffee_reviews, market_context)"
-	@echo "ml         whole model pipeline: features + train"
+	@echo "clean-layer  build the clean layer (every clean table of DOMAIN)"
+	@echo "ml         whole model pipeline: features + train + predict (every model, or MODEL=<name>)"
 	@echo "features   build the model-ready feature table"
 	@echo "train      tune, train, track in MLflow and promote if it passes the quality gate"
 	@echo "predict    score the feature table with the champion (batch)"
@@ -67,19 +67,19 @@ clean-layer:
 	uv run mlops data clean --domain $(DOMAIN)
 
 ml:
-	uv run mlops ml run --domain $(DOMAIN)
+	uv run mlops ml run --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL))
 
 features:
-	uv run mlops ml features --domain $(DOMAIN)
+	uv run mlops ml features --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL))
 
 sql:
 	uv run mlops sql "$(Q)" --domain $(DOMAIN)
 
 train:
-	uv run mlops ml train --domain $(DOMAIN)
+	uv run mlops ml train --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL))
 
 predict:
-	uv run mlops ml predict --domain $(DOMAIN)
+	uv run mlops ml predict --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL))
 
 services-up:
 	docker compose --profile $(PROFILE) up -d --wait
