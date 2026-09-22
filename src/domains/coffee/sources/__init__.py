@@ -17,8 +17,11 @@ from domains.coffee.config import CoffeeConfig, CoffeeCredentials
 from domains.coffee.sources.denue import ingest_establishments
 from domains.coffee.sources.fas import ingest_balance
 from domains.coffee.sources.overpass import ingest_places
+from domains.coffee.sources.roasters import ingest_catalogs
 from mlops_core.adapter import ApiExtraction
 from mlops_core.data.api import ApiClient
+from mlops_core.data.extract import user_agent
+from mlops_core.data.robots import RobotsPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,26 @@ def extract(
             api = _client(client, data_dir, fas.name, fas.rate_limit_seconds, fas.cache_hours)
             key = credentials.usda_fas_api_key.get_secret_value()
             result.artifacts[fas.name] = ingest_balance(api, fas, key, raw_dir, now)
+
+    if (roasters := config.roasters) is not None:
+        clients: dict[str, ApiClient] = {}
+        policies: dict[str, RobotsPolicy] = {}
+        for shop in roasters.shops:
+            api = _client(
+                client,
+                data_dir,
+                f"{roasters.name}/{shop.shop}",
+                roasters.rate_limit_seconds,
+                roasters.cache_hours,
+            )
+            policies[shop.shop] = RobotsPolicy(api, user_agent())
+            # A shop that asks for more time between requests gets it.
+            delay = policies[shop.shop].crawl_delay(shop.base_url)
+            api.min_interval_s = max(api.min_interval_s, delay or 0.0)
+            clients[shop.shop] = api
+        artifact, refused = ingest_catalogs(clients, policies, roasters, raw_dir, now)
+        result.artifacts[roasters.name] = artifact
+        result.skipped.update({f"{roasters.name}/{shop}": why for shop, why in refused.items()})
 
     for name, reason in result.skipped.items():
         logger.warning("%s skipped: %s", name, reason)

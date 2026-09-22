@@ -49,6 +49,18 @@ def test_a_second_identical_request_is_served_from_disk(tmp_path: Path) -> None:
     assert recorder.calls == 1  # the service was asked once
 
 
+def test_a_page_is_cached_as_the_text_it_was(tmp_path: Path) -> None:
+    """Pages and robots.txt are text: cached as served, never through a JSON round trip."""
+    recorder = Recorder(httpx.Response(200, text="<p>Altura</p>"))
+    client, _ = build(recorder, tmp_path)
+
+    first = client.get_text(URL, cache_key="page")
+    second = client.get_text(URL, cache_key="page")
+
+    assert first == second == "<p>Altura</p>"
+    assert recorder.calls == 1
+
+
 @pytest.mark.parametrize(("age_s", "requests"), [(30, 1), (120, 2)])
 def test_a_cached_answer_is_only_trusted_while_it_is_young(
     tmp_path: Path, age_s: float, requests: int

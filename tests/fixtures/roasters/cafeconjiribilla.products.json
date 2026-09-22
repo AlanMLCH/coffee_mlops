@@ -1,0 +1,391 @@
+{
+ "products": [
+  {
+   "id": 4520023490660,
+   "title": "Martha Santiz - Lavado",
+   "handle": "martha-santiz-natural",
+   "body_html": "<div class=\"page\" title=\"Page 3\"></div>\n<div class=\"page\" title=\"Page 3\">\n<div class=\"section\">\n<div class=\"layoutArea\">\n<div class=\"column\">\n<p><span></span><span>Origen: Tenejapa, Chiapas</span></p>\n<p><span>Productor: Martha Santiz</span></p>\n<p><span>Predio: Finca Oniltik</span></p>\n<p><span>Variedad: Caturra &amp; Bourbon </span></p>\n<p><span>Proceso: Lavado</span></p>\n</div>\n</div>\n</div>\n</div>",
+   "published_at": "2026-05-25T21:08:07-06:00",
+   "created_at": "2020-04-03T17:29:55-06:00",
+   "updated_at": "2026-09-21T23:05:52-06:00",
+   "vendor": "Cafe con Jiribilla",
+   "product_type": "",
+   "tags": [
+    "Chiapas",
+    "natural",
+    "origen unico",
+    "single origin"
+   ],
+   "variants": [
+    {
+     "id": 31741710532708,
+     "title": "en grano / 250 g",
+     "option1": "en grano",
+     "option2": "250 g",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": null,
+     "available": true,
+     "price": "280.00",
+     "grams": 250,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 4520023490660,
+     "created_at": "2020-04-03T17:29:56-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 31741710565476,
+     "title": "en grano / 1 kg",
+     "option1": "en grano",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": null,
+     "available": true,
+     "price": "780.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 2,
+     "product_id": 4520023490660,
+     "created_at": "2020-04-03T17:29:56-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 31741710598244,
+     "title": "molido / 250 g",
+     "option1": "molido",
+     "option2": "250 g",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": null,
+     "available": true,
+     "price": "280.00",
+     "grams": 250,
+     "compare_at_price": null,
+     "position": 3,
+     "product_id": 4520023490660,
+     "created_at": "2020-04-03T17:29:56-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 31741710631012,
+     "title": "molido / 1 kg",
+     "option1": "molido",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": null,
+     "available": true,
+     "price": "780.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 4,
+     "product_id": 4520023490660,
+     "created_at": "2020-04-03T17:29:56-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    }
+   ],
+   "images": [
+    {
+     "id": 48041415672035,
+     "created_at": "2026-05-25T13:02:39-06:00",
+     "position": 1,
+     "updated_at": "2026-05-25T13:02:41-06:00",
+     "product_id": 4520023490660,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/0167/8373/6932/files/IMG-7507.jpg?v=1779735761",
+     "width": 1372,
+     "height": 1830
+    }
+   ],
+   "options": [
+    {
+     "name": "Estado",
+     "position": 1,
+     "values": [
+      "en grano",
+      "molido"
+     ]
+    },
+    {
+     "name": "Peso",
+     "position": 2,
+     "values": [
+      "250 g",
+      "1 kg"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 5588901396630,
+   "title": "Sampler",
+   "handle": "sampler",
+   "body_html": "<p> </p>\n<p>Sampler con <strong>4 bolsitas de café</strong>, con 200 g cada una, seleccionadas por los tostadores de Café con Jiribilla. Las bolsas de café cambian dependiendo la selección del mes, para que pruebes y disfrutes de distintas experiencias sensoriales en cada caja.</p>\n<p><em>Incluye envío dentro de la República Mexicana</em></p>\n<p><span>Molido fino: 700 micras (Prensa italiana, máquina de espresso casera)<br>Molido medio: 700 a 1,100 micras (Filtro de papel para V60, Chemex, Clever, entre otros)<br>Molido grueso: +1,100 micras (Prensa francesa)</span></p>\n<p class=\"p1\"><em>Tostamos de lunes a viernes de 9 am a 4 pm. <br></em></p>\n<p><span style=\"font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; font-size: 0.875rem;\"> </span></p>",
+   "published_at": "2025-11-18T09:13:14-06:00",
+   "created_at": "2020-08-08T09:41:25-05:00",
+   "updated_at": "2026-09-21T23:05:52-06:00",
+   "vendor": "Cafe con Jiribilla",
+   "product_type": "",
+   "tags": [
+    "preventas"
+   ],
+   "variants": [
+    {
+     "id": 35674273579158,
+     "title": "En grano",
+     "option1": "En grano",
+     "option2": null,
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "850.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 5588901396630,
+     "created_at": "2020-08-08T09:42:11-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 35674273611926,
+     "title": "Molido fino",
+     "option1": "Molido fino",
+     "option2": null,
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "850.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 2,
+     "product_id": 5588901396630,
+     "created_at": "2020-08-08T09:42:11-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 42734055719139,
+     "title": "Molido medio",
+     "option1": "Molido medio",
+     "option2": null,
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "850.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 3,
+     "product_id": 5588901396630,
+     "created_at": "2022-04-07T17:02:28-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 42734055751907,
+     "title": "Molido grueso",
+     "option1": "Molido grueso",
+     "option2": null,
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "850.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 4,
+     "product_id": 5588901396630,
+     "created_at": "2022-04-07T17:02:28-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    }
+   ],
+   "images": [
+    {
+     "id": 30723419013270,
+     "created_at": "2021-09-20T18:09:46-05:00",
+     "position": 1,
+     "updated_at": "2021-10-22T12:15:33-05:00",
+     "product_id": 5588901396630,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/0167/8373/6932/products/sampler.png?v=1634922933",
+     "width": 2616,
+     "height": 2616
+    },
+    {
+     "id": 30368368623766,
+     "created_at": "2021-08-30T14:53:54-05:00",
+     "position": 2,
+     "updated_at": "2021-09-20T18:09:49-05:00",
+     "product_id": 5588901396630,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/0167/8373/6932/products/IMG_5352.jpg?v=1632179389",
+     "width": 4143,
+     "height": 2804
+    },
+    {
+     "id": 28486982402198,
+     "created_at": "2021-04-07T18:15:12-05:00",
+     "position": 3,
+     "updated_at": "2021-09-20T18:09:49-05:00",
+     "product_id": 5588901396630,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/0167/8373/6932/products/IMG_2981.jpg?v=1632179389",
+     "width": 2769,
+     "height": 2769
+    }
+   ],
+   "options": [
+    {
+     "name": "Estado",
+     "position": 1,
+     "values": [
+      "En grano",
+      "Molido fino",
+      "Molido medio",
+      "Molido grueso"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4519986561124,
+   "title": "Mezcla Mística",
+   "handle": "mezcla-mistica",
+   "body_html": "<div title=\"Page 3\" class=\"page\">Una mezcla de Café con Jiribilla que tiene una taza compleja con dulzura acentuada, acidez frutal, muy buen cuerpo y un sabor intenso. Mezcla: 70% Huatusco lavado, tueste medio-alto; 30% Zentla natural, tueste medio.<br>\n</div>\n<div title=\"Page 3\" class=\"page\">\n<div class=\"section\">\n<div class=\"layoutArea\">\n<div class=\"column\">\n<p><span>Molido fino: 700 micras (Prensa italiana, máquina de espresso casera)<br>Molido medio: 700 a 1,100 micras (Filtro de papel para V60, Chemex, Clever, entre otros)<br>Molido grueso: +1,100 micras (Prensa francesa)</span></p>\n<p class=\"p1\"><em>Tostamos de lunes a viernes de 9 am a 4 pm. <br><br></em></p>\n</div>\n</div>\n</div>\n</div>",
+   "published_at": "2020-04-03T16:45:19-06:00",
+   "created_at": "2020-04-03T16:51:23-06:00",
+   "updated_at": "2026-09-21T23:05:52-06:00",
+   "vendor": "Cafe con Jiribilla",
+   "product_type": "",
+   "tags": [],
+   "variants": [
+    {
+     "id": 31741638967396,
+     "title": "En grano / 1 kg",
+     "option1": "En grano",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "410.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 4519986561124,
+     "created_at": "2020-04-03T16:51:24-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 31741639032932,
+     "title": "Molido fino / 1 kg",
+     "option1": "Molido fino",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "410.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 3,
+     "product_id": 4519986561124,
+     "created_at": "2020-04-03T16:51:24-06:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 42732889800931,
+     "title": "Molido medio / 1 kg",
+     "option1": "Molido medio",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "410.00",
+     "grams": 1000,
+     "compare_at_price": null,
+     "position": 5,
+     "product_id": 4519986561124,
+     "created_at": "2022-04-07T11:54:33-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    },
+    {
+     "id": 42732889899235,
+     "title": "Molido grueso / 1 kg",
+     "option1": "Molido grueso",
+     "option2": "1 kg",
+     "option3": null,
+     "sku": "",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": null,
+     "available": true,
+     "price": "410.00",
+     "grams": 250,
+     "compare_at_price": null,
+     "position": 7,
+     "product_id": 4519986561124,
+     "created_at": "2022-04-07T11:54:33-05:00",
+     "updated_at": "2026-09-21T23:05:52-06:00"
+    }
+   ],
+   "images": [
+    {
+     "id": 43473038082275,
+     "created_at": "2024-12-05T10:09:27-06:00",
+     "position": 1,
+     "updated_at": "2025-02-05T10:09:18-06:00",
+     "product_id": 4519986561124,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/0167/8373/6932/files/DSCF0181-1_1.jpg?v=1738771758",
+     "width": 836,
+     "height": 836
+    }
+   ],
+   "options": [
+    {
+     "name": "Estado",
+     "position": 1,
+     "values": [
+      "En grano",
+      "Molido fino",
+      "Molido medio",
+      "Molido grueso"
+     ]
+    },
+    {
+     "name": "Peso",
+     "position": 2,
+     "values": [
+      "1 kg"
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -70,17 +70,30 @@ class ApiClient:
         `cache_key` identifies the request *without any credential*: the caller knows
         which parts of the URL are secret, this class cannot.
         """
-        cached = self._cache_path(cache_key)
+        cached = self._cache_path(cache_key, ".json")
         if self._is_fresh(cached):
             logger.debug("cache hit: %s", cache_key)
             return json.loads(cached.read_text(encoding="utf-8"))
 
-        payload = self._fetch(url, headers)
+        payload = self._fetch(url, headers).json()
         cached.parent.mkdir(parents=True, exist_ok=True)
         cached.write_text(json.dumps(payload), encoding="utf-8")
         return payload
 
-    def _fetch(self, url: str, headers: Mapping[str, str] | None) -> Any:
+    def get_text(self, url: str, cache_key: str, headers: Mapping[str, str] | None = None) -> str:
+        """Fetch a page as text - HTML, robots.txt - with the same rate limit, retries and
+        cache as `get_json`. Scraping a shop is still calling someone else's server."""
+        cached = self._cache_path(cache_key, ".txt")
+        if self._is_fresh(cached):
+            logger.debug("cache hit: %s", cache_key)
+            return cached.read_text(encoding="utf-8")
+
+        text = self._fetch(url, headers).text
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(text, encoding="utf-8")
+        return text
+
+    def _fetch(self, url: str, headers: Mapping[str, str] | None) -> httpx.Response:
         last_error: Exception | None = None
         for attempt in range(1, self.max_attempts + 1):
             self._wait_turn()
@@ -99,7 +112,7 @@ class ApiClient:
                 self._backoff(attempt, f"status {response.status_code}")
                 continue
             response.raise_for_status()  # 4xx: our request is wrong, retrying cannot fix it
-            return response.json()
+            return response
         raise RuntimeError(f"Giving up after {self.max_attempts} attempts") from last_error
 
     def _wait_turn(self) -> None:
@@ -120,6 +133,6 @@ class ApiClient:
             return False
         return self.max_age_s is None or self.clock() - cached.stat().st_mtime < self.max_age_s
 
-    def _cache_path(self, cache_key: str) -> Path:
+    def _cache_path(self, cache_key: str, suffix: str) -> Path:
         digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()[:16]
-        return self.cache_dir / f"{digest}.json"
+        return self.cache_dir / f"{digest}{suffix}"

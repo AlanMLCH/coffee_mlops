@@ -221,6 +221,27 @@ SIAP_AGRICOLA = pa.DataFrameSchema(
     },
 )
 
+# One row per offer - a roaster's product in one size - as the shops listed it.
+ROASTER_OFFERS = pa.DataFrameSchema(
+    name="roaster_catalogs",
+    coerce=True,
+    unique=["shop", "variant_id"],
+    columns={
+        "shop": _text(),
+        "platform": pa.Column(pl.String, pa.Check.isin(["shopify", "squarespace"])),
+        "product_id": _text(),
+        "variant_id": _text(),
+        "title": _text(),
+        "variant_title": _text(nullable=True),
+        "price": pa.Column(pl.Float64, pa.Check.ge(0)),  # MXN, as listed
+        "platform_grams": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),  # 0 = not set
+        "url": pa.Column(pl.String, pa.Check.str_startswith("https://")),
+        "tags": _text(nullable=True),
+        "body_html": _text(nullable=True),
+        "page_html": _text(nullable=True),  # only for shops whose attributes live there
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -231,6 +252,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     # The API is held to the file's contract: one table, two ways to reach it.
     "fas_psd_coffee": PSD_COFFEE,
     "siap_agricola": SIAP_AGRICOLA,
+    "roaster_catalogs": ROASTER_OFFERS,
 }
 
 

@@ -1,0 +1,4503 @@
+{
+ "items": [
+  {
+   "id": "6a6fc1a198f72327f7985830",
+   "collectionId": "5f1106d43004f7151d18a8f6",
+   "recordType": 11,
+   "addedOn": 1785708961634,
+   "updatedOn": 1788254248504,
+   "displayIndex": 81,
+   "starred": false,
+   "passthrough": false,
+   "categoryIds": [
+    "5f430f0f850b9f23fd5d2717",
+    "6a7017428d7a8a3a2913cf4c"
+   ],
+   "workflowState": 1,
+   "publishOn": 1785709072444,
+   "authorId": "625eea7ac69e5b07e88b95da",
+   "urlId": "mazateca-oaxaca",
+   "title": "Mazateca - Oaxaca",
+   "body": null,
+   "excerpt": "<p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Sierra Mazateca, Oaxaca</span></strong></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>El lenguaje de una tierra antigua</span></strong></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><span>En el norte de Oaxaca, donde las monta&ntilde;as permanecen envueltas por la niebla y el bosque conserva un profundo sentido de misterio, la Sierra Mazateca ha construido una identidad que trasciende al caf&eacute;. Es un territorio reconocido por su riqueza biol&oacute;gica, su cosmovisi&oacute;n ind&iacute;gena y por haber sido el hogar de Mar&iacute;a Sabina, figura que convirti&oacute; a esta regi&oacute;n en uno de los paisajes culturales y espirituales m&aacute;s conocidos de M&eacute;xico.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><span>Entre estas monta&ntilde;as sobreviven numerosas variedades nativas y caf&eacute;s t&iacute;picos que, con el paso del tiempo, han desarrollado perfiles extraordinarios. Su diversidad gen&eacute;tica y las condiciones &uacute;nicas del territorio producen tazas de gran complejidad, con frutas tropicales maduras, acideces brillantes, dulzura profunda y una estructura arom&aacute;tica que, en ocasiones, recuerda a algunos de los grandes caf&eacute;s africanos, particularmente de Kenia.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><span>Para Cucurucho, encontrar estos caf&eacute;s siempre representa una sorpresa. Son el resultado de una tierra que sigue hablando en un lenguaje propio, donde cada cosecha revela matices inesperados y confirma que algunos de los perfiles m&aacute;s extraordinarios nacen precisamente en aquellos lugares donde la tradici&oacute;n ha permanecido viva.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"></p><h2 style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Notas de cata</span></strong></h2><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Aroma:</span></strong><span> frutas tropicales, flores blancas y miel.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Sabor:</span></strong><span> pi&ntilde;a madura, maracuy&aacute;, c&iacute;tricos dulces y az&uacute;car mascabado.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Final:</span></strong><span> largo, limpio y floral.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Textura:</span></strong><span> sedosa.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"></p><h2 style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong><span>Origen &amp; procesamiento</span></strong></h2><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><span>Este lote llega gracias al trabajo de </span><strong><span>ORCE Mazateca</span></strong><span>, una organizaci&oacute;n comunitaria comprometida con fortalecer la producci&oacute;n de caf&eacute; mientras impulsa la educaci&oacute;n, la transmisi&oacute;n de los conocimientos tradicionales, la conservaci&oacute;n cultural y el mejoramiento continuo de las familias productoras.</span></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><span>Creemos que apoyar proyectos como &eacute;ste significa preservar mucho m&aacute;s que un origen. Significa acompa&ntilde;ar comunidades que han sabido mirar hacia el futuro sin perder el v&iacute;nculo con su historia, demostrando que el caf&eacute; puede convertirse en una expresi&oacute;n viva del territorio, la memoria y la identidad.</span></p>",
+   "likeCount": 0,
+   "commentCount": 0,
+   "publicCommentCount": 0,
+   "commentState": 1,
+   "unsaved": false,
+   "fullUrl": "/tienda/p/mazateca-oaxaca",
+   "assetUrl": "https://static1.squarespace.com/static/5f109cfd8d6eea4f0def46e5/5f1106d43004f7151d18a8f6/6a6fc1a198f72327f7985830/1788254248504/",
+   "contentType": "application/octet-stream",
+   "structuredContent": {
+    "_type": "StoreItem",
+    "priceCents": 0,
+    "salePriceCents": 0,
+    "priceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "salePriceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "onSale": false,
+    "productType": 1,
+    "customAddButtonText": "Add To Cart",
+    "useCustomAddButtonText": false,
+    "variants": [
+     {
+      "attributes": {},
+      "optionValues": [],
+      "id": "aa28430b-b637-4952-9ed0-bbd203e79b1e",
+      "sku": "SQ3656365",
+      "price": 25000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "250.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": false,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     }
+    ],
+    "variantOptionOrdering": [],
+    "isSubscribable": false,
+    "fulfilledExternally": false,
+    "productAddOnsConfiguration": {
+     "productAddOns": []
+    },
+    "mightHavePaymentPlan": false
+   },
+   "priceCents": 0,
+   "salePriceCents": 0,
+   "priceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "salePriceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "onSale": false,
+   "productType": 1,
+   "customAddButtonText": "Add To Cart",
+   "useCustomAddButtonText": false,
+   "variants": [
+    {
+     "attributes": {},
+     "optionValues": [],
+     "id": "aa28430b-b637-4952-9ed0-bbd203e79b1e",
+     "sku": "SQ3656365",
+     "price": 25000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "250.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": false,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    }
+   ],
+   "variantOptionOrdering": [],
+   "isSubscribable": false,
+   "fulfilledExternally": false,
+   "productAddOnsConfiguration": {
+    "productAddOns": []
+   },
+   "mightHavePaymentPlan": false,
+   "items": [
+    {
+     "id": "6a6fc20f8d7a8a3a291394a5",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1785709071976,
+     "updatedOn": 1785709071976,
+     "displayIndex": 0,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "6a6fc1a198f72327f7985830",
+     "systemDataId": "dd0b047e-27a1-4370-a0d1-48497e86e5de",
+     "systemDataVariants": "1911x2391",
+     "systemDataSourceType": "JPEG",
+     "filename": "BOLSA_MAZATECA_WEB_INSTA-22.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "0084ff",
+      "topRightAverage": "0084ff",
+      "bottomLeftAverage": "0084fe",
+      "bottomRightAverage": "0084fe",
+      "centerAverage": "0084ff",
+      "suggestedBgColor": "519ff6"
+     },
+     "title": "BOLSA_MAZATECA_WEB_INSTA-22.jpg",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/dd0b047e-27a1-4370-a0d1-48497e86e5de/BOLSA_MAZATECA_WEB_INSTA-22.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "1911x2391",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "6a6fc20f8d7a8a3a291394a6",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1785709071978,
+     "updatedOn": 1785709071978,
+     "displayIndex": 1,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "6a6fc1a198f72327f7985830",
+     "systemDataId": "ef2baf2d-0b6a-40af-9694-79dde4c6df71",
+     "systemDataVariants": "1911x2391",
+     "systemDataSourceType": "JPEG",
+     "filename": "BOLSA_MAZATECA_WEB_INSTA-23.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "f862d0",
+      "topRightAverage": "f862d0",
+      "bottomLeftAverage": "f762d0",
+      "bottomRightAverage": "f762d0",
+      "centerAverage": "f862d0",
+      "suggestedBgColor": "e789d9"
+     },
+     "title": "BOLSA_MAZATECA_WEB_INSTA-23.jpg",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/ef2baf2d-0b6a-40af-9694-79dde4c6df71/BOLSA_MAZATECA_WEB_INSTA-23.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "1911x2391",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "6a6fc20f8d7a8a3a291394a7",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1785709071986,
+     "updatedOn": 1785709071986,
+     "displayIndex": 2,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "6a6fc1a198f72327f7985830",
+     "systemDataId": "9667d193-4772-4012-bcc5-0a59ddfcb99a",
+     "systemDataVariants": "1911x2391",
+     "systemDataSourceType": "JPEG",
+     "filename": "BOLSAS_MAZATECA_WEB_INSTA-18.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "e0e8f0",
+      "topRightAverage": "72b8fd",
+      "bottomLeftAverage": "889bf3",
+      "bottomRightAverage": "014992",
+      "centerAverage": "e9e6ef",
+      "suggestedBgColor": "9aaeda"
+     },
+     "title": "BOLSAS_MAZATECA_WEB_INSTA-18.jpg",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/9667d193-4772-4012-bcc5-0a59ddfcb99a/BOLSAS_MAZATECA_WEB_INSTA-18.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "1911x2391",
+     "recordTypeLabel": "image"
+    }
+   ],
+   "pushedServices": {},
+   "pendingPushedServices": {},
+   "recordTypeLabel": "store-item"
+  },
+  {
+   "id": "658f270227928977bfcfe868",
+   "collectionId": "5f1106d43004f7151d18a8f6",
+   "recordType": 11,
+   "addedOn": 1703880450203,
+   "updatedOn": 1787867555764,
+   "displayIndex": 57,
+   "starred": false,
+   "passthrough": false,
+   "categoryIds": [
+    "5f4824502f71b310b6930e0f",
+    "5f430f0f850b9f23fd5d2717"
+   ],
+   "workflowState": 1,
+   "publishOn": 1703880796037,
+   "authorId": "625eea7ac69e5b07e88b95da",
+   "systemDataId": "1721945856204-VBC8TKKAIPYNW44HQ3GH",
+   "systemDataVariants": "1135x2019,100w,300w,500w,750w,1000w",
+   "systemDataSourceType": "JPEG",
+   "filename": "05_PUEBLA.jpg",
+   "mediaFocalPoint": {
+    "x": 0.5,
+    "y": 0.5,
+    "source": 3
+   },
+   "colorData": {
+    "topLeftAverage": "d3d3d3",
+    "topRightAverage": "d3d3d3",
+    "bottomLeftAverage": "d3d3d3",
+    "bottomRightAverage": "d3d3d3",
+    "centerAverage": "5c5c5c",
+    "suggestedBgColor": "c5c3c2"
+   },
+   "urlId": "puebla-durazno-dulce-manzanilla-y-hoja-de-naranja",
+   "title": "Puebla - Durazno dulce, manzanilla y hoja de naranja.",
+   "body": null,
+   "excerpt": "<p style=\"white-space:pre-wrap;\">El aroma es dulce y delicado, similar a fruta con hueso, frutos secos y con dejos florales. En boca, la dulzura a fruta amarilla predomina y se acompa&ntilde;a de acidez de car&aacute;cter malico y c&iacute;trica, brillante y jugosa, como la de una naranja. Su cuerpo es sedoso y el posgusto se tornar&aacute; agradable durante la taza, apreciando en ella notas a durazno dulce, manzanilla y hoja de naranja.</p><p data-rte-preserve-empty=\"true\" style=\"white-space:pre-wrap;\"></p><p style=\"white-space:pre-wrap;\">250 GRAMOS</p>",
+   "likeCount": 0,
+   "commentCount": 0,
+   "publicCommentCount": 0,
+   "commentState": 1,
+   "unsaved": false,
+   "fullUrl": "/tienda/p/puebla-durazno-dulce-manzanilla-y-hoja-de-naranja",
+   "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721945856204-VBC8TKKAIPYNW44HQ3GH/05_PUEBLA.jpg",
+   "contentType": "image/jpeg",
+   "structuredContent": {
+    "_type": "StoreItem",
+    "priceCents": 0,
+    "salePriceCents": 0,
+    "priceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "salePriceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "onSale": false,
+    "productType": 1,
+    "customAddButtonText": "Add To Cart",
+    "useCustomAddButtonText": false,
+    "variants": [
+     {
+      "attributes": {},
+      "optionValues": [],
+      "id": "1a6d70b2-6848-4c52-81fa-91e0074cf565",
+      "sku": "SQ7153134",
+      "price": 28000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "280.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     }
+    ],
+    "variantOptionOrdering": [],
+    "isSubscribable": false,
+    "fulfilledExternally": false,
+    "productAddOnsConfiguration": {
+     "productAddOns": []
+    },
+    "mightHavePaymentPlan": false
+   },
+   "priceCents": 0,
+   "salePriceCents": 0,
+   "priceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "salePriceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "onSale": false,
+   "productType": 1,
+   "customAddButtonText": "Add To Cart",
+   "useCustomAddButtonText": false,
+   "variants": [
+    {
+     "attributes": {},
+     "optionValues": [],
+     "id": "1a6d70b2-6848-4c52-81fa-91e0074cf565",
+     "sku": "SQ7153134",
+     "price": 28000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "280.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    }
+   ],
+   "variantOptionOrdering": [],
+   "isSubscribable": false,
+   "fulfilledExternally": false,
+   "productAddOnsConfiguration": {
+    "productAddOns": []
+   },
+   "mightHavePaymentPlan": false,
+   "items": [
+    {
+     "id": "66a2ceff0c495f303724636c",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1721945855264,
+     "updatedOn": 1721945860377,
+     "displayIndex": 0,
+     "workflowState": 1,
+     "authorId": "560b7791e4b0c1fb1809972b",
+     "parentId": "658f270227928977bfcfe868",
+     "systemDataId": "1721945856204-VBC8TKKAIPYNW44HQ3GH",
+     "systemDataVariants": "1135x2019,100w,300w,500w,750w,1000w",
+     "systemDataSourceType": "JPG",
+     "filename": "05_PUEBLA.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "d3d3d3",
+      "topRightAverage": "d3d3d3",
+      "bottomLeftAverage": "d3d3d3",
+      "bottomRightAverage": "d3d3d3",
+      "centerAverage": "5c5c5c",
+      "suggestedBgColor": "c5c3c2"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721945856204-VBC8TKKAIPYNW44HQ3GH/05_PUEBLA.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "1135x2019",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "658f293044189d1cbba1e2b0",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1703881008271,
+     "updatedOn": 1703881018920,
+     "displayIndex": 1,
+     "workflowState": 1,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "658f270227928977bfcfe868",
+     "systemDataId": "1703881014804-ZANEIO3Q16ZR7DMNYYTB",
+     "systemDataVariants": "3813x2851,100w,300w,500w,750w,1000w,1500w,2500w",
+     "systemDataSourceType": "JPG",
+     "filename": "09.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "b2afaf",
+      "topRightAverage": "d6d5d5",
+      "bottomLeftAverage": "a6a6a6",
+      "bottomRightAverage": "ccc7c7",
+      "centerAverage": "c3c2c2",
+      "suggestedBgColor": "bbb7b7"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1703881014804-ZANEIO3Q16ZR7DMNYYTB/09.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "3813x2851",
+     "recordTypeLabel": "image"
+    }
+   ],
+   "pushedServices": {},
+   "pendingPushedServices": {},
+   "originalSize": "1135x2019",
+   "recordTypeLabel": "store-item"
+  },
+  {
+   "id": "5f1109183dcd890fb26508e0",
+   "collectionId": "5f1106d43004f7151d18a8f6",
+   "recordType": 11,
+   "addedOn": 1594951954483,
+   "updatedOn": 1787753135427,
+   "displayIndex": 2,
+   "starred": false,
+   "passthrough": false,
+   "tags": [
+    "cafetería de especialidad cdmx",
+    "café",
+    "café en grano",
+    "café de especialidad",
+    "café de chiapas",
+    "café de chiapas en grano",
+    "granos de cafe",
+    "cafe de chipas",
+    "cafe en grano chiapas",
+    "cafe chiapas",
+    "hario v60",
+    "cafe de grano molido",
+    "cafe molido para cafetera",
+    "cafetera italiana",
+    "cafe en grano para espresso"
+   ],
+   "categoryIds": [
+    "5f4824502f71b310b6930e0f",
+    "5f430f0f850b9f23fd5d2717"
+   ],
+   "workflowState": 1,
+   "publishOn": 1594951954483,
+   "authorId": "5f19b341c590d234110c917e",
+   "systemDataId": "1721945773703-3JZB2DQ42BRGQ2Z85DMB",
+   "systemDataVariants": "1135x2019,100w,300w,500w,750w,1000w",
+   "systemDataSourceType": "JPEG",
+   "filename": "03_CHIAPAS.jpg",
+   "mediaFocalPoint": {
+    "x": 0.5,
+    "y": 0.5,
+    "source": 3
+   },
+   "colorData": {
+    "topLeftAverage": "d3d3d3",
+    "topRightAverage": "d3d3d3",
+    "bottomLeftAverage": "d3d3d3",
+    "bottomRightAverage": "d3d3d3",
+    "centerAverage": "787878",
+    "suggestedBgColor": "bdbbbb"
+   },
+   "urlId": "chiapas-finca-hambugo",
+   "title": "Chiapas- Caramelo, avellana y chocolate",
+   "body": null,
+   "excerpt": "<p style=\"white-space:pre-wrap;\">Este caf&eacute; de Chiapas se caracteriza principalmente por tener un aroma perfumado a miel y vainilla un toque a nueces y chocolate- acidez malica muy bien balanceada, dulce como el caramelo, cuerpo medio y redondo,  posgusto  muy agradable.</p><p style=\"white-space:pre-wrap;\">Lugar de origen: Chiapas</p><p style=\"white-space:pre-wrap;\">Regi&oacute;n: Tapachula (Soconusco)</p><p style=\"white-space:pre-wrap;\">Altura: 1250 msnm</p>",
+   "likeCount": 0,
+   "commentCount": 0,
+   "publicCommentCount": 0,
+   "commentState": 1,
+   "unsaved": false,
+   "fullUrl": "/tienda/p/chiapas-finca-hambugo",
+   "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721945773703-3JZB2DQ42BRGQ2Z85DMB/03_CHIAPAS.jpg",
+   "contentType": "image/jpeg",
+   "structuredContent": {
+    "_type": "StoreItem",
+    "priceCents": 0,
+    "salePriceCents": 0,
+    "priceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "salePriceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "onSale": false,
+    "productType": 1,
+    "additionalFieldsFormId": "5f68f3ee53f2314986bb8e1d",
+    "customAddButtonText": "Añadir al carrito",
+    "useCustomAddButtonText": false,
+    "additionalFieldsForm": {
+     "id": "5f68f3ee53f2314986bb8e1d",
+     "type": 2,
+     "name": "Personalización de Molido",
+     "fields": [
+      "{\"type\":\"select\",\"id\":\"select-yui_3_17_2_1_1600712881819_64318\",\"locked\":false,\"title\":\"Quieres recibir tu café molido?\",\"description\":\"\",\"options\":[\"No, lo quiero en grano\",\"Si, lo quiero molido para espresso\",\"Si, lo quiero molido para filtro de papel\",\"si, lo quiero molido para prensa francesa\"],\"required\":false,\"select\":true}"
+     ],
+     "parsedFields": [],
+     "submitButtonText": "Enviar",
+     "submissionMessage": "{\"html\":\"¡Gracias!\"}",
+     "disclaimerMessage": "null",
+     "successRedirect": "",
+     "captchaEnabled": false,
+     "captchaTheme": 1,
+     "captchaAlignment": 1
+    },
+    "variants": [
+     {
+      "attributes": {
+       "Peso": "250 g."
+      },
+      "optionValues": [
+       {
+        "optionName": "Peso",
+        "value": "250 g."
+       }
+      ],
+      "id": "0f55cacf-bc5c-45fd-a994-0ffaeb801852",
+      "sku": "CGS02-01-250",
+      "price": 22000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "220.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "Peso": "500gr"
+      },
+      "optionValues": [
+       {
+        "optionName": "Peso",
+        "value": "500gr"
+       }
+      ],
+      "id": "15a6653e-6a7e-4a8a-9700-395ad3b5e447",
+      "sku": "CGS02-01-500",
+      "price": 44000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "440.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "Peso": "1 Kg."
+      },
+      "optionValues": [
+       {
+        "optionName": "Peso",
+        "value": "1 Kg."
+       }
+      ],
+      "id": "a288abb1-cbc3-47ea-a5d5-54811354e8bc",
+      "sku": "CGS02-01-1k",
+      "price": 88000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "880.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     }
+    ],
+    "variantOptionOrdering": [
+     "Peso"
+    ],
+    "isSubscribable": false,
+    "fulfilledExternally": false,
+    "productAddOnsConfiguration": {
+     "productAddOns": []
+    },
+    "mightHavePaymentPlan": false
+   },
+   "priceCents": 0,
+   "salePriceCents": 0,
+   "priceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "salePriceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "onSale": false,
+   "productType": 1,
+   "additionalFieldsFormId": "5f68f3ee53f2314986bb8e1d",
+   "customAddButtonText": "Añadir al carrito",
+   "useCustomAddButtonText": false,
+   "additionalFieldsForm": {
+    "id": "5f68f3ee53f2314986bb8e1d",
+    "type": 2,
+    "name": "Personalización de Molido",
+    "fields": [
+     "{\"type\":\"select\",\"id\":\"select-yui_3_17_2_1_1600712881819_64318\",\"locked\":false,\"title\":\"Quieres recibir tu café molido?\",\"description\":\"\",\"options\":[\"No, lo quiero en grano\",\"Si, lo quiero molido para espresso\",\"Si, lo quiero molido para filtro de papel\",\"si, lo quiero molido para prensa francesa\"],\"required\":false,\"select\":true}"
+    ],
+    "parsedFields": [],
+    "submitButtonText": "Enviar",
+    "submissionMessage": "{\"html\":\"¡Gracias!\"}",
+    "disclaimerMessage": "null",
+    "successRedirect": "",
+    "captchaEnabled": false,
+    "captchaTheme": 1,
+    "captchaAlignment": 1
+   },
+   "variants": [
+    {
+     "attributes": {
+      "Peso": "250 g."
+     },
+     "optionValues": [
+      {
+       "optionName": "Peso",
+       "value": "250 g."
+      }
+     ],
+     "id": "0f55cacf-bc5c-45fd-a994-0ffaeb801852",
+     "sku": "CGS02-01-250",
+     "price": 22000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "220.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "Peso": "500gr"
+     },
+     "optionValues": [
+      {
+       "optionName": "Peso",
+       "value": "500gr"
+      }
+     ],
+     "id": "15a6653e-6a7e-4a8a-9700-395ad3b5e447",
+     "sku": "CGS02-01-500",
+     "price": 44000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "440.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "Peso": "1 Kg."
+     },
+     "optionValues": [
+      {
+       "optionName": "Peso",
+       "value": "1 Kg."
+      }
+     ],
+     "id": "a288abb1-cbc3-47ea-a5d5-54811354e8bc",
+     "sku": "CGS02-01-1k",
+     "price": 88000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "880.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    }
+   ],
+   "variantOptionOrdering": [
+    "Peso"
+   ],
+   "isSubscribable": false,
+   "fulfilledExternally": false,
+   "productAddOnsConfiguration": {
+    "productAddOns": []
+   },
+   "mightHavePaymentPlan": false,
+   "items": [
+    {
+     "id": "66a2ceacbed8aa5af7ff331b",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1721945772719,
+     "updatedOn": 1721945777841,
+     "displayIndex": 0,
+     "workflowState": 1,
+     "authorId": "560b7791e4b0c1fb1809972b",
+     "parentId": "5f1109183dcd890fb26508e0",
+     "systemDataId": "1721945773703-3JZB2DQ42BRGQ2Z85DMB",
+     "systemDataVariants": "1135x2019,100w,300w,500w,750w,1000w",
+     "systemDataSourceType": "JPG",
+     "filename": "03_CHIAPAS.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "d3d3d3",
+      "topRightAverage": "d3d3d3",
+      "bottomLeftAverage": "d3d3d3",
+      "bottomRightAverage": "d3d3d3",
+      "centerAverage": "787878",
+      "suggestedBgColor": "bdbbbb"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721945773703-3JZB2DQ42BRGQ2Z85DMB/03_CHIAPAS.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "1135x2019",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "66a2ceac1121ff382548ce27",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1721945772718,
+     "updatedOn": 1721945783278,
+     "displayIndex": 1,
+     "workflowState": 1,
+     "authorId": "560b7791e4b0c1fb1809972b",
+     "parentId": "5f1109183dcd890fb26508e0",
+     "systemDataId": "1721945778940-A90T4LLA4VG5VW6YJ4JT",
+     "systemDataVariants": "3813x2851,100w,300w,500w,750w,1000w,1500w,2500w",
+     "systemDataSourceType": "JPG",
+     "filename": "PUEBLA BOLSAS CAFE CUCURUCHO copy 2.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "a8a5a5",
+      "topRightAverage": "d6d5d5",
+      "bottomLeftAverage": "a7a7a7",
+      "bottomRightAverage": "b1acac",
+      "centerAverage": "c2b9b9",
+      "suggestedBgColor": "b5b1b1"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721945778940-A90T4LLA4VG5VW6YJ4JT/PUEBLA+BOLSAS+CAFE+CUCURUCHO+copy+2.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "3813x2851",
+     "recordTypeLabel": "image"
+    }
+   ],
+   "pushedServices": {},
+   "pendingPushedServices": {},
+   "originalSize": "1135x2019",
+   "recordTypeLabel": "store-item"
+  },
+  {
+   "id": "6a244e1f9d129d02efd66313",
+   "collectionId": "5f1106d43004f7151d18a8f6",
+   "recordType": 11,
+   "addedOn": 1780764191186,
+   "updatedOn": 1788223869410,
+   "displayIndex": 76,
+   "starred": false,
+   "passthrough": false,
+   "categoryIds": [
+    "6664deef205276629884c87e",
+    "5f430f0f850b9f23fd5d2719"
+   ],
+   "workflowState": 1,
+   "publishOn": 1780764385640,
+   "authorId": "625eea7ac69e5b07e88b95da",
+   "urlId": "tote-bag-hikari-rojo-",
+   "title": "Tote Bag Hikari Rojo (光)",
+   "body": null,
+   "excerpt": "<p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong>Tradici&oacute;n que evoluciona. Luz que permanece.</strong></p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">Hikari significa “luz”.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">En nuestra leyenda, es el samur&aacute;i que viaja, aprende ciencia y tecnolog&iacute;a, y regresa sin perder la profundidad del pasado. No es lo nuevo contra lo antiguo. Es la modernidad cuidando lo esencial.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">Esta edici&oacute;n especial en rojo representa la energ&iacute;a de avanzar con intenci&oacute;n: disciplina en el m&eacute;todo, respeto por la forma y atenci&oacute;n al detalle.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">Dise&ntilde;ada para acompa&ntilde;arte todos los d&iacute;as, dentro y fuera del caf&eacute;, esta tote bag es una pieza funcional que refleja una manera de entender el mundo: con conciencia, precisi&oacute;n y prop&oacute;sito.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">M&aacute;s que una bolsa, es una declaraci&oacute;n de principios.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\">Edici&oacute;n limitada.<br />Disponible en sucursales y tienda online hasta agotar existencias.</p><p style=\"white-space:pre-wrap;\" data-rte-preserve-empty=\"true\"><strong>Lleva la luz contigo.<br />Lleva Hikari.</strong></p>",
+   "likeCount": 0,
+   "commentCount": 0,
+   "publicCommentCount": 0,
+   "commentState": 1,
+   "unsaved": false,
+   "fullUrl": "/tienda/p/tote-bag-hikari-rojo-",
+   "assetUrl": "https://static1.squarespace.com/static/5f109cfd8d6eea4f0def46e5/5f1106d43004f7151d18a8f6/6a244e1f9d129d02efd66313/1788223869410/",
+   "contentType": "application/octet-stream",
+   "structuredContent": {
+    "_type": "StoreItem",
+    "priceCents": 0,
+    "salePriceCents": 0,
+    "priceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "salePriceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "onSale": false,
+    "productType": 1,
+    "customAddButtonText": "Add To Cart",
+    "useCustomAddButtonText": false,
+    "variants": [
+     {
+      "attributes": {},
+      "optionValues": [],
+      "id": "fcc4c935-37e8-40ff-9063-050aa6e72d86",
+      "sku": "SQ2398164",
+      "price": 50000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "500.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": false,
+      "qtyInStock": 2,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "len": 0.0
+     }
+    ],
+    "variantOptionOrdering": [],
+    "isSubscribable": false,
+    "fulfilledExternally": false,
+    "productAddOnsConfiguration": {
+     "productAddOns": []
+    },
+    "mightHavePaymentPlan": false
+   },
+   "priceCents": 0,
+   "salePriceCents": 0,
+   "priceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "salePriceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "onSale": false,
+   "productType": 1,
+   "customAddButtonText": "Add To Cart",
+   "useCustomAddButtonText": false,
+   "variants": [
+    {
+     "attributes": {},
+     "optionValues": [],
+     "id": "fcc4c935-37e8-40ff-9063-050aa6e72d86",
+     "sku": "SQ2398164",
+     "price": 50000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "500.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": false,
+     "qtyInStock": 2,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "len": 0.0
+    }
+   ],
+   "variantOptionOrdering": [],
+   "isSubscribable": false,
+   "fulfilledExternally": false,
+   "productAddOnsConfiguration": {
+    "productAddOns": []
+   },
+   "mightHavePaymentPlan": false,
+   "items": [
+    {
+     "id": "6a244ee158b73f530a6d6923",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1780764385121,
+     "updatedOn": 1780764385121,
+     "displayIndex": 0,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "6a244e1f9d129d02efd66313",
+     "systemDataId": "a323e4fa-339b-4d27-96ee-ce961039a0a7",
+     "systemDataVariants": "2600x3460,2500w",
+     "systemDataSourceType": "JPEG",
+     "filename": "TOTE_HIKARI_ROJO_1.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "a63b3b",
+      "topRightAverage": "a63b3b",
+      "bottomLeftAverage": "a63b3b",
+      "bottomRightAverage": "a63a3a",
+      "centerAverage": "a63b3b",
+      "suggestedBgColor": "ae5655"
+     },
+     "title": "TOTE_HIKARI_ROJO_1.jpg",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/a323e4fa-339b-4d27-96ee-ce961039a0a7/TOTE_HIKARI_ROJO_1.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "2600x3460",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "6a244ee19d129d02efd6638b",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1780764385126,
+     "updatedOn": 1780764385126,
+     "displayIndex": 1,
+     "authorId": "625eea7ac69e5b07e88b95da",
+     "parentId": "6a244e1f9d129d02efd66313",
+     "systemDataId": "d4b1e1db-6c3f-4dd3-8e0b-ad704ae98285",
+     "systemDataVariants": "2600x3460,2500w",
+     "systemDataSourceType": "JPEG",
+     "filename": "TOTE_HIKARI_ROJO_2.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "a63b3b",
+      "topRightAverage": "a63b3b",
+      "bottomLeftAverage": "a63b3b",
+      "bottomRightAverage": "a63a3a",
+      "centerAverage": "a63b3b",
+      "suggestedBgColor": "ae5655"
+     },
+     "title": "TOTE_HIKARI_ROJO_2.jpg",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/d4b1e1db-6c3f-4dd3-8e0b-ad704ae98285/TOTE_HIKARI_ROJO_2.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "2600x3460",
+     "recordTypeLabel": "image"
+    }
+   ],
+   "pushedServices": {},
+   "pendingPushedServices": {},
+   "recordTypeLabel": "store-item"
+  },
+  {
+   "id": "5f6973aaba1bde0a45575209",
+   "collectionId": "5f1106d43004f7151d18a8f6",
+   "recordType": 11,
+   "addedOn": 1600747192003,
+   "updatedOn": 1787753883986,
+   "displayIndex": 31,
+   "starred": false,
+   "passthrough": false,
+   "categoryIds": [
+    "5f4824502f71b310b6930e0f",
+    "5f540e6deb91e93e05574e6b",
+    "5f430f0f850b9f23fd5d2717",
+    "5f4824602f71b310b6930e18"
+   ],
+   "workflowState": 1,
+   "publishOn": 1600747192003,
+   "authorId": "5f3b0c088e1ea25e36ca8811",
+   "systemDataId": "1721866770143-EBI0CLY69THK5KV5YEKF",
+   "systemDataVariants": "3813x2851,100w,300w,500w,750w,1000w,1500w,2500w",
+   "systemDataSourceType": "JPEG",
+   "filename": "PUEBLA BOLSAS CAFE CUCURUCHO copy 2.jpg",
+   "mediaFocalPoint": {
+    "x": 0.5,
+    "y": 0.5,
+    "source": 3
+   },
+   "colorData": {
+    "topLeftAverage": "a8a5a5",
+    "topRightAverage": "d6d5d5",
+    "bottomLeftAverage": "a7a7a7",
+    "bottomRightAverage": "b1acac",
+    "centerAverage": "c2b9b9",
+    "suggestedBgColor": "b5b1b1"
+   },
+   "urlId": "suscripcin-quincenal",
+   "title": "Suscripción Quincenal",
+   "body": null,
+   "excerpt": "<p class=\"\" style=\"white-space:pre-wrap;\">Que nunca te falte Café Fresco en casa!</p><p class=\"\" style=\"white-space:pre-wrap;\">Con esta suscripción podrás recibir quincenalmente café en la puerta de tu casa!</p><p class=\"\" style=\"white-space:pre-wrap;\">Escoge tu mezcla favorita o tu mix de cafés y la recurrencia con la que quieres recibir tu paquete.</p><p class=\"\" data-rte-preserve-empty=\"true\" style=\"white-space:pre-wrap;\"></p><p class=\"\" data-rte-preserve-empty=\"true\" style=\"white-space:pre-wrap;\"></p>",
+   "likeCount": 0,
+   "commentCount": 0,
+   "publicCommentCount": 0,
+   "commentState": 1,
+   "unsaved": false,
+   "fullUrl": "/tienda/p/suscripcin-quincenal",
+   "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721866770143-EBI0CLY69THK5KV5YEKF/PUEBLA+BOLSAS+CAFE+CUCURUCHO+copy+2.jpg",
+   "contentType": "image/jpeg",
+   "structuredContent": {
+    "_type": "StoreItem",
+    "priceCents": 0,
+    "salePriceCents": 0,
+    "priceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "salePriceMoney": {
+     "currency": "MXN",
+     "value": "0.00"
+    },
+    "onSale": false,
+    "productType": 1,
+    "additionalFieldsFormId": "5f68f3ee53f2314986bb8e1d",
+    "customAddButtonText": "Añadir al carrito",
+    "useCustomAddButtonText": false,
+    "additionalFieldsForm": {
+     "id": "5f68f3ee53f2314986bb8e1d",
+     "type": 2,
+     "name": "Personalización de Molido",
+     "fields": [
+      "{\"type\":\"select\",\"id\":\"select-yui_3_17_2_1_1600712881819_64318\",\"locked\":false,\"title\":\"Quieres recibir tu café molido?\",\"description\":\"\",\"options\":[\"No, lo quiero en grano\",\"Si, lo quiero molido para espresso\",\"Si, lo quiero molido para filtro de papel\",\"si, lo quiero molido para prensa francesa\"],\"required\":false,\"select\":true}"
+     ],
+     "parsedFields": [],
+     "submitButtonText": "Enviar",
+     "submissionMessage": "{\"html\":\"¡Gracias!\"}",
+     "disclaimerMessage": "null",
+     "successRedirect": "",
+     "captchaEnabled": false,
+     "captchaTheme": 1,
+     "captchaAlignment": 1
+    },
+    "variants": [
+     {
+      "attributes": {
+       "origen": "Oaxaca",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Oaxaca"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "7e28e3fa-c019-4dfe-a26d-675a4cfa3105",
+      "sku": "SUSQO1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Chiapas",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Chiapas"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "be313032-659e-4721-8bdf-7345fbd052ff",
+      "sku": "SUSQCH1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Veracruz",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Veracruz"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "6cd9c1d2-c2bc-4352-a745-646a615ccaf3",
+      "sku": "SUSQVZ1",
+      "price": 21500,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "215.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 21500,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "215.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Dark Side of the Fruit",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Dark Side of the Fruit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "3a7ce4db-4b33-4f9c-9eed-ffcb3d0d74d9",
+      "sku": "SUSQDSF1",
+      "price": 22500,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "225.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 22500,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "225.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Resistencia",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Resistencia"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "549658ad-bf66-4e1f-8aab-cacae7c56b9f",
+      "sku": "SUSQRE1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mezcla de la Casa",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mezcla de la Casa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "0ffd0e86-b118-4325-9e11-0658c3ef4294",
+      "sku": "SUSQMZ1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Nayarit",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Nayarit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "a78ddea6-eb1d-46aa-b115-a5917dd51a85",
+      "sku": "SUSQNY1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.25,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mix Sorpresa",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mix Sorpresa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "93f31e13-ba64-45e0-866b-e591ad336c4d",
+      "sku": "SUSQMX1",
+      "price": 18000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "180.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 18000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "180.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Guerrero",
+       "cantidad quincenal": "1"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Guerrero"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "1"
+       }
+      ],
+      "id": "72dcfbcd-4260-4cc0-b2d3-cf16396778c2",
+      "sku": "SQG1",
+      "price": 19000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "190.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 19000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "190.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Oaxaca",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Oaxaca"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "c82ddf31-fbf2-4f79-95ac-816f6682f0c9",
+      "sku": "SUSQO2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Chiapas",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Chiapas"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "d8837069-13fe-4c5e-8e69-5661cc3d807b",
+      "sku": "SUSQCH2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Veracruz",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Veracruz"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "16464bee-141a-4043-b636-f3e19e15b6ff",
+      "sku": "SUSQVZ2",
+      "price": 43000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "430.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 43000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "430.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Dark Side of the Fruit",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Dark Side of the Fruit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "64df3868-c6a8-4630-8fb0-3e3582acfb4e",
+      "sku": "SUSQDSF2",
+      "price": 45000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "450.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 45000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "450.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Resistencia",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Resistencia"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "71ec0c48-a7c2-4a1e-9e69-0e0ecfe8f213",
+      "sku": "SUSQRE2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mezcla de la Casa",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mezcla de la Casa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "9241c1c8-48b8-4f29-af6e-5c26f3c09c79",
+      "sku": "SUSQMZ2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Nayarit",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Nayarit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "57c0d9f0-affd-4ca3-8808-34590d68ad87",
+      "sku": "SUSQNY2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.5,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mix Sorpresa",
+       "cantidad quincenal": "2"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mix Sorpresa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "2"
+       }
+      ],
+      "id": "aaa00a3c-3761-4593-9ee5-19b2b84132fe",
+      "sku": "SUSQMX2",
+      "price": 36000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "360.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 36000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "360.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Oaxaca",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Oaxaca"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "9feee28f-d611-4df4-b3e2-7f4d75fa286a",
+      "sku": "SUSQO4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Chiapas",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Chiapas"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "fde9a7ad-98b6-4036-aa34-58c5cd1325b7",
+      "sku": "SUSQCH4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Veracruz",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Veracruz"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "4683599c-981d-482c-946d-07ee3af9f512",
+      "sku": "SUSQVZ4",
+      "price": 86000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "860.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 86000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "860.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Dark Side of the Fruit",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Dark Side of the Fruit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "e2329998-cfdf-4eaa-a677-feb896b209e2",
+      "sku": "SUSQDSF4",
+      "price": 90000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "900.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 90000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "900.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Resistencia",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Resistencia"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "f547bfc6-4270-4ee7-8a98-696e2eb970ea",
+      "sku": "SUSQRE4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mezcla de la Casa",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mezcla de la Casa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "32f8933f-92c3-4ea3-813d-05ac5d9d209e",
+      "sku": "SUSQMZ4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Nayarit",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Nayarit"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "043fea03-98ae-44cd-a2a7-b02c6e378d9a",
+      "sku": "SUSQNY4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 1.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     },
+     {
+      "attributes": {
+       "origen": "Mix Sorpresa",
+       "cantidad quincenal": "4"
+      },
+      "optionValues": [
+       {
+        "optionName": "origen",
+        "value": "Mix Sorpresa"
+       },
+       {
+        "optionName": "cantidad quincenal",
+        "value": "4"
+       }
+      ],
+      "id": "671d3ed0-e874-4eb6-9ef3-7c176d4f5a97",
+      "sku": "SUSQMX4",
+      "price": 72000,
+      "salePrice": 0,
+      "priceMoney": {
+       "currency": "MXN",
+       "value": "720.00"
+      },
+      "salePriceMoney": {
+       "currency": "MXN",
+       "value": "0.00"
+      },
+      "onSale": false,
+      "unlimited": true,
+      "qtyInStock": 0,
+      "width": 0.0,
+      "height": 0.0,
+      "weight": 0.0,
+      "imageIds": [],
+      "images": [],
+      "pricingOptions": [
+       {
+        "price": 72000,
+        "salePrice": 0,
+        "percentageDiscount": 0,
+        "priceMoney": {
+         "currency": "MXN",
+         "value": "720.00"
+        },
+        "salePriceMoney": {
+         "currency": "MXN",
+         "value": "0.00"
+        },
+        "onSale": false,
+        "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+        "subscriptionPlan": {
+         "billingPeriod": {
+          "value": 2,
+          "unit": "WEEK"
+         },
+         "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+         "numBillingCycles": 0
+        }
+       }
+      ],
+      "len": 0.0
+     }
+    ],
+    "variantOptionOrdering": [
+     "cantidad quincenal",
+     "origen"
+    ],
+    "isSubscribable": true,
+    "subscriptionPlan": {
+     "billingPeriod": {
+      "value": 2,
+      "unit": "WEEK"
+     },
+     "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+     "numBillingCycles": 0
+    },
+    "fulfilledExternally": false,
+    "productAddOnsConfiguration": {
+     "productAddOns": []
+    },
+    "productSubscriptionOptions": [
+     {
+      "id": "13a7e59e-546f-4de8-a93e-7500b8506675",
+      "percentageDiscount": 0,
+      "subscriptionPlan": {
+       "billingPeriod": {
+        "value": 2,
+        "unit": "WEEK"
+       },
+       "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+       "numBillingCycles": 0
+      }
+     }
+    ],
+    "mightHavePaymentPlan": false
+   },
+   "priceCents": 0,
+   "salePriceCents": 0,
+   "priceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "salePriceMoney": {
+    "currency": "MXN",
+    "value": "0.00"
+   },
+   "onSale": false,
+   "productType": 1,
+   "additionalFieldsFormId": "5f68f3ee53f2314986bb8e1d",
+   "customAddButtonText": "Añadir al carrito",
+   "useCustomAddButtonText": false,
+   "additionalFieldsForm": {
+    "id": "5f68f3ee53f2314986bb8e1d",
+    "type": 2,
+    "name": "Personalización de Molido",
+    "fields": [
+     "{\"type\":\"select\",\"id\":\"select-yui_3_17_2_1_1600712881819_64318\",\"locked\":false,\"title\":\"Quieres recibir tu café molido?\",\"description\":\"\",\"options\":[\"No, lo quiero en grano\",\"Si, lo quiero molido para espresso\",\"Si, lo quiero molido para filtro de papel\",\"si, lo quiero molido para prensa francesa\"],\"required\":false,\"select\":true}"
+    ],
+    "parsedFields": [],
+    "submitButtonText": "Enviar",
+    "submissionMessage": "{\"html\":\"¡Gracias!\"}",
+    "disclaimerMessage": "null",
+    "successRedirect": "",
+    "captchaEnabled": false,
+    "captchaTheme": 1,
+    "captchaAlignment": 1
+   },
+   "variants": [
+    {
+     "attributes": {
+      "origen": "Oaxaca",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Oaxaca"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "7e28e3fa-c019-4dfe-a26d-675a4cfa3105",
+     "sku": "SUSQO1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Chiapas",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Chiapas"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "be313032-659e-4721-8bdf-7345fbd052ff",
+     "sku": "SUSQCH1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Veracruz",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Veracruz"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "6cd9c1d2-c2bc-4352-a745-646a615ccaf3",
+     "sku": "SUSQVZ1",
+     "price": 21500,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "215.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 21500,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "215.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Dark Side of the Fruit",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Dark Side of the Fruit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "3a7ce4db-4b33-4f9c-9eed-ffcb3d0d74d9",
+     "sku": "SUSQDSF1",
+     "price": 22500,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "225.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 22500,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "225.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Resistencia",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Resistencia"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "549658ad-bf66-4e1f-8aab-cacae7c56b9f",
+     "sku": "SUSQRE1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mezcla de la Casa",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mezcla de la Casa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "0ffd0e86-b118-4325-9e11-0658c3ef4294",
+     "sku": "SUSQMZ1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Nayarit",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Nayarit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "a78ddea6-eb1d-46aa-b115-a5917dd51a85",
+     "sku": "SUSQNY1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.25,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mix Sorpresa",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mix Sorpresa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "93f31e13-ba64-45e0-866b-e591ad336c4d",
+     "sku": "SUSQMX1",
+     "price": 18000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "180.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 18000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "180.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Guerrero",
+      "cantidad quincenal": "1"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Guerrero"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "1"
+      }
+     ],
+     "id": "72dcfbcd-4260-4cc0-b2d3-cf16396778c2",
+     "sku": "SQG1",
+     "price": 19000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "190.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 19000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "190.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Oaxaca",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Oaxaca"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "c82ddf31-fbf2-4f79-95ac-816f6682f0c9",
+     "sku": "SUSQO2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Chiapas",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Chiapas"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "d8837069-13fe-4c5e-8e69-5661cc3d807b",
+     "sku": "SUSQCH2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Veracruz",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Veracruz"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "16464bee-141a-4043-b636-f3e19e15b6ff",
+     "sku": "SUSQVZ2",
+     "price": 43000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "430.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 43000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "430.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Dark Side of the Fruit",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Dark Side of the Fruit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "64df3868-c6a8-4630-8fb0-3e3582acfb4e",
+     "sku": "SUSQDSF2",
+     "price": 45000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "450.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 45000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "450.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Resistencia",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Resistencia"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "71ec0c48-a7c2-4a1e-9e69-0e0ecfe8f213",
+     "sku": "SUSQRE2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mezcla de la Casa",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mezcla de la Casa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "9241c1c8-48b8-4f29-af6e-5c26f3c09c79",
+     "sku": "SUSQMZ2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Nayarit",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Nayarit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "57c0d9f0-affd-4ca3-8808-34590d68ad87",
+     "sku": "SUSQNY2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.5,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mix Sorpresa",
+      "cantidad quincenal": "2"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mix Sorpresa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "2"
+      }
+     ],
+     "id": "aaa00a3c-3761-4593-9ee5-19b2b84132fe",
+     "sku": "SUSQMX2",
+     "price": 36000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "360.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 36000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "360.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Oaxaca",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Oaxaca"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "9feee28f-d611-4df4-b3e2-7f4d75fa286a",
+     "sku": "SUSQO4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Chiapas",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Chiapas"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "fde9a7ad-98b6-4036-aa34-58c5cd1325b7",
+     "sku": "SUSQCH4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Veracruz",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Veracruz"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "4683599c-981d-482c-946d-07ee3af9f512",
+     "sku": "SUSQVZ4",
+     "price": 86000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "860.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 86000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "860.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Dark Side of the Fruit",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Dark Side of the Fruit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "e2329998-cfdf-4eaa-a677-feb896b209e2",
+     "sku": "SUSQDSF4",
+     "price": 90000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "900.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 90000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "900.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Resistencia",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Resistencia"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "f547bfc6-4270-4ee7-8a98-696e2eb970ea",
+     "sku": "SUSQRE4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mezcla de la Casa",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mezcla de la Casa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "32f8933f-92c3-4ea3-813d-05ac5d9d209e",
+     "sku": "SUSQMZ4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Nayarit",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Nayarit"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "043fea03-98ae-44cd-a2a7-b02c6e378d9a",
+     "sku": "SUSQNY4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 1.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    },
+    {
+     "attributes": {
+      "origen": "Mix Sorpresa",
+      "cantidad quincenal": "4"
+     },
+     "optionValues": [
+      {
+       "optionName": "origen",
+       "value": "Mix Sorpresa"
+      },
+      {
+       "optionName": "cantidad quincenal",
+       "value": "4"
+      }
+     ],
+     "id": "671d3ed0-e874-4eb6-9ef3-7c176d4f5a97",
+     "sku": "SUSQMX4",
+     "price": 72000,
+     "salePrice": 0,
+     "priceMoney": {
+      "currency": "MXN",
+      "value": "720.00"
+     },
+     "salePriceMoney": {
+      "currency": "MXN",
+      "value": "0.00"
+     },
+     "onSale": false,
+     "unlimited": true,
+     "qtyInStock": 0,
+     "width": 0.0,
+     "height": 0.0,
+     "weight": 0.0,
+     "imageIds": [],
+     "images": [],
+     "pricingOptions": [
+      {
+       "price": 72000,
+       "salePrice": 0,
+       "percentageDiscount": 0,
+       "priceMoney": {
+        "currency": "MXN",
+        "value": "720.00"
+       },
+       "salePriceMoney": {
+        "currency": "MXN",
+        "value": "0.00"
+       },
+       "onSale": false,
+       "productSubscriptionOptionId": "13a7e59e-546f-4de8-a93e-7500b8506675",
+       "subscriptionPlan": {
+        "billingPeriod": {
+         "value": 2,
+         "unit": "WEEK"
+        },
+        "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+        "numBillingCycles": 0
+       }
+      }
+     ],
+     "len": 0.0
+    }
+   ],
+   "variantOptionOrdering": [
+    "cantidad quincenal",
+    "origen"
+   ],
+   "isSubscribable": true,
+   "subscriptionPlan": {
+    "billingPeriod": {
+     "value": 2,
+     "unit": "WEEK"
+    },
+    "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+    "numBillingCycles": 0
+   },
+   "fulfilledExternally": false,
+   "productAddOnsConfiguration": {
+    "productAddOns": []
+   },
+   "productSubscriptionOptions": [
+    {
+     "id": "13a7e59e-546f-4de8-a93e-7500b8506675",
+     "percentageDiscount": 0,
+     "subscriptionPlan": {
+      "billingPeriod": {
+       "value": 2,
+       "unit": "WEEK"
+      },
+      "planVersionId": "f73c0c32-fb0e-449b-a932-aba51f6118c2",
+      "numBillingCycles": 0
+     }
+    }
+   ],
+   "mightHavePaymentPlan": false,
+   "items": [
+    {
+     "id": "66a19a0eb0ba3f0deca6bdb2",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1721866766087,
+     "updatedOn": 1721866776159,
+     "displayIndex": 0,
+     "workflowState": 1,
+     "authorId": "560b7791e4b0c1fb1809972b",
+     "parentId": "5f6973aaba1bde0a45575209",
+     "systemDataId": "1721866770143-EBI0CLY69THK5KV5YEKF",
+     "systemDataVariants": "3813x2851,100w,300w,500w,750w,1000w,1500w,2500w",
+     "systemDataSourceType": "JPG",
+     "filename": "PUEBLA BOLSAS CAFE CUCURUCHO copy 2.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "a8a5a5",
+      "topRightAverage": "d6d5d5",
+      "bottomLeftAverage": "a7a7a7",
+      "bottomRightAverage": "b1acac",
+      "centerAverage": "c2b9b9",
+      "suggestedBgColor": "b5b1b1"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1721866770143-EBI0CLY69THK5KV5YEKF/PUEBLA+BOLSAS+CAFE+CUCURUCHO+copy+2.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "3813x2851",
+     "recordTypeLabel": "image"
+    },
+    {
+     "id": "5f7664b5e022086e88cea38a",
+     "collectionId": "5f1106d43004f7151d18a8f6",
+     "recordType": 2,
+     "addedOn": 1601594549275,
+     "updatedOn": 1601594584471,
+     "displayIndex": 1,
+     "workflowState": 1,
+     "authorId": "5f31d13ed2eef2351703adad",
+     "parentId": "5f6973aaba1bde0a45575209",
+     "systemDataId": "1601594577254-2H9VCOTYXC80VRSG32VO",
+     "systemDataVariants": "2500x1667,100w,300w,500w,750w,1000w,1500w,2500w",
+     "systemDataSourceType": "JPG",
+     "filename": "CUCURUCHO_CAFES_B.jpg",
+     "mediaFocalPoint": {
+      "x": 0.5,
+      "y": 0.5,
+      "source": 3
+     },
+     "colorData": {
+      "topLeftAverage": "b1b1b1",
+      "topRightAverage": "b2b2b2",
+      "bottomLeftAverage": "d4b0b3",
+      "bottomRightAverage": "d0cdcb",
+      "centerAverage": "afafae",
+      "suggestedBgColor": "c2c2c2"
+     },
+     "title": "",
+     "body": null,
+     "likeCount": 0,
+     "commentCount": 0,
+     "publicCommentCount": 0,
+     "commentState": 1,
+     "fullUrl": "/tienda/null",
+     "assetUrl": "https://images.squarespace-cdn.com/content/v1/5f109cfd8d6eea4f0def46e5/1601594577254-2H9VCOTYXC80VRSG32VO/CUCURUCHO_CAFES_B.jpg",
+     "contentType": "image/jpeg",
+     "pushedServices": {},
+     "pendingPushedServices": {},
+     "originalSize": "2500x1667",
+     "recordTypeLabel": "image"
+    }
+   ],
+   "pushedServices": {},
+   "pendingPushedServices": {},
+   "originalSize": "3813x2851",
+   "recordTypeLabel": "store-item"
+  }
+ ],
+ "pagination": null
+}

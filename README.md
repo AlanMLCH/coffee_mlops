@@ -13,7 +13,7 @@ Everything runs locally. No cloud, no recurring costs.
 
 ## Status
 
-**Stage 2 — APIs, geospatial, and the core extracted.** Stage 1 is complete.
+**Stage 3 — scraping, RAG and the agent (in progress).** Stages 1 and 2 are complete.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -33,6 +33,7 @@ Everything runs locally. No cloud, no recurring costs.
 | [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` (1,125) or `ice_cream` (232) in Mexico City | 1,357 | Overpass API, no credential |
 | [USDA FAS Open Data](https://apps.fas.usda.gov/opendataweb/) (stage 2) | The same PSD coffee balance, by market year, through an API | 87,704 | API key in a header, free |
 | [SIAP cierre agrícola](https://nube.agricultura.gob.mx/datosAbiertos/Agricola.php) (stage 2) | Every crop in every Mexican municipality, 2025; coffee cherry in 489 of them | 35,902 | Direct download, Latin-1 |
+| Roasters' shops (stage 3): Almanegra, Buna, Café con Jiribilla, Cucurucho | Every coffee they sell, as their own shops list it: 168 coffees in 528 offers (a product in one size) | 528 | Shopify / Squarespace catalog JSON, product pages where needed, robots.txt first |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
@@ -83,15 +84,18 @@ flowchart TD
             osm_places["osm_places<br/>Overpass · one query"]
             fas_psd_coffee["fas_psd_coffee<br/>USDA FAS · key in header, by year"]
         end
+        subgraph SHOPS["Shops, read politely"]
+            direction TB
+            roaster_catalogs["roaster_catalogs<br/>4 roasters · Shopify + Squarespace<br/>robots.txt first · product pages"]
+        end
         subgraph LATER["Stage 3, planned"]
             direction TB
-            roasters["roaster shops<br/>scraping"]
             documents["technical documents<br/>cultivation · processing · roasting"]
         end
     end
 
     extract_files["mlops data extract<br/>stream the file, de-duplicate by sha256"]
-    extract_apis["adapter.extract<br/>ApiClient: rate limit, retries, expiring cache"]
+    extract_apis["adapter.extract<br/>ApiClient: rate limit, retries, expiring cache<br/>RobotsPolicy for shops"]
     raw[("raw/<br/>untouched bytes + manifest<br/>one partition per ingestion")]
     validate[["validate<br/>one Pandera contract per source<br/>CSV · map layer · API JSON"]]
 
@@ -128,6 +132,7 @@ flowchart TD
 
     FILES --> extract_files
     APIS --> extract_apis
+    SHOPS --> extract_apis
     extract_files & extract_apis --> raw
     raw --> validate --> CLEAN
     CLEAN --- audits
@@ -150,9 +155,9 @@ flowchart TD
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
     class extract_files,validate,train,gate,api,analysis,dashboard core
     class extract_apis,review_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
-    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee domain
+    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,catalog store
-    class roasters,documents,corpus,vectors,agent planned
+    class documents,corpus,vectors,agent planned
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -428,6 +433,14 @@ The evaluation is built to survive a small test set:
   never reach a cache key, a manifest or a log line — DENUE carries its token in the URL
   path, so request URLs are never logged, and that safeguard lives with the client
   rather than in one entry point.
+- Shops are read politely, and the rules for that live in the core, not in a scraper:
+  every page is checked against the site's robots.txt for this project's agent first
+  (`mlops_core.data.robots`), a `Crawl-delay` is honoured, and requests are at least 3 s
+  apart. A robots.txt that is missing allows everything, but one a failing server cannot
+  serve closes the site (RFC 9309): silence is not permission. A refusal skips that shop
+  out loud; it is never read around. The platform's own catalog JSON is read rather than
+  the rendered pages, which change with every theme; a product page is read only where
+  the attributes live nowhere else.
 - `make extract` runs the file sources always and an API source when it can: Overpass
   needs no credential, DENUE and FAS are skipped out loud without theirs, so a fresh clone
   still builds all of stage 1. Which sources exist and what each one needs lives in one

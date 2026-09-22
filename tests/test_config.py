@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 import domains.coffee
-from domains.coffee.config import CoffeeConfig, CoffeeCredentials
+from domains.coffee.config import CoffeeConfig, CoffeeCredentials, ShopConfig
 from mlops_core.adapter import available_domains, load_adapter
 from mlops_core.config import ModelSpec, Settings, load_config
 
@@ -87,6 +87,12 @@ def test_zip_source_must_name_its_member(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="member"):
         load_config(tmp_path / "bad.yaml", CoffeeConfig)
+
+
+def test_a_squarespace_shop_must_say_where_its_store_is() -> None:
+    """Squarespace has no fixed catalog path, unlike Shopify's `/products.json`."""
+    with pytest.raises(ValidationError, match="store_path"):
+        ShopConfig(shop="nowhere", platform="squarespace", base_url="https://shop.test")
 
 
 @pytest.mark.parametrize("leaked", ["aroma", "total_cup_points"])

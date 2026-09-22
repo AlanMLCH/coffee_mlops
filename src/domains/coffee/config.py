@@ -6,7 +6,9 @@ years), a cleaning vocabulary for two CQI snapshots that disagree about spelling
 the market studies that only make sense for a commodity with a world balance.
 """
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from typing import Literal, Self
+
+from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mlops_core.config import DomainConfig
@@ -72,6 +74,43 @@ class FasConfig(BaseModel):
     filename: str
     rate_limit_seconds: float
     cache_hours: float  # see DenueConfig
+
+
+class ShopConfig(BaseModel):
+    """One roaster's online shop, and how to tell its coffee from everything else it sells."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    shop: str
+    platform: Literal["shopify", "squarespace"]
+    base_url: str
+    store_path: str | None = None  # Squarespace: the store page whose JSON lists the items
+    # A listing is coffee when its type or one of its tags is listed here. Both empty: the
+    # shop sells only coffee, and every listing counts.
+    product_types: list[str] = []
+    tags: list[str] = []
+    exclude_titles: list[str] = []  # regexes for merch and subscriptions sold beside it
+    # The catalog JSON leaves the attributes out; they are only on the product page.
+    product_pages: bool = False
+
+    @model_validator(mode="after")
+    def _squarespace_needs_a_store(self) -> Self:
+        if self.platform == "squarespace" and self.store_path is None:
+            raise ValueError(f"{self.shop}: a Squarespace shop needs `store_path`")
+        return self
+
+
+class RoastersConfig(BaseModel):
+    """The roasters' shops read in stage 3, as one raw source."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    filename: str
+    # A shop is not an API: slower than any of them. A robots.txt Crawl-delay wins if longer.
+    rate_limit_seconds: float
+    cache_hours: float
+    shops: list[ShopConfig]
 
 
 class ShopKindRule(BaseModel):
@@ -147,6 +186,7 @@ class CoffeeConfig(DomainConfig):
     denue: DenueConfig | None = None
     overpass: OverpassConfig | None = None
     fas: FasConfig | None = None
+    roasters: RoastersConfig | None = None
     cleaning: CleaningConfig
     production: ProductionConfig
     market_analysis: MarketAnalysisConfig

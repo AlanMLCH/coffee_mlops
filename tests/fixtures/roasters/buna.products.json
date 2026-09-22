@@ -1,0 +1,528 @@
+{
+ "products": [
+  {
+   "id": 8319044517958,
+   "title": "Café Guarumbo",
+   "handle": "cafe-guarumbo",
+   "body_html": "<p>Guarumbo es un sello con mezcla de café arábiga y robusta diseñado para transmitir sensaciones dulces y especiadas.</p>",
+   "published_at": "2026-04-01T22:46:55-06:00",
+   "created_at": "2026-03-31T12:26:51-06:00",
+   "updated_at": "2026-09-21T23:05:41-06:00",
+   "vendor": "BUNA",
+   "product_type": "Café",
+   "tags": [
+    "B2C",
+    "Café",
+    "Destacados"
+   ],
+   "variants": [
+    {
+     "id": 44830786814022,
+     "title": "Compra única / 340 gr / Molido medio",
+     "option1": "Compra única",
+     "option2": "340 gr",
+     "option3": "Molido medio",
+     "sku": "CAF-GUA-01-02-02-CU",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": {
+      "id": 38019480289350,
+      "product_id": 8319044517958,
+      "position": 1,
+      "created_at": "2026-04-08T12:41:40-06:00",
+      "updated_at": "2026-04-08T12:41:51-06:00",
+      "alt": null,
+      "width": 1600,
+      "height": 1600,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_aadaf0f9-a482-4d81-9369-06b13658b0e2.webp?v=1775673711",
+      "variant_ids": [
+       44830786814022,
+       44830786846790
+      ]
+     },
+     "available": true,
+     "price": "310.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 8319044517958,
+     "created_at": "2026-04-01T22:08:58-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 44830786846790,
+     "title": "Compra única / 340 gr / En grano",
+     "option1": "Compra única",
+     "option2": "340 gr",
+     "option3": "En grano",
+     "sku": "CAF-GUA-01-02-01-CU",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": {
+      "id": 38019480289350,
+      "product_id": 8319044517958,
+      "position": 1,
+      "created_at": "2026-04-08T12:41:40-06:00",
+      "updated_at": "2026-04-08T12:41:51-06:00",
+      "alt": null,
+      "width": 1600,
+      "height": 1600,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_aadaf0f9-a482-4d81-9369-06b13658b0e2.webp?v=1775673711",
+      "variant_ids": [
+       44830786814022,
+       44830786846790
+      ]
+     },
+     "available": true,
+     "price": "310.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 2,
+     "product_id": 8319044517958,
+     "created_at": "2026-04-01T22:08:58-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 44830786879558,
+     "title": "Compra única / 2 kg / Molido medio",
+     "option1": "Compra única",
+     "option2": "2 kg",
+     "option3": "Molido medio",
+     "sku": "CAF-GUA-01-01-02-CU",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": {
+      "id": 38009738428486,
+      "product_id": 8319044517958,
+      "position": 5,
+      "created_at": "2026-04-07T16:08:58-06:00",
+      "updated_at": "2026-04-08T12:41:51-06:00",
+      "alt": null,
+      "width": 1200,
+      "height": 1200,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_395decbd-7d7b-4a84-8619-e10b0077ac77.png?v=1775673711",
+      "variant_ids": [
+       44830786879558,
+       44830786912326
+      ]
+     },
+     "available": true,
+     "price": "1250.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 3,
+     "product_id": 8319044517958,
+     "created_at": "2026-04-01T22:08:58-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 44830786912326,
+     "title": "Compra única / 2 kg / En grano",
+     "option1": "Compra única",
+     "option2": "2 kg",
+     "option3": "En grano",
+     "sku": "CAF-GUA-01-01-01-CU",
+     "requires_shipping": true,
+     "taxable": false,
+     "featured_image": {
+      "id": 38009738428486,
+      "product_id": 8319044517958,
+      "position": 5,
+      "created_at": "2026-04-07T16:08:58-06:00",
+      "updated_at": "2026-04-08T12:41:51-06:00",
+      "alt": null,
+      "width": 1200,
+      "height": 1200,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_395decbd-7d7b-4a84-8619-e10b0077ac77.png?v=1775673711",
+      "variant_ids": [
+       44830786879558,
+       44830786912326
+      ]
+     },
+     "available": true,
+     "price": "1250.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 4,
+     "product_id": 8319044517958,
+     "created_at": "2026-04-01T22:08:58-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    }
+   ],
+   "images": [
+    {
+     "id": 38019480289350,
+     "created_at": "2026-04-08T12:41:40-06:00",
+     "position": 1,
+     "updated_at": "2026-04-08T12:41:51-06:00",
+     "product_id": 8319044517958,
+     "variant_ids": [
+      44830786814022,
+      44830786846790
+     ],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_aadaf0f9-a482-4d81-9369-06b13658b0e2.webp?v=1775673711",
+     "width": 1600,
+     "height": 1600
+    },
+    {
+     "id": 37908749287494,
+     "created_at": "2026-03-30T14:32:17-06:00",
+     "position": 2,
+     "updated_at": "2026-04-08T12:41:51-06:00",
+     "product_id": 8319044517958,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/BUNA_Productos_Guarumbo-side_a8cb48be-5fbf-41e8-b605-747fa9ca3314.webp?v=1775673711",
+     "width": 1600,
+     "height": 1600
+    },
+    {
+     "id": 37908749254726,
+     "created_at": "2026-03-30T14:32:15-06:00",
+     "position": 3,
+     "updated_at": "2026-04-08T12:41:51-06:00",
+     "product_id": 8319044517958,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/BUNA_Productos_Guarumbo-lifestyle-1_57be5c86-1468-42ba-884a-3fb6151982ef.webp?v=1775673711",
+     "width": 1600,
+     "height": 1600
+    },
+    {
+     "id": 37908749221958,
+     "created_at": "2026-03-30T14:32:14-06:00",
+     "position": 4,
+     "updated_at": "2026-04-08T12:41:51-06:00",
+     "product_id": 8319044517958,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/BUNA_Productos_Guarumbo-lifestyle-2_4941f976-b54e-4ca1-a115-eaf6622a530d.webp?v=1775673711",
+     "width": 1600,
+     "height": 1600
+    },
+    {
+     "id": 38009738428486,
+     "created_at": "2026-04-07T16:08:58-06:00",
+     "position": 5,
+     "updated_at": "2026-04-08T12:41:51-06:00",
+     "product_id": 8319044517958,
+     "variant_ids": [
+      44830786879558,
+      44830786912326
+     ],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/guarumbo_395decbd-7d7b-4a84-8619-e10b0077ac77.png?v=1775673711",
+     "width": 1200,
+     "height": 1200
+    }
+   ],
+   "options": [
+    {
+     "name": "Tipo de compra",
+     "position": 1,
+     "values": [
+      "Compra única"
+     ]
+    },
+    {
+     "name": "Tamaño",
+     "position": 2,
+     "values": [
+      "340 gr",
+      "2 kg"
+     ]
+    },
+    {
+     "name": "Presentación",
+     "position": 3,
+     "values": [
+      "Molido medio",
+      "En grano"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8497755717702,
+   "title": "Micha y Micha",
+   "handle": "micha-y-micha",
+   "body_html": "<p dir=\"ltr\"><span>Creamos Micha y Micha para quienes buscan ese punto medio perfecto. Esta mezcla mitad cafeína y mitad descafeinado se prepara desde antes del tueste para desarrollar un perfil propio, con notas a caramelo, nuez y piloncillo que acompañan cualquier momento del día.</span></p>\n<p> </p>",
+   "published_at": "2026-08-10T15:28:42-06:00",
+   "created_at": "2026-08-05T16:34:03-06:00",
+   "updated_at": "2026-09-21T23:05:41-06:00",
+   "vendor": "BUNA",
+   "product_type": "",
+   "tags": [
+    "Café",
+    "Destacados"
+   ],
+   "variants": [
+    {
+     "id": 46099295567942,
+     "title": "340 gr / Molido medio",
+     "option1": "340 gr",
+     "option2": "Molido medio",
+     "option3": null,
+     "sku": "CAF-MIC-01-02-02-CU",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": {
+      "id": 39449178013766,
+      "product_id": 8497755717702,
+      "position": 3,
+      "created_at": "2026-08-05T16:28:34-06:00",
+      "updated_at": "2026-08-05T16:28:35-06:00",
+      "alt": null,
+      "width": 1080,
+      "height": 1080,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-2.png?v=1785968915",
+      "variant_ids": [
+       46099295567942,
+       46099295600710
+      ]
+     },
+     "available": true,
+     "price": "365.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 8497755717702,
+     "created_at": "2026-08-05T16:34:04-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 46099295600710,
+     "title": "340 gr / En grano",
+     "option1": "340 gr",
+     "option2": "En grano",
+     "option3": null,
+     "sku": "CAF-MIC-01-02-01-CU",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": {
+      "id": 39449178013766,
+      "product_id": 8497755717702,
+      "position": 3,
+      "created_at": "2026-08-05T16:28:34-06:00",
+      "updated_at": "2026-08-05T16:28:35-06:00",
+      "alt": null,
+      "width": 1080,
+      "height": 1080,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-2.png?v=1785968915",
+      "variant_ids": [
+       46099295567942,
+       46099295600710
+      ]
+     },
+     "available": true,
+     "price": "365.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 2,
+     "product_id": 8497755717702,
+     "created_at": "2026-08-05T16:34:04-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 46099295666246,
+     "title": "2 kg / Molido medio",
+     "option1": "2 kg",
+     "option2": "Molido medio",
+     "option3": null,
+     "sku": "CAF-MIC-01-01-02-CU",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": {
+      "id": 39449178079302,
+      "product_id": 8497755717702,
+      "position": 4,
+      "created_at": "2026-08-05T16:28:34-06:00",
+      "updated_at": "2026-08-05T16:28:35-06:00",
+      "alt": null,
+      "width": 1080,
+      "height": 1080,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-4.png?v=1785968915",
+      "variant_ids": [
+       46099295666246,
+       46099295699014
+      ]
+     },
+     "available": true,
+     "price": "1450.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 3,
+     "product_id": 8497755717702,
+     "created_at": "2026-08-05T16:34:04-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    },
+    {
+     "id": 46099295699014,
+     "title": "2 kg / En grano",
+     "option1": "2 kg",
+     "option2": "En grano",
+     "option3": null,
+     "sku": "CAF-MIC-01-01-01-CU",
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": {
+      "id": 39449178079302,
+      "product_id": 8497755717702,
+      "position": 4,
+      "created_at": "2026-08-05T16:28:34-06:00",
+      "updated_at": "2026-08-05T16:28:35-06:00",
+      "alt": null,
+      "width": 1080,
+      "height": 1080,
+      "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-4.png?v=1785968915",
+      "variant_ids": [
+       46099295666246,
+       46099295699014
+      ]
+     },
+     "available": true,
+     "price": "1450.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 4,
+     "product_id": 8497755717702,
+     "created_at": "2026-08-05T16:34:04-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    }
+   ],
+   "images": [
+    {
+     "id": 39449177980998,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 1,
+     "updated_at": "2026-08-05T16:28:35-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-1.png?v=1785968915",
+     "width": 1080,
+     "height": 1080
+    },
+    {
+     "id": 39449178046534,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 2,
+     "updated_at": "2026-08-05T16:28:36-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-3.png?v=1785968916",
+     "width": 1080,
+     "height": 1080
+    },
+    {
+     "id": 39449178013766,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 3,
+     "updated_at": "2026-08-05T16:28:35-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [
+      46099295567942,
+      46099295600710
+     ],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-2.png?v=1785968915",
+     "width": 1080,
+     "height": 1080
+    },
+    {
+     "id": 39449178079302,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 4,
+     "updated_at": "2026-08-05T16:28:35-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [
+      46099295666246,
+      46099295699014
+     ],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/micha-4.png?v=1785968915",
+     "width": 1080,
+     "height": 1080
+    },
+    {
+     "id": 39449178112070,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 5,
+     "updated_at": "2026-08-05T16:28:35-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/MichayMicha340_3.png?v=1785968915",
+     "width": 1080,
+     "height": 1080
+    },
+    {
+     "id": 39449178144838,
+     "created_at": "2026-08-05T16:28:34-06:00",
+     "position": 6,
+     "updated_at": "2026-08-05T16:28:35-06:00",
+     "product_id": 8497755717702,
+     "variant_ids": [],
+     "src": "https://cdn.shopify.com/s/files/1/1407/6980/files/MichayMicha340_4.png?v=1785968915",
+     "width": 1080,
+     "height": 1080
+    }
+   ],
+   "options": [
+    {
+     "name": "Tamaño",
+     "position": 1,
+     "values": [
+      "340 gr",
+      "2 kg"
+     ]
+    },
+    {
+     "name": "Presentación",
+     "position": 2,
+     "values": [
+      "Molido medio",
+      "En grano"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 8564686618694,
+   "title": "Cofia",
+   "handle": "cofia",
+   "body_html": "",
+   "published_at": "2026-09-18T14:32:21-06:00",
+   "created_at": "2026-09-18T14:32:20-06:00",
+   "updated_at": "2026-09-21T23:05:41-06:00",
+   "vendor": "BUNA",
+   "product_type": "",
+   "tags": [
+    "CEDIS"
+   ],
+   "variants": [
+    {
+     "id": 46598526566470,
+     "title": "Default Title",
+     "option1": "Default Title",
+     "option2": null,
+     "option3": null,
+     "sku": null,
+     "requires_shipping": true,
+     "taxable": true,
+     "featured_image": null,
+     "available": false,
+     "price": "0.00",
+     "grams": 0,
+     "compare_at_price": null,
+     "position": 1,
+     "product_id": 8564686618694,
+     "created_at": "2026-09-18T14:32:20-06:00",
+     "updated_at": "2026-09-21T23:05:41-06:00"
+    }
+   ],
+   "images": [],
+   "options": [
+    {
+     "name": "Title",
+     "position": 1,
+     "values": [
+      "Default Title"
+     ]
+    }
+   ]
+  }
+ ]
+}

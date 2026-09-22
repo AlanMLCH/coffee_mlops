@@ -55,6 +55,7 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
         "cdmx_boroughs",
         "siap_agricola",
         "osm_places",
+        "roaster_catalogs",  # the shops need no credential either, only robots.txt's leave
     }
 
 

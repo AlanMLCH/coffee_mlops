@@ -64,7 +64,7 @@ class CoffeeAdapter:
         return RAW_SCHEMAS
 
     def json_readers(self) -> Mapping[str, JsonReader]:
-        from domains.coffee.sources import denue, fas, overpass
+        from domains.coffee.sources import denue, fas, overpass, roasters
 
         config = self.config
         readers: dict[str, JsonReader] = {}
@@ -74,6 +74,8 @@ class CoffeeAdapter:
             readers[config.overpass.name] = overpass.to_frame
         if config.fas is not None:
             readers[config.fas.name] = fas.to_frame
+        if config.roasters is not None:
+            readers[config.roasters.name] = roasters.to_frame
         return readers
 
     def clean(self, raw: Mapping[str, pl.DataFrame]) -> Mapping[str, CleanTable]:

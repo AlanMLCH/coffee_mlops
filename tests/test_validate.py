@@ -21,7 +21,7 @@ def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFram
 
 def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> None:
     """Including the API sources, which are configured apart from the file downloads."""
-    apis = (coffee_config.denue, coffee_config.overpass, coffee_config.fas)
+    apis = (coffee_config.denue, coffee_config.overpass, coffee_config.fas, coffee_config.roasters)
     api = {source.name for source in apis if source}
 
     assert coffee_config.sources.keys() | api == RAW_SCHEMAS.keys()
@@ -41,6 +41,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "osm_places": 7,
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
         "siap_agricola": 13,
+        "roaster_catalogs": 33,  # offers: a product in one size
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()

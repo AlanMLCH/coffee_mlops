@@ -115,6 +115,35 @@ fas:
   # Recent market years are revised with each circular; a day keeps up with that.
   cache_hours: 24
 
+# Stage 3, no credential: Mexico City's specialty roasters, read from their own shops'
+# catalogs. Verified 2026-09-21: robots.txt allows this project's agent on all four, and
+# none asks for a Crawl-delay. What each shop needs to be read right is data, below.
+roasters:
+  name: roaster_catalogs
+  filename: roaster_catalogs.json
+  rate_limit_seconds: 3.0
+  cache_hours: 24
+  shops:
+    - shop: almanegra
+      platform: shopify
+      base_url: https://almanegra.cafe
+      product_types: [Coffee] # 130 of its 284 listings; the rest is gear and merch
+    - shop: buna
+      platform: shopify
+      base_url: https://buna.mx
+      tags: ["Café"] # product_type is mostly empty; the tag is not
+      # Region, altitude, varieties and process are on the product page, not in the JSON.
+      product_pages: true
+    - shop: jiribilla
+      platform: shopify
+      base_url: https://cafeconjiribilla.com # Café con Jiribilla sells only coffee
+    - shop: cucurucho
+      platform: squarespace
+      base_url: https://cucuruchocafe.com
+      store_path: /tienda
+      # The store page lists merch and subscriptions beside the coffee, untagged.
+      exclude_titles: ["^tote", "^playera", "chamarra", "^suscripci"]
+
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
 cleaning:

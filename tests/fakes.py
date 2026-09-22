@@ -66,7 +66,7 @@ def without_rate_limits(config: CoffeeConfig) -> CoffeeConfig:
     """
     quick = {
         name: source.model_copy(update={"rate_limit_seconds": 0.0})
-        for name in ("denue", "overpass", "fas")
+        for name in ("denue", "overpass", "fas", "roasters")
         if (source := getattr(config, name)) is not None
     }
     return config.model_copy(update=quick)
@@ -110,6 +110,51 @@ def fas_response(request: httpx.Request, recording: dict[str, Any]) -> httpx.Res
     return httpx.Response(200, json=recording["years"].get(endpoint.rsplit("/", 1)[1], []))
 
 
+SHOP_FIXTURES = FIXTURES / "roasters"
+# Shop host -> the name its recordings are saved under.
+SHOP_HOSTS = {
+    "buna.mx": "buna",
+    "almanegra.cafe": "almanegra",
+    "cafeconjiribilla.com": "cafeconjiribilla",
+    "cucuruchocafe.com": "cucurucho",
+}
+
+
+def shop_response(request: httpx.Request) -> httpx.Response | None:
+    """Answer like the roasters' shops from their recordings, or None for another host.
+
+    One catalog page is recorded per shop, so a second page comes back empty, as a
+    short catalog's would. A product page that was not recorded is a 404.
+    """
+    prefix = SHOP_HOSTS.get(request.url.host)
+    if prefix is None:
+        return None
+    path, params = request.url.path, request.url.params
+    if path == "/robots.txt":
+        return httpx.Response(
+            200, text=(SHOP_FIXTURES / f"{request.url.host}.robots.txt").read_text(encoding="utf-8")
+        )
+    if path == "/products.json":
+        recorded = SHOP_FIXTURES / f"{prefix}.products.json"
+        body = (
+            recorded.read_text(encoding="utf-8")
+            if params.get("page") == "1"
+            else '{"products": []}'
+        )
+        return httpx.Response(
+            200, content=body.encode("utf-8"), headers={"content-type": "application/json"}
+        )
+    if path == "/tienda" and params.get("format") == "json":
+        body = (SHOP_FIXTURES / f"{prefix}.tienda.json").read_text(encoding="utf-8")
+        return httpx.Response(
+            200, content=body.encode("utf-8"), headers={"content-type": "application/json"}
+        )
+    page = SHOP_FIXTURES / f"{prefix}.{path.removeprefix('/products/')}.html"
+    if path.startswith("/products/") and page.is_file():
+        return httpx.Response(200, text=page.read_text(encoding="utf-8"))
+    return httpx.Response(404)
+
+
 class RecordedServer:
     """Replays payloads by URL. Mutate `payloads` to simulate an upstream change."""
 
@@ -139,6 +184,9 @@ class RecordedServer:
         fas = None if self.fas is None else fas_response(request, self.fas)
         if fas is not None:
             return fas
+        shop = shop_response(request)
+        if shop is not None:
+            return shop
         if url in self.payloads:
             return httpx.Response(
                 200,
