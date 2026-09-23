@@ -97,14 +97,24 @@ def ingest(
     client: httpx.Client,
     now: datetime | None = None,
 ) -> RawArtifact:
+    return ingest_file(name, str(source.url), source.filename, raw_dir, client, now)
+
+
+def ingest_file(
+    name: str,
+    url: str,
+    filename: str,
+    raw_dir: Path,
+    client: httpx.Client,
+    now: datetime | None = None,
+) -> RawArtifact:
+    """Stream a file into a raw partition: a table, a map layer, a document, any bytes."""
     source_dir = raw_dir / name
     source_dir.mkdir(parents=True, exist_ok=True)
-    part_file = source_dir / f".{source.filename}.part"
+    part_file = source_dir / f".{filename}.part"
 
-    sha256, size, last_modified = _download(client, str(source.url), part_file)
-    return _store(
-        name, source.filename, part_file, raw_dir, str(source.url), sha256, size, last_modified, now
-    )
+    sha256, size, last_modified = _download(client, url, part_file)
+    return _store(name, filename, part_file, raw_dir, url, sha256, size, last_modified, now)
 
 
 def store_payload(

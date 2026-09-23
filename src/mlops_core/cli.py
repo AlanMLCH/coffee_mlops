@@ -21,6 +21,7 @@ from mlops_core.adapter import DomainAdapter, load_adapter
 from mlops_core.config import DomainConfig, Settings
 from mlops_core.data.api import silence_request_urls
 from mlops_core.data.clean import build_clean
+from mlops_core.data.documents import fetch_documents
 from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
 from mlops_core.provenance import REPO_ROOT
@@ -97,7 +98,8 @@ def extract(domain: Domain = None) -> None:
     """Download every source of the domain to the raw layer.
 
     File sources always run. An API source runs when its credential is configured and is
-    skipped out loud when it is not, so a fresh clone still builds the whole stage 1.
+    skipped out loud when it is not, so a fresh clone still builds the whole stage 1. A
+    document a publisher refuses to serve is skipped the same way, saying where to put it.
     """
     adapter = _adapter(domain)
     config = adapter.config
@@ -105,9 +107,10 @@ def extract(domain: Domain = None) -> None:
     with http_client() as client:
         artifacts = extract_all(config, data_dir / "raw", client)
         api = adapter.extract(data_dir, client)
-    for name, reason in api.skipped.items():
+        corpus, absent = fetch_documents(config.documents, data_dir, client)
+    for name, reason in (api.skipped | absent).items():
         typer.echo(f"{name}: skipped, {reason}", err=True)
-    for name, artifact in (artifacts | api.artifacts).items():
+    for name, artifact in (artifacts | api.artifacts | corpus).items():
         typer.echo(f"{name}: {artifact.path} ({artifact.manifest.size_bytes:,} bytes)")
 
 

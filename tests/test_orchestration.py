@@ -111,6 +111,7 @@ def test_every_asset_runs_its_own_pipeline_step(
     monkeypatch.setattr(coffee_adapter, "extract", extract)
     stubs = {
         "extract_all": Stub({"cqi_2018": artifact}),
+        "fetch_documents": Stub(({"wcr_arabica_catalog": artifact}, {"sca_103_descriptive": "x"})),
         "build_clean": Stub({"coffee_reviews": Path("reviews.parquet")}),
         "build_features": Stub(Path("features.parquet")),
         "train_model": Stub(TrainResult("run-1", "3", True, {"test_mae": 1.5})),
@@ -136,5 +137,5 @@ def test_every_asset_runs_its_own_pipeline_step(
     assert model.metadata["version"].value == "3"
     assert model.metadata["promoted"].value == "True"
     raw = result.asset_materializations_for_node("coffee__raw_sources")[0]
-    assert raw.metadata["sources"].value == 2  # one file source, one API source
-    assert raw.metadata["skipped"].value == "denue_cafes (no token)"
+    assert raw.metadata["sources"].value == 3  # a file source, an API source, a document
+    assert raw.metadata["skipped"].value == "denue_cafes (no token), sca_103_descriptive (x)"

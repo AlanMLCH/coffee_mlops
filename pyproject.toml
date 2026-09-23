@@ -47,6 +47,18 @@ analysis = [
     "streamlit>=1.52.0",
 ]
 
+# The corpus the agent explains from: PDFs and article XML into text. `cryptography`
+# because the SCA's standards are encrypted with permissions (pypdf opens them with an
+# empty password, but needs AES to do it).
+rag = [
+    "coffee-mlops[data]",
+    "cryptography>=46.0.5",
+    # The stdlib XML parser is a known hazard on files from the internet; this is the
+    # standard mitigation, and Europe PMC's articles are XML.
+    "defusedxml>=0.7.1",
+    "pypdf>=6.6.1",
+]
+
 # Dagster orchestrates both pipelines, so it needs both.
 orchestration = [
     "coffee-mlops[data,ml]",
@@ -123,5 +135,6 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.8",
+    "types-defusedxml>=0.7",
     "types-pyyaml>=6.0.12.20260906",
 ]

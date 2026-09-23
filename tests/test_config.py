@@ -95,6 +95,24 @@ def test_a_squarespace_shop_must_say_where_its_store_is() -> None:
         ShopConfig(shop="nowhere", platform="squarespace", base_url="https://shop.test")
 
 
+def test_a_document_filed_under_an_unknown_topic_is_refused() -> None:
+    """A topic nobody declared would route nothing and be found by nobody."""
+    config = load_adapter("coffee").config.model_dump()
+    config["documents"][0]["topics"] = ["barista history"]
+
+    with pytest.raises(ValidationError, match="barista history"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_two_documents_cannot_share_a_name() -> None:
+    """They would share a raw folder, and each ingestion would look like a change."""
+    config = load_adapter("coffee").config.model_dump()
+    config["documents"].append(config["documents"][0])
+
+    with pytest.raises(ValidationError, match="Document names must be unique"):
+        CoffeeConfig.model_validate(config)
+
+
 def test_the_roasters_processes_speak_the_cqi_vocabulary() -> None:
     """Otherwise a roaster's "washed" and a graded lot's could not be compared."""
     cleaning = load_adapter("coffee").config.cleaning.model_dump()

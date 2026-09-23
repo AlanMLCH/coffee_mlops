@@ -22,6 +22,7 @@ import polars as pl
 from mlops_core.adapter import DomainAdapter
 from mlops_core.config import SourceConfig
 from mlops_core.contracts import check_contract
+from mlops_core.data.documents import DOCUMENT_PARTS, read_document
 from mlops_core.data.extract import RawArtifact, latest_ingestion
 from mlops_core.data.geo import read_areas
 
@@ -79,6 +80,16 @@ def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSo
             continue
         payload = json.loads(artifact.path.read_text(encoding="utf-8"))
         validated[name] = _checked(contracts[name], artifact, read_json(payload))
+
+    for document in adapter.config.documents:
+        artifact = latest_ingestion(raw_dir, document.name)
+        if artifact is None:
+            # A document nobody handed over yet: the corpus is short, not broken.
+            logger.info("%s has never been ingested; skipping its contract", document.name)
+            continue
+        validated[document.name] = _checked(
+            DOCUMENT_PARTS, artifact, read_document(artifact, document)
+        )
     return validated
 
 

@@ -209,3 +209,18 @@ states it. The listed `price_mxn` is dropped: the target is it divided by the si
 `raw/<source>/ingested_at=<timestamp>/` holds each download **exactly as served**, next
 to a manifest with the URL, sha256, size and ingestion time. Nothing is parsed there.
 Sources: `cqi_2018`, `cqi_2023`, `psd_coffee` (see the README).
+
+### Documents
+
+Each document of the corpus is a source of its own, stored as the PDF or the article XML
+it was served as. Read into a frame of parts, which is what its contract checks:
+
+| Column | Type | Meaning |
+|---|---|---|
+| `document_id` | String | The document, as `documents:` names it in the config |
+| `part` | Int | Page of a PDF or section of an article, in reading order; a page with no text is left out and the others keep their numbers, so a citation still points at the right page |
+| `part_title` | String? | The section's heading, for an article; a PDF has none a parser can trust |
+| `text` | String | The part's text, Unicode-normalised so a ligature ("coﬀee") is searchable |
+
+The rest of what is known about a document - title, publisher, year, licence, language
+and its topics - is config, not data, and travels with every chunk of it.

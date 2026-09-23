@@ -80,6 +80,37 @@ class SourceConfig(BaseModel):
         return self
 
 
+class DocumentConfig(BaseModel):
+    """One document of the domain's corpus: where it comes from, and what it is.
+
+    Text the agent explains from, never figures: a PDF's tables come out of extraction
+    scrambled, and an answer built from them is confidently wrong. Numbers are answered
+    from the tables, which is what the SQL tool is for.
+
+    The metadata is not decoration: it travels with every chunk, so an answer can say who
+    published it, when, and under what licence.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # its raw source folder
+    title: str
+    publisher: str
+    # The edition's year, where it states one: a catalogue that is revised silently does
+    # not, and a guessed year in a citation is worse than none.
+    year: int | None = None
+    # Where it came from: fetched from here, and cited in an answer.
+    url: HttpUrl
+    license: str
+    language: str  # of the text as published, ISO 639-1
+    topics: list[str] = Field(min_length=1)  # the domain's own vocabulary
+    format: Literal["pdf", "jats"]  # JATS is the XML article format Europe PMC serves
+    # Some publishers answer 403 to anything that is not a browser, licence
+    # notwithstanding. Those are fetched by hand into <data_dir>/inbox/documents/ and
+    # named here: a refusal is respected, never worked around.
+    inbox: str | None = None
+
+
 class ItemsConfig(BaseModel):
     """What one item of a model is, in the domain's own vocabulary.
 
@@ -248,8 +279,17 @@ class DomainConfig(BaseModel):
 
     name: str
     sources: dict[str, SourceConfig]
+    documents: list[DocumentConfig] = []  # the corpus; empty until a domain has one
     models: list[ModelConfig] = Field(min_length=1)
     analysis: AnalysisConfig
+
+    @model_validator(mode="after")
+    def _documents_are_named_once(self) -> Self:
+        names = [document.name for document in self.documents]
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        if repeated:
+            raise ValueError(f"Document names must be unique; repeated: {repeated}")
+        return self
 
     @model_validator(mode="after")
     def _models_are_named_once(self) -> Self:

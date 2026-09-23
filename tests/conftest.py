@@ -87,6 +87,17 @@ def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedS
     urls = {name: str(source.url) for name, source in coffee_config.sources.items()}
     payloads = {urls[name]: body for name, body in recorded.items() if name != "cqi_2023"}
     payloads[SIGNED_URL] = recorded["cqi_2023"]
+    # The corpus a publisher serves to anyone. The ones behind a 403 are not here: they
+    # are handed over by a person, and their absence is what the extract step reports.
+    documents = {
+        "pdf": (FIXTURES / "documents" / "sample.pdf").read_bytes(),
+        "jats": (FIXTURES / "documents" / "article.xml").read_bytes(),
+    }
+    payloads |= {
+        str(document.url): documents[document.format]
+        for document in coffee_config.documents
+        if document.inbox is None
+    }
     return RecordedServer(
         payloads,
         redirects={urls["cqi_2023"]: SIGNED_URL},
@@ -111,12 +122,15 @@ def raw_dir(tmp_path: Path, coffee_config: CoffeeConfig, client: Any) -> Path:
     (<data_dir>/<domain>/raw), so `raw_dir.parent` is the domain's data dir.
 
     The API sources are pulled too, with a token supplied: the clean layer's table of
-    places is built from them, so a fixture without them would test half a pipeline.
+    places is built from them, so a fixture without them would test half a pipeline. So
+    are the documents a publisher serves, exactly as `mlops data extract` pulls them.
     """
+    from mlops_core.data.documents import fetch_documents
     from mlops_core.data.extract import extract_all
 
     data_dir = tmp_path / coffee_config.name
     extract_all(coffee_config, data_dir / "raw", client)
     adapter = CoffeeAdapter(without_rate_limits(coffee_config), FIXTURE_CREDENTIALS)
     adapter.extract(data_dir, client)
+    fetch_documents(coffee_config.documents, data_dir, client)
     return data_dir / "raw"

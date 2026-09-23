@@ -27,6 +27,7 @@ from dagster import (
 from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
 from mlops_core.config import ModelConfig, Settings
 from mlops_core.data.clean import build_clean
+from mlops_core.data.documents import fetch_documents
 from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
 from mlops_core.ml.features import build_features
@@ -67,13 +68,15 @@ def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefi
         with http_client() as client:
             artifacts = extract_all(config, data_dir / "raw", client)
             api = adapter.extract(data_dir, client)
-        artifacts |= api.artifacts
+            corpus, absent = fetch_documents(config.documents, data_dir, client)
+        artifacts |= api.artifacts | corpus
+        skipped = api.skipped | absent
         return MaterializeResult(
             metadata={
                 "sources": len(artifacts),
                 "bytes": sum(a.manifest.size_bytes for a in artifacts.values()),
                 # A skipped source is a shorter run, not a failed one; say which and why.
-                "skipped": ", ".join(f"{n} ({w})" for n, w in api.skipped.items()),
+                "skipped": ", ".join(f"{n} ({w})" for n, w in skipped.items()),
             }
         )
 

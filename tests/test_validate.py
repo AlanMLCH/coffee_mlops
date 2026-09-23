@@ -30,7 +30,9 @@ def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> 
 def test_recorded_sources_pass_and_come_out_typed(
     coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
-    frames = {name: s.frame for name, s in validate_raw(coffee_adapter, raw_dir).items()}
+    validated = validate_raw(coffee_adapter, raw_dir)
+    documents = {d.name for d in coffee_adapter.config.documents}
+    frames = {name: s.frame for name, s in validated.items() if name not in documents}
 
     assert {name: df.height for name, df in frames.items()} == {
         "cqi_2018": 14,
@@ -155,3 +157,19 @@ def test_a_file_in_another_encoding_must_say_so(coffee_config: DomainConfig, raw
 
     with pytest.raises(pl.exceptions.ComputeError):
         read_raw(artifact, as_utf8)
+
+
+def test_the_documents_are_held_to_the_same_kind_of_contract(
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
+) -> None:
+    """A document is a source like any other: read into a frame, checked before use."""
+    served = [d.name for d in coffee_adapter.config.documents if d.inbox is None]
+
+    validated = validate_raw(coffee_adapter, raw_dir)
+
+    assert set(served) <= validated.keys()
+    parts = validated[served[0]].frame
+    assert parts.columns == ["document_id", "part", "part_title", "text"]
+    assert parts.height > 0
+    # The ones a person hands over are absent here, and that is not a failure.
+    assert not any(d.name in validated for d in coffee_adapter.config.documents if d.inbox)

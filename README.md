@@ -19,7 +19,7 @@ Everything runs locally. No cloud, no recurring costs.
 |---|---|---|
 | 1 | Static CSV / ZIP | File extraction, schema contracts, raw → clean layers |
 | 2 | Token-auth, paginated APIs + geospatial | API extraction, retries, rate limiting, secrets, spatial joins |
-| 3 | Web scraping | Semi-structured parsing, RAG documents, agent |
+| 3 | Web scraping | Semi-structured parsing, a corpus of documents, RAG, agent, its tools over MCP |
 | 4 | Time series | Temporal partitioning, incremental backfill, drift, retraining |
 
 ## Data sources (stage 1)
@@ -63,7 +63,7 @@ Everything runs locally. No cloud, no recurring costs.
 
 The whole flow, from each source to what reads the model. Blue is the generic core
 (`mlops_core`), orange is what the coffee domain supplies (its config, its adapter and
-the tables it defines), grey is where data is stored, and dashed is planned for stage 3.
+the tables it defines), grey is where data is stored, and dashed is the rest of stage 3.
 Every step is its own command; Dagster runs the same functions as one graph per domain.
 
 ```mermaid
@@ -88,16 +88,16 @@ flowchart TD
             direction TB
             roaster_catalogs["roaster_catalogs<br/>4 roasters · Shopify + Squarespace<br/>robots.txt first · product pages"]
         end
-        subgraph LATER["Stage 3, planned"]
+        subgraph CORPUS["Documents: text, never figures"]
             direction TB
-            documents["technical documents<br/>cultivation · processing · roasting"]
+            documents["17 documents<br/>WCR · FAO · SCA · ICO · papers<br/>fetched, or handed over at a 403"]
         end
     end
 
-    extract_files["mlops data extract<br/>stream the file, de-duplicate by sha256"]
+    extract_files["mlops data extract<br/>files and documents<br/>stream, de-duplicate by sha256"]
     extract_apis["adapter.extract<br/>ApiClient: rate limit, retries, expiring cache<br/>RobotsPolicy for shops"]
     raw[("raw/<br/>untouched bytes + manifest<br/>one partition per ingestion")]
-    validate[["validate<br/>one Pandera contract per source<br/>CSV · map layer · API JSON"]]
+    validate[["validate<br/>one Pandera contract per source<br/>CSV · map layer · API JSON · document text"]]
 
     subgraph CLEAN["clean/ : adapter.clean, held to strict contracts by the core"]
         direction LR
@@ -130,12 +130,12 @@ flowchart TD
 
     subgraph AI["Stage 3, planned: RAG and agent"]
         direction LR
-        corpus["corpus in English<br/>translated first if Spanish-only"]
+        chunks["chunks + topics<br/>the domain's own vocabulary"]
         vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
 
-    FILES --> extract_files
+    FILES & CORPUS --> extract_files
     APIS --> extract_apis
     SHOPS --> extract_apis
     extract_files & extract_apis --> raw
@@ -153,8 +153,8 @@ flowchart TD
     CLEAN & review_features & review_predictions & analysis -.-> catalog
     offer_features & offer_predictions -.-> catalog
 
-    LATER -.-> corpus -.-> vectors -.-> agent
-    roaster_coffees -. "descriptions" .-> corpus
+    validate -.-> chunks -.-> vectors -.-> agent
+    roaster_coffees -. "descriptions" .-> chunks
     catalog -.-> agent
     api -.-> agent
 
@@ -167,7 +167,8 @@ flowchart TD
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class documents,corpus,vectors,agent planned
+    class chunks,vectors,agent planned
+    class documents domain
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -446,6 +447,45 @@ Unlike the CQI's frozen labels, these shops change weekly, so these rules are op
 new country or process does not stop the pipeline. It is logged by name, left empty in
 the canonical column (a process keeps its label as written beside it), and it shows up
 in the coverage table.
+
+## What the agent will read (stage 3)
+
+The tables answer how much and how many. What a variety is, why a washed coffee tastes
+the way it does, what "sweetness" means on a cupping form: that is what the corpus is
+for. 17 documents, 1.33 million characters, in the same raw layer as every other source -
+manifest, sha256, one partition per ingestion - and each read into parts before anything
+uses it (a page of a PDF, a section of an article).
+
+| Documents | Publisher | Topics |
+|---|---|---|
+| Arabica and Robusta variety catalogues | World Coffee Research | varieties, cultivation |
+| Arabica coffee manual (2005) | FAO | cultivation, processing, varieties |
+| Wet processing, roast aroma, extraction kinetics | Frontiers, Molecules, J. Math. Industry (via Europe PMC) | processing, roasting, chemistry, brewing |
+| Roasting conditions, coffee flavour, postharvest aroma | MDPI Beverages, IJFST | roasting, chemistry, cupping |
+| CVA forms and standards SCA-102 to SCA-105 | Specialty Coffee Association | cupping |
+| Market report, Coffee Development Report, WMT circular | ICO, USDA FAS | market, sustainability |
+
+Four rules the ingestion follows, each of them a decision:
+
+- **Text, never figures.** A PDF's tables come out of extraction scrambled, and an answer
+  built from them is confidently wrong. Numbers are answered from the tables with SQL;
+  documents explain.
+- **A refusal is respected.** Nine documents are served to anyone and fetched. Eight sit
+  behind a 403 that no licence overrides (MDPI, Oxford Academic, the SCA), so they are
+  downloaded by hand into `data/<domain>/inbox/documents/` and named in the config with
+  the URL they came from. `make extract` says which are missing and where to put them;
+  nothing is scraped around the refusal.
+- **Provenance travels with the text.** Publisher, year, licence, language and topics are
+  config, and every chunk will carry them, so an answer can say where it got that.
+- **Topics are metadata, not folders.** Nine of them - cultivation, varieties, processing,
+  roasting, chemistry, cupping, brewing, market, sustainability - each with the terms a
+  question is routed by. Almost no document is about one subject (the FAO manual covers
+  three), so a folder per subject would be the wrong grain.
+
+Two traps are handled where they are found: the SCA's standards are encrypted with
+permissions rather than a password (an empty one opens them), and Europe PMC's article
+XML is read by section, top level only, because a nested section's text is inside its
+parent's and both would index every paragraph twice.
 
 ## What a kilo costs (stage 3): the gate said no
 

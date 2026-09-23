@@ -134,6 +134,219 @@ roasters:
       # The store page lists merch and subscriptions beside the coffee, untagged.
       exclude_titles: ["^tote", "^playera", "chamarra", "^suscripci", "^taza"]
 
+# What the agent explains from (stage 3). Text, never figures: a PDF's tables come out of
+# extraction scrambled, so numbers are answered from the tables with SQL. Every chunk
+# carries this metadata, so an answer can say who published it, when and under what licence.
+# Verified 2026-09-21: each one downloaded and its text read.
+documents:
+  # --- Varieties ------------------------------------------------------------------
+  - name: wcr_arabica_catalog
+    title: Arabica Coffee Varieties
+    publisher: World Coffee Research
+    url: https://cdn2.assets-servd.host/worldcoffee-research/production/pdf/catalogEnglish/Combined/arabica-1769602235.pdf?dm=1769602235
+    license: No notice in the document; cited
+    language: en
+    topics: [varieties, cultivation]
+    format: pdf
+  - name: wcr_robusta_catalog
+    title: Robusta Coffee Varieties
+    publisher: World Coffee Research
+    url: https://cdn2.assets-servd.host/worldcoffee-research/production/pdf/catalogEnglish/Combined/robusta-1769602236.pdf?dm=1769602236
+    license: No notice in the document; cited
+    language: en
+    topics: [varieties, cultivation]
+    format: pdf
+
+  # --- Growing and processing -----------------------------------------------------
+  - name: fao_arabica_manual
+    title: Arabica coffee manual for Lao PDR
+    publisher: FAO
+    year: 2005
+    # The FAO's own copy is HTML; this mirror serves the PDF the manual was printed as.
+    url: https://laocoffee.org/wp-content/uploads/2018/06/arabica-coffee-manual-for-lao-pdr-fao-2005.pdf
+    license: (c) FAO; non-commercial reproduction with attribution
+    language: en
+    topics: [cultivation, processing, varieties]
+    format: pdf
+  - name: pmc_wet_processing
+    title: Microbial ecology of wet coffee processing
+    publisher: Frontiers in Microbiology (PMC6863779)
+    year: 2019
+    # Europe PMC's REST API, because PMC itself answers a robot with a reCAPTCHA. The
+    # XML is sectioned, which is better than a PDF to split into chunks.
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6863779/fullTextXML
+    license: CC BY
+    language: en
+    topics: [processing, chemistry]
+    format: jats
+  - name: ijfst_postharvest_aroma
+    title: Effects of postharvest processing on aroma formation in roasted coffee
+    publisher: International Journal of Food Science and Technology
+    year: 2023
+    url: https://academic.oup.com/ijfst/article/58/3/1007/7807986
+    license: CC BY
+    language: en
+    topics: [processing, roasting, chemistry]
+    format: pdf
+    inbox: ijfs16261.pdf # Oxford Academic answers 403 to anything that is not a browser
+
+  # --- Roasting and chemistry -----------------------------------------------------
+  - name: pmc_roast_aroma
+    title: Roast level and aroma compounds in coffee
+    publisher: Molecules (PMC11477549)
+    year: 2024
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11477549/fullTextXML
+    license: CC BY 4.0
+    language: en
+    topics: [roasting, chemistry]
+    format: jats
+  - name: mdpi_roasting_flavor
+    title: Roasting Conditions and Coffee Flavor
+    publisher: Beverages (MDPI)
+    year: 2020
+    url: https://www.mdpi.com/2306-5710/6/2/29
+    license: CC BY
+    language: en
+    topics: [roasting, chemistry, cupping]
+    format: pdf
+    inbox: beverages-06-00029-v2.pdf # MDPI answers 403 to a client that is not a browser
+  - name: mdpi_coffee_flavor
+    title: "Coffee Flavor: A Review"
+    publisher: Beverages (MDPI)
+    year: 2020
+    url: https://www.mdpi.com/2306-5710/6/3/44
+    license: CC BY
+    language: en
+    topics: [chemistry, cupping]
+    format: pdf
+    inbox: beverages-06-00044-v3.pdf
+
+  # --- Brewing --------------------------------------------------------------------
+  - name: pmc_extraction_kinetics
+    title: Systematically improving espresso - extraction kinetics
+    publisher: Journal of Mathematics in Industry (PMC4986356)
+    year: 2016
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC4986356/fullTextXML
+    license: CC BY 4.0
+    language: en
+    topics: [brewing, chemistry]
+    format: jats
+
+  # --- Cupping: the SCA's Coffee Value Assessment ---------------------------------
+  # Encrypted with permissions rather than a password; an empty password opens them.
+  # The forms are score sheets (the vocabulary of attributes); the standards explain them.
+  - name: sca_cva_forms
+    title: Coffee Value Assessment cupping forms
+    publisher: Specialty Coffee Association
+    url: https://sca.coffee/value-assessment
+    license: (c) SCA; reproduction permitted
+    language: en
+    topics: [cupping]
+    format: pdf
+    inbox: CVA+Cupping+Forms+(EN).pdf
+  - name: sca_102_sample_preparation
+    title: "SCA-102: Sample preparation and cupping mechanics"
+    publisher: Specialty Coffee Association
+    year: 2024
+    url: https://sca.coffee/value-assessment
+    license: (c) SCA; reproduction permitted
+    language: en
+    topics: [cupping]
+    format: pdf
+    inbox: AW_SCA-102_Sample-Preparation_28.10.24_Secured.pdf
+  - name: sca_103_descriptive
+    title: "SCA-103: Descriptive assessment"
+    publisher: Specialty Coffee Association
+    year: 2024
+    url: https://sca.coffee/value-assessment
+    license: (c) SCA; reproduction permitted
+    language: en
+    topics: [cupping]
+    format: pdf
+    inbox: AW_SCA-103_Descriptive-Assessment_Sept2024_Secured.pdf
+  - name: sca_104_affective
+    title: "SCA-104: Affective assessment"
+    publisher: Specialty Coffee Association
+    year: 2024
+    url: https://sca.coffee/value-assessment
+    license: (c) SCA; reproduction permitted
+    language: en
+    topics: [cupping]
+    format: pdf
+    inbox: AW_SCA-104_Affective-Assessment_Sept2024_Secured.pdf
+  - name: sca_105_extrinsic
+    title: "SCA-105: Extrinsic assessment"
+    publisher: Specialty Coffee Association
+    year: 2025
+    url: https://sca.coffee/value-assessment
+    license: (c) SCA; reproduction permitted
+    language: en
+    topics: [cupping]
+    format: pdf
+    inbox: SCA_Standard_105-Extrinsic-Assessment_SECURED+(2).pdf
+
+  # --- The market, in words (the figures come from PSD, FAS and SIAP) --------------
+  - name: ico_market_report
+    title: Coffee Market Report, August 2026
+    publisher: International Coffee Organization
+    year: 2026
+    url: https://www.ico.org/documents/cy2025-26/cmr-0826-e.pdf
+    license: (c) ICO; cited
+    language: en
+    topics: [market]
+    format: pdf
+  - name: ico_development_report
+    title: Coffee Development Report 2022-23
+    publisher: International Coffee Organization
+    year: 2024
+    url: https://www.ico.org/documents/cy2024-25/coffee-development-report-2022-23.pdf
+    license: (c) 2024 ICO; internal use, cited
+    language: en
+    topics: [market, sustainability, cultivation]
+    format: pdf
+  - name: usda_coffee_circular
+    title: "Coffee: World Markets and Trade"
+    publisher: USDA Foreign Agricultural Service
+    year: 2026
+    url: https://apps.fas.usda.gov/psdonline/circulars/coffee.pdf
+    license: Public domain (US government)
+    language: en
+    topics: [market]
+    format: pdf
+
+# The corpus' own vocabulary: what coffee knowledge is filed under. Metadata, not
+# folders - almost no document is about one subject. The terms are what a question is
+# routed by and what joins a document to the tables' closed vocabularies.
+corpus:
+  topics:
+    cultivation:
+      description: "Growing coffee: altitude, shade, soil, pruning, pests and the harvest."
+      terms: [altitude, shade, soil, pruning, harvest, cherry, leaf rust, agroforestry, nursery, yield]
+    varieties:
+      description: "The plants themselves - their genetics, lineage and cup potential."
+      terms: [variety, cultivar, typica, bourbon, caturra, gesha, heirloom, catimor, timor hybrid, genetics]
+    processing:
+      description: "Turning cherry into green coffee, and what each method does to the cup."
+      terms: [washed, natural, honey, semi_washed, fermentation, drying, pulping, mucilage, anaerobic, wet mill]
+    roasting:
+      description: "The roast - its curve, its chemistry and the flavour it develops."
+      terms: [roast, roast level, development, first crack, maillard, caramelisation, agtron, degassing, roast profile]
+    chemistry:
+      description: "What is in the bean and in the cup, and what it tastes of."
+      terms: [caffeine, chlorogenic acid, trigonelline, volatile, aroma compound, lipids, sugars, acidity, extraction yield]
+    cupping:
+      description: "How coffee is tasted and scored: protocols, attributes and calibration."
+      terms: [cupping, score, total cup points, descriptive assessment, affective assessment, attribute, protocol, calibration, flavour wheel]
+    brewing:
+      description: "Getting the coffee out of the grounds: grind, water, ratio, method."
+      terms: [extraction, espresso, filter, grind, brew ratio, tds, immersion, percolation, water chemistry]
+    market:
+      description: "Prices, production, trade and consumption, in words rather than figures."
+      terms: [price, differential, futures, export, import, production, consumption, market year, supply, demand]
+    sustainability:
+      description: "Who grows it and on what terms: livelihoods, climate and certification."
+      terms: [livelihood, smallholder, climate, certification, income, gender, deforestation, living income]
+
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.
 cleaning:

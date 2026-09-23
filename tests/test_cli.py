@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 
 import domains.coffee
 from domains.coffee.adapter import CoffeeAdapter
+from domains.coffee.config import CoffeeConfig
 from mlops_core import cli
 from mlops_core.data.extract import http_client
 from mlops_core.ml.registry import ServedModel
@@ -42,12 +43,16 @@ def data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, server: RecordedSe
     return tmp_path
 
 
-def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
+def test_extract_writes_raw_layer_under_the_domain(
+    data_dir: Path, coffee_config: CoffeeConfig
+) -> None:
     result = CliRunner().invoke(cli.app, ["data", "extract", "--domain", "coffee"])
 
     assert result.exit_code == 0, result.output
     raw = data_dir / "coffee" / "raw"
-    # The file sources and the API sources that need no credential.
+    # The file sources, the API sources that need no credential, and the documents a
+    # publisher serves to anyone.
+    served = {document.name for document in coffee_config.documents if document.inbox is None}
     assert {p.name for p in raw.iterdir()} == {
         "cqi_2018",
         "cqi_2023",
@@ -56,7 +61,17 @@ def test_extract_writes_raw_layer_under_the_domain(data_dir: Path) -> None:
         "siap_agricola",
         "osm_places",
         "roaster_catalogs",  # the shops need no credential either, only robots.txt's leave
+        *served,
     }
+
+
+def test_a_document_nobody_handed_over_says_where_to_put_it(data_dir: Path) -> None:
+    """A publisher that refuses robots is not worked around: a person downloads it."""
+    result = CliRunner().invoke(cli.app, ["data", "extract", "--domain", "coffee"])
+
+    assert result.exit_code == 0, result.output
+    assert "mdpi_coffee_flavor: skipped, not in the inbox" in result.output
+    assert "inbox" in result.output and "beverages-06-00044-v3.pdf" in result.output
 
 
 def test_validate_runs_after_extract(data_dir: Path) -> None:
