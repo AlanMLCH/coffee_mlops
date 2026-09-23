@@ -106,7 +106,15 @@ def test_the_api_reproduces_the_batch_feature_row(
     )
 
 
-OFFER_FIELDS = ["shop", "bag_grams", "country", "state", "processing_method", "variety"]
+OFFER_FIELDS = [
+    "shop",
+    "bag_grams",
+    "country",
+    "state",
+    "processing_method",
+    "variety",
+    "producer",
+]
 
 
 @pytest.fixture

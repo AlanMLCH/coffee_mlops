@@ -9,6 +9,7 @@ import polars as pl
 import pytest
 from mlflow import MlflowClient
 from mlflow.models import infer_signature
+from pydantic import ValidationError
 from sklearn.dummy import DummyRegressor
 
 from domains.coffee.adapter import CoffeeAdapter
@@ -35,6 +36,7 @@ from mlops_core.ml.train import (
     experiment_name,
     fit_params,
     group_split,
+    out_of_fold,
     promote_if_better,
     split_items,
     temporal_split,
@@ -393,6 +395,8 @@ def test_a_group_split_model_trains_end_to_end_without_a_next_period(
     run = MlflowClient(tracking_uri).get_run(result.run_id)
     assert run.data.params["split"] == "group" and run.data.params["split_column"] == "lot"
     assert not any(name.startswith("recalibration") for name in run.data.metrics)
+    # Judged out of fold, on every group, not on one draw of a quarter of them.
+    assert {"out_of_fold_mae", "out_of_fold_baseline_mae"} <= set(run.data.metrics)
     assert MlflowClient(tracking_uri).get_experiment(run.info.experiment_id).name == "toy-price"
     assert experiment_name(config, model) == "toy-price"
 
@@ -410,3 +414,56 @@ def test_model_names_are_unique_and_looked_up_by_name(coffee_config: DomainConfi
         )
     with pytest.raises(ValueError, match="No model 'nope'"):
         coffee_config.model_named("nope")
+
+
+def test_repeated_folds_draw_the_groups_again() -> None:
+    """One pass over a few hundred rows is a noisy thing to choose hyperparameters by."""
+    train = lot_features()
+    model = toy_model()
+    repeated = model.model_copy(
+        update={"training": model.training.model_copy(update={"cv_repeats": 4})}
+    )
+
+    once, groups = cv_folds(train, model)
+    again, _ = cv_folds(train, repeated)
+
+    assert once.get_n_splits(groups=groups) == 2  # cv_folds
+    assert again.get_n_splits(groups=groups) == 8  # cv_folds x cv_repeats
+    for fit_rows, score_rows in again.split(train, groups=groups):
+        assert set(groups[fit_rows]).isdisjoint(set(groups[score_rows]))
+
+
+def test_every_item_is_predicted_by_a_model_that_never_saw_its_group() -> None:
+    """The gate's evidence for a group model: all of it, none of it leaked."""
+    features = lot_features()
+    model = toy_model()
+
+    observed, predicted, baseline = out_of_fold(features, model, {"n_estimators": 5})
+
+    assert len(observed) == len(predicted) == len(baseline) == features.height
+    assert observed.tolist() == features.sort("item_id")["price"].to_list()
+    # The baseline is refitted per fold too, or it alone would have seen the held-out
+    # groups: predicting each group's own mean would make it unbeatable.
+    assert len(set(baseline.tolist())) > 1
+
+
+def test_out_of_fold_needs_groups_to_hold_out_by() -> None:
+    temporal = TemporalSplit(kind="temporal", test_from=date(2026, 1, 1), recalibration_window=5)
+
+    with pytest.raises(TypeError, match="not split by group"):
+        out_of_fold(lot_features(), toy_model(temporal), {"n_estimators": 5})
+
+
+def test_the_search_space_is_narrowed_not_invented() -> None:
+    training = toy_model().training
+
+    bounds = training.model_copy(update={"search_space": {"num_leaves": (4, 8)}}).bounds
+    assert bounds["num_leaves"] == (4, 8)  # the model's own
+    assert bounds["n_estimators"] == (50, 800)  # the core's default, untouched
+
+    with pytest.raises(ValidationError, match="Nothing to tune"):
+        TrainingConfig.model_validate(training.model_dump() | {"search_space": {"depth": (1, 5)}})
+    with pytest.raises(ValidationError, match="low to high"):
+        TrainingConfig.model_validate(
+            training.model_dump() | {"search_space": {"num_leaves": (16, 4)}}
+        )

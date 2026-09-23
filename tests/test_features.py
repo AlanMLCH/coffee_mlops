@@ -105,6 +105,7 @@ def origin_row(coffee: str, **values: object) -> dict[str, object]:
         "country": None,
         "state": None,
         "processing_method": None,
+        "producer": None,
         "varieties": None,
         "altitude_min_m": None,
         "altitude_max_m": None,
@@ -161,6 +162,21 @@ def test_a_coffee_is_what_its_origins_agree_on() -> None:
     assert summary["silent"]["country"] is None and summary["silent"]["variety"] is None
 
 
+def test_a_sheet_that_names_no_variety_says_nothing_about_varieties() -> None:
+    """Zero would claim "this is not a Gesha"; the sheet never said that."""
+    quiet = pl.DataFrame(
+        [origin_row("quiet", country="Mexico")], schema_overrides={"varieties": pl.List(pl.String)}
+    )
+
+    summary = coffee_origins(quiet).row(0, named=True)
+
+    assert summary["varieties_n"] is None
+    assert summary["variety_gesha"] is None and summary["variety"] is None
+    # A sheet that does list varieties says so for the ones it leaves out.
+    listed = coffee_origins(ORIGINS.filter(pl.col("coffee_id") == "single")).row(0, named=True)
+    assert (listed["variety_typica"], listed["variety_gesha"]) == (1.0, 0.0)
+
+
 def test_offers_are_examples_only_with_a_price_to_learn_from() -> None:
     offers = pl.DataFrame(
         {
@@ -178,7 +194,24 @@ def test_offers_are_examples_only_with_a_price_to_learn_from() -> None:
 
 
 def test_a_request_keeps_the_origin_it_states() -> None:
-    """Online, the caller describes the coffee: nothing in the catalogue overrides it."""
-    request = pl.DataFrame({"shop": ["buna"], "country": ["Kenya"], "bag_grams": [340.0]})
+    """Online, the caller describes the coffee: nothing in the catalogue overrides it,
+    and the columns a sheet's summary would have produced are derived from what it says,
+    or online and batch would feed the model different things."""
+    request = pl.DataFrame(
+        {"shop": ["buna"], "country": ["Kenya"], "variety": ["gesha"], "bag_grams": [340.0]}
+    )
 
-    assert add_coffee_origin(request, ORIGINS).equals(request)
+    enriched = add_coffee_origin(request, ORIGINS)
+
+    assert enriched.select(request.columns).equals(request)  # stated, untouched
+    row = enriched.row(0, named=True)
+    assert (row["origins_n"], row["varieties_n"]) == (1.0, 1.0)
+    assert (row["variety_gesha"], row["variety_typica"]) == (1.0, 0.0)
+
+
+def test_a_request_that_names_no_variety_claims_nothing_about_them() -> None:
+    request = pl.DataFrame({"shop": ["buna"], "variety": [None], "bag_grams": [340.0]})
+
+    row = add_coffee_origin(request, ORIGINS).row(0, named=True)
+
+    assert row["varieties_n"] is None and row["variety_gesha"] is None

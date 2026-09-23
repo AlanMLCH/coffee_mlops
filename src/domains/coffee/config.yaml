@@ -604,8 +604,31 @@ models:
       period: snapshot # which read: drift across reads is stage 4
     spec:
       target: price_mxn_per_kg
-      categorical: [shop, country, state, processing_method, variety]
-      numeric: [altitude_m, bag_grams] # the size, for the discount a bigger bag gets
+      categorical: [shop, country, state, processing_method, variety, producer]
+      numeric:
+        - altitude_m
+        - bag_grams # the size, for the discount a bigger bag gets
+        - origins_n # more than one origin is a blend
+        - varieties_n
+        # One column per variety the catalogues list often, because a coffee that names
+        # several says "multiple" and its Gesha would be invisible. The list is in
+        # domains/coffee/features.py, chosen by how often each appears, never by price.
+        - variety_bourbon
+        - variety_caturra
+        - variety_colombia
+        - variety_garnica
+        - variety_gesha
+        - variety_heirloom
+        - variety_jember
+        - variety_marsellesa
+        - variety_mundo_novo
+        - variety_oro_azteca
+        - variety_pluma_mejorado
+        - variety_ruiru_11
+        - variety_sarchimor
+        - variety_sl28
+        - variety_sl34
+        - variety_typica
       # The listed price is the target times the size.
       leakage: [price_mxn]
     training:
@@ -616,8 +639,23 @@ models:
         column: coffee_id
         test_share: 0.25
       cv_folds: 5
+      # 118 training coffees in five folds is a noisy thing to choose hyperparameters by,
+      # so the folds are drawn four times over and the trial is scored on all of them.
+      cv_repeats: 4
       trials: 40
       seed: 42
+      # 118 training coffees cannot support the core's default search. Left to it, the
+      # tuner picked a model so slow it barely left the mean (learning rate 0.011 over
+      # 174 trees) and a `min_frequency` of 27, which on 381 rows grouped nearly every
+      # variety and state into "infrequent" - deleting the features this model is for.
+      # Narrowed after reading the chosen parameters, never the test score; the gate
+      # still decides whether what comes out is worth serving.
+      search_space:
+        learning_rate: [0.03, 0.2]
+        n_estimators: [100, 400]
+        num_leaves: [4, 16]
+        min_child_samples: [5, 30]
+        min_frequency: [2, 10]
       # To be promoted it must beat pricing every bag at its shop's average.
       baseline_group: shop
       bootstrap_resamples: 5000
@@ -651,6 +689,7 @@ analysis:
     - review_target_distribution
     - review_feature_importance
     - review_residual_bias
+    - offer_feature_importance
     - market_history
     - shop_kinds
     - mexico_production

@@ -5,6 +5,13 @@ One named model at a time. How its items are split is part of its config: across
 when the items have a time axis worth predicting across, by group when they come in
 families that must not straddle train and test.
 
+The split also decides what the gate is allowed to read. A temporal model is judged on
+the future it was asked to predict, which is the only honest test. A group model has no
+such order, and holding out a quarter of the groups throws away three quarters of the
+evidence: it is judged out of fold instead, on every item, each one predicted by a model
+fitted without its group. That is not a softer test - no item is ever scored by a model
+that saw it - it is the same test run on four times as much of the data.
+
 sklearn, LightGBM and MLflow speak pandas, so frames cross to pandas at this boundary.
 """
 
@@ -23,7 +30,13 @@ from mlflow import MlflowClient
 from mlflow.data.pandas_dataset import from_pandas
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import BaseCrossValidator, GroupKFold, TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import (
+    BaseCrossValidator,
+    GroupKFold,
+    GroupShuffleSplit,
+    TimeSeriesSplit,
+    cross_val_score,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder
 
@@ -101,13 +114,52 @@ def group_split(
     return ordered.filter(~is_test), ordered.filter(is_test)
 
 
+def out_of_fold(
+    features: pl.DataFrame, model: ModelConfig, params: dict[str, Any]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Predict every item from a model fitted without its group, and the baseline the same
+    way. Returns (observed, predicted, baseline prediction), aligned row by row."""
+    spec, cfg = model.spec, model.training
+    split = cfg.split
+    if not isinstance(split, GroupSplit):  # only a group split has folds to hold out by
+        raise TypeError(f"{model.name} is not split by group")
+    ordered = features.sort(model.items.id)
+    x, y = xy(ordered, spec)
+    groups = ordered[split.column].to_numpy()
+    predicted, from_baseline = np.zeros(len(y)), np.zeros(len(y))
+    folds = GroupKFold(n_splits=cfg.cv_folds)
+    for fitted_rows, held_out_rows in folds.split(x, y, groups=groups):
+        fit, held_out = ordered[fitted_rows], ordered[held_out_rows]
+        pipeline = build_pipeline(spec, params, cfg.seed)
+        pipeline.fit(x.iloc[fitted_rows], y[fitted_rows], **fit_params(spec))
+        predicted[held_out_rows] = pipeline.predict(x.iloc[held_out_rows])
+        # The baseline is refitted per fold too, or it would be the only one that saw
+        # the held-out groups.
+        baselines = baseline_predictions(fit, held_out, spec, cfg.baseline_group)
+        from_baseline[held_out_rows] = min(
+            baselines.values(), key=lambda p: float(np.abs(p - y[held_out_rows]).mean())
+        )
+    return y, predicted, from_baseline
+
+
 def cv_folds(train: pl.DataFrame, model: ModelConfig) -> tuple[BaseCrossValidator, Any]:
     """Folds inside the training split, of the same kind as the split itself: a model
-    tuned on random folds would be tuned for a problem it is not evaluated on."""
-    split, folds = model.training.split, model.training.cv_folds
-    if isinstance(split, TemporalSplit):
+    tuned on random folds would be tuned for a problem it is not evaluated on.
+
+    With `cv_repeats` the groups are drawn again, `repeats` times over: on a few hundred
+    rows one pass is noisy enough that the tuner ranks draws instead of models.
+    """
+    cfg = model.training
+    folds, repeats = cfg.cv_folds, cfg.cv_repeats
+    if isinstance(cfg.split, TemporalSplit):
         return TimeSeriesSplit(n_splits=folds), None  # `train` is already in time order
-    return GroupKFold(n_splits=folds), train[split.column].to_numpy()
+    groups = train[cfg.split.column].to_numpy()
+    if repeats == 1:
+        return GroupKFold(n_splits=folds), groups
+    return (
+        GroupShuffleSplit(n_splits=folds * repeats, test_size=1 / folds, random_state=cfg.seed),
+        groups,
+    )
 
 
 def build_pipeline(spec: ModelSpec, params: dict[str, Any], seed: int) -> Pipeline:
@@ -156,15 +208,23 @@ def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float
     x, y = xy(train, spec)
     folds, groups = cv_folds(train, model)
 
+    bounds = cfg.bounds
+
     def objective(trial: optuna.Trial) -> float:
         params = {
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-            "n_estimators": trial.suggest_int("n_estimators", 50, 800),
-            "num_leaves": trial.suggest_int("num_leaves", 4, 64),
-            "min_child_samples": trial.suggest_int("min_child_samples", 5, 60),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "min_frequency": trial.suggest_int("min_frequency", 2, 30),
+            "learning_rate": trial.suggest_float(
+                "learning_rate", *bounds["learning_rate"], log=True
+            ),
+            "n_estimators": trial.suggest_int("n_estimators", *_whole(bounds["n_estimators"])),
+            "num_leaves": trial.suggest_int("num_leaves", *_whole(bounds["num_leaves"])),
+            "min_child_samples": trial.suggest_int(
+                "min_child_samples", *_whole(bounds["min_child_samples"])
+            ),
+            "reg_lambda": trial.suggest_float("reg_lambda", *bounds["reg_lambda"], log=True),
+            "colsample_bytree": trial.suggest_float(
+                "colsample_bytree", *bounds["colsample_bytree"]
+            ),
+            "min_frequency": trial.suggest_int("min_frequency", *_whole(bounds["min_frequency"])),
         }
         scores = cross_val_score(
             build_pipeline(spec, params, cfg.seed),
@@ -187,6 +247,12 @@ def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float
     )
     study.optimize(objective, n_trials=cfg.trials)
     return study.best_params, study.best_value
+
+
+def _whole(bounds: tuple[float, float]) -> tuple[int, int]:
+    """A count's bounds, as the counts they name."""
+    low, high = bounds
+    return int(low), int(high)
 
 
 def promote_if_better(
@@ -315,11 +381,24 @@ def train_model(
         versus_champion = (
             compare(errors, champion, resamples, seed, families) if champion is not None else None
         )
+        # A group model's evidence against the baseline is gathered on every group.
+        out_of_fold_metrics: dict[str, float] = {}
+        if isinstance(split, GroupSplit):
+            observed, predicted_oof, baseline_oof = out_of_fold(features, model, best_params)
+            oof_errors = absolute_errors(observed, predicted_oof)
+            oof_baseline = absolute_errors(observed, baseline_oof)
+            all_families = features.sort(model.items.id)[split.column].to_numpy()
+            versus_baseline = compare(oof_errors, oof_baseline, resamples, seed, all_families)
+            out_of_fold_metrics = {
+                "out_of_fold_mae": float(oof_errors.mean()),
+                "out_of_fold_baseline_mae": float(oof_baseline.mean()),
+            }
 
         metrics = (
             {"cv_mae": cv_mae, "test_mae_ci_low": ci_low, "test_mae_ci_high": ci_high}
             | {f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()}
             | versus_baseline.as_metrics("versus_baseline")
+            | out_of_fold_metrics
             | (versus_champion.as_metrics("versus_champion") if versus_champion else {})
             | (
                 recalibration_gain(

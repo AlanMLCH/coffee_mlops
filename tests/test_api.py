@@ -223,7 +223,13 @@ def test_a_bag_is_priced_from_what_the_request_states(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["target"] == "price_mxn_per_kg" and body["context"] == {}
+    assert body["target"] == "price_mxn_per_kg"
+    # `context` is what the domain worked out for the request, not what it was told: the
+    # request states one variety, so its columns are derived rather than looked up.
+    assert body["context"]["variety_typica"] == 1.0
+    assert body["context"]["variety_gesha"] == 0.0
+    assert body["context"]["origins_n"] == 1.0
+    assert "country" not in body["context"]  # stated, not derived
     assert model.seen is not None
     assert list(model.seen.columns) == coffee_config.model_named("offer").spec.features
     assert model.seen["bag_grams"].iloc[0] == 312.5

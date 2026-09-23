@@ -178,11 +178,33 @@ class GroupSplit(BaseModel):
 Split = Annotated[TemporalSplit | GroupSplit, Field(discriminator="kind")]
 
 
+# What the tuner may try, as (low, high) per parameter. The defaults suit a few thousand
+# rows; a model with a few hundred says so, because a search that can reach 800 trees can
+# also reach a learning rate so low that the model never leaves the mean.
+SEARCH_SPACE: dict[str, tuple[float, float]] = {
+    "learning_rate": (0.01, 0.2),
+    "n_estimators": (50, 800),
+    "num_leaves": (4, 64),
+    "min_child_samples": (5, 60),
+    "reg_lambda": (1e-3, 10.0),
+    "colsample_bytree": (0.5, 1.0),
+    # How many rows a category needs to exist on its own; above that it is grouped as
+    # "infrequent", which on a small table quietly deletes the categorical features.
+    "min_frequency": (2, 30),
+}
+
+
 class TrainingConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     split: Split
+    # Bounds to narrow, merged over the defaults above.
+    search_space: dict[str, tuple[float, float]] = {}
     cv_folds: int  # folds inside the training split, of the same kind as the split
+    # How many times those folds are drawn. One pass over a few hundred rows is a noisy
+    # thing to choose hyperparameters by: the tuner ends up ranking draws, not models.
+    # Only a group split can repeat them (time has one order).
+    cv_repeats: int = Field(default=1, ge=1)
     trials: int
     seed: int
     baseline_group: str
@@ -191,6 +213,20 @@ class TrainingConfig(BaseModel):
     stratify_by: str
     min_group_size: int
     registered_model: str
+
+    @model_validator(mode="after")
+    def _search_space_is_known_and_ordered(self) -> Self:
+        unknown = sorted(set(self.search_space) - set(SEARCH_SPACE))
+        if unknown:
+            raise ValueError(f"Nothing to tune called {unknown}; there is {sorted(SEARCH_SPACE)}")
+        backwards = sorted(name for name, (low, high) in self.search_space.items() if low >= high)
+        if backwards:
+            raise ValueError(f"Search bounds must run from low to high: {backwards}")
+        return self
+
+    @property
+    def bounds(self) -> dict[str, tuple[float, float]]:
+        return SEARCH_SPACE | self.search_space
 
 
 class TargetBands(BaseModel):

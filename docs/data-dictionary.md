@@ -190,9 +190,11 @@ states it. The listed `price_mxn` is dropped: the target is it divided by the si
 |---|---|---|
 | `offer_id`, `snapshot`, `observed_on` | | Keys, carried for joins and studies |
 | `coffee_id` | String | The group of the split: every size of one coffee is on one side |
-| `shop`, `country`, `state`, `processing_method`, `variety` | String? | Categorical features; the origin ones summarised as above |
+| `shop`, `country`, `state`, `processing_method`, `variety`, `producer` | String? | Categorical features; the origin ones summarised as above |
 | `altitude_m` | Float? | Mean of the midpoints of the coffee's origin altitude ranges |
 | `bag_grams` | Float? | The size, for the discount a bigger bag gets |
+| `origins_n`, `varieties_n` | Float? | How many origins and varieties the sheet names; more than one origin is a blend |
+| `variety_bourbon`, `variety_caturra`, `variety_colombia`, `variety_garnica`, `variety_gesha`, `variety_heirloom`, `variety_jember`, `variety_marsellesa`, `variety_mundo_novo`, `variety_oro_azteca`, `variety_pluma_mejorado`, `variety_ruiru_11`, `variety_sarchimor`, `variety_sl28`, `variety_sl34`, `variety_typica` | Float? | 1 when the coffee's sheet lists that variety, 0 when it lists others, **null when it lists none** - "not stated" is not "not a Gesha". One column per variety that appears in at least four coffees, chosen by frequency and never by price |
 | `price_mxn_per_kg` | Float | Target |
 
 ## `predictions.offer_predictions` — batch price estimates

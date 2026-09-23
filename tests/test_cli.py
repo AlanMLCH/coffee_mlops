@@ -305,6 +305,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "market_history.png",
         "mexico_production.png",  # review_residual_bias needs predictions; this run has none
         "roaster_coverage.png",
+        "offer_feature_importance.png",
     }
 
 

@@ -36,6 +36,7 @@ class Offer(BaseModel):
     state: str | None = Field(None, description="As SIAP names it, e.g. Oaxaca")
     processing_method: str | None = Field(None, description="washed, natural, honey, ...")
     variety: str | None = Field(None, description="As the CQI spells it, e.g. gesha")
+    producer: str | None = None
     altitude_m: float | None = Field(None, ge=0, le=9000)
     observed_on: date | None = Field(None, description="Defaults to today (UTC).")
 

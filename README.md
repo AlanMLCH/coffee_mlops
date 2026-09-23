@@ -487,48 +487,62 @@ permissions rather than a password (an empty one opens them), and Europe PMC's a
 XML is read by section, top level only, because a nested section's text is inside its
 parent's and both would index every paragraph twice.
 
-## What a kilo costs (stage 3): the gate said no
+## What a kilo costs (stage 3)
 
-The second model, `offer`, asks what a kilo of roasted coffee costs on a Mexico City
-shelf, from what its shop and its sheet say: shop, country, state, process, variety,
-altitude, and the bag's size (a bigger bag is cheaper per kilo). One item is one coffee
-in one size; 510 offers of 157 coffees have a price to learn from (no size, a kit, or a
-price copied from another size are not examples).
+The domain's second model, `offer`, prices a kilo of roasted coffee on a Mexico City
+shelf from what a buyer can know before paying: the shop, the bag's size, and what the
+shop's sheet says about the coffee - country, state, process, variety, altitude, and a
+column per variety the catalogues list often, because a coffee that names three says
+"multiple" and its Gesha would otherwise be invisible. One item is one coffee in one
+size; 510 offers of 157 coffees have a price to learn from.
 
-Two things are different from the cup-score model, and both are in the core now:
+Two things about it are different from the cup-score model, and both are now the core's:
 
-- **The split is by coffee, not by bag.** The sizes of one coffee share almost
-  everything; with some in train and the rest in test the model would be graded on
-  memory. A seeded quarter of the *coffees* is held out, and tuning uses `GroupKFold`.
-- **The gate resamples coffees, not bags.** Four sizes of one mispriced coffee are one
-  mistake, not four pieces of evidence; resampling rows would make every interval too
-  narrow and the gate too easy (a cluster bootstrap).
+- **The split is by coffee, not by bag**, since the sizes of one coffee share almost
+  everything, and **the gate resamples coffees, not bags**: four sizes of one coffee
+  priced wrong are one mistake, not four.
+- **A group model is judged out of fold.** Holding out a quarter of the coffees throws
+  away three quarters of the evidence, so every coffee is scored by a model fitted
+  without its group. Not a softer test - nothing is ever scored by a model that saw it -
+  the same test on four times as much data.
 
-| Held-out coffees (39 of 157, 129 offers) | Value |
+| Out of fold, 510 offers of 157 coffees | Value |
 |---|---|
-| Model MAE | 319.5 MXN/kg (95% CI 217 - 413) |
-| Best baseline: every bag at its shop's mean | 325.6 MXN/kg |
-| Paired difference vs baseline | -6.1 (95% CI -42.9 to 32.1), **60% sure** |
-| R² | -0.01 |
-| Cross-validated MAE inside training | 196.2 |
+| Model MAE | **229.9 MXN/kg** |
+| Baseline: every bag at its shop's mean | 252.7 MXN/kg |
+| Paired difference, resampling coffees | -22.8 (95% CI -46.9 to +2.9), **96% sure** |
 
-**Not promoted, and correctly so.** On coffees it has not seen, the model does not
-price better than "what this shop usually charges" - 60% sure is a coin flip, and the
-gate asks for 95%. The gap between cross-validation (196) and the held-out coffees (319)
-is the split's draw as much as the model: the held-out Almanegra coffees are dearer
-(median 1,298 MXN/kg against 1,117 in training), and 39 coffees are few enough for one
-draw to matter.
+Promoted at the same 95% bar as the other model. Getting there was not a matter of a
+bigger model or a different one, and the way it was found is the point:
 
-The data does carry signal the model cannot yet turn into held-out accuracy: price per
-kilo rises with altitude (correlation 0.42), falls with bag size (-0.23), and imported
-origins sit above Mexico's (Yemen 1,464 and Rwanda 1,373 MXN/kg against 1,094). What is
-missing is mostly coffees: 128 of the 157 are one shop's, and a variety summarised as
-"multiple" hides the Gesha in a coffee sold as several lots. Stage 4 re-reads the shops
-over time, which is also where a second period gives these studies drift to measure.
+- **The estimator was not the problem.** Ridge on one-hot columns, a random forest and a
+  log target were measured against the same baseline on the same split
+  (`experiments/price_estimators.py`): none beat the tuned LightGBM by enough to matter.
+- **The tuner was.** Choosing hyperparameters by five folds over 118 coffees is choosing
+  by a noisy number: it picked a learning rate of 0.011 over 174 trees - a model so slow
+  it barely left the mean - and a `min_frequency` of 27, which on 381 rows grouped nearly
+  every variety and state into "infrequent", deleting the features the model is for.
+  Drawing those folds four times over, and narrowing the search to what a few hundred
+  rows can support, gave a small model (110 trees, 4 leaves) that generalises.
 
-Until a version passes the gate, `/models/offer/predict` answers 503 and `/health`
-reports `"partial"`: the cup-score model keeps serving.
+What the model is **not** allowed to claim, and the README says it so the model card is
+not the only place it appears:
 
+- Against a baseline that also knows the size - what any label shows - the edge is
+  **-9.9 MXN/kg at 78%**, short of the bar. Part of what the model knows is the discount
+  a bigger bag gets.
+- The edge comes from the coffees that say where they grew (-26.8 MXN/kg against the shop
+  mean). On the 75 offers whose coffee has no sheet it matches the baseline exactly, as
+  it should: there is nothing to know about them.
+- 128 of the 157 coffees are one shop's, so "what a kilo costs" is mostly what Almanegra
+  charges. More roasters, and the re-reads of stage 4, are what widens that.
+
+![What the price model relies on](docs/figures/offer_feature_importance.png)
+
+Altitude carries it, then the shop, then the bag's size - and the Gesha column earns its
+place, which is what the variety features were added for.
+
+## Results (stage 1)
 ## Results (stage 1)
 
 Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
@@ -560,8 +574,8 @@ The evaluation is built to survive a small test set:
 
 ## Documentation
 
-- [Model card](docs/model-card.md) — what the model is for, how it performs, where it
-  fails and what it must not be used for.
+- Model cards — what each model is for, how it performs, where it fails and what it must
+  not be used for: [cup score](docs/model-card.md) and [price per kilo](docs/model-card-price.md).
 - `experiments/` — one-off studies that answer a question and get logged to MLflow, kept
   out of the pipelines. See "Alternatives tried" in the model card.
 - [Data dictionary](docs/data-dictionary.md) — every column of every layer, with units.

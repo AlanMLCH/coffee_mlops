@@ -123,10 +123,12 @@ class Service:
         features = features.with_columns(pl.col(c).cast(pl.Float64) for c in spec.numeric)
         # Built from rows rather than polars.to_pandas(), which needs pyarrow: 156 MB in
         # the image for one conversion. The casts keep the dtypes the model trained on,
-        # since pandas cannot infer a numeric column from a single missing value.
-        model_input = pd.DataFrame(features.select(spec.features).to_dicts()).astype(
-            {column: "float64" for column in spec.numeric}
-        )
+        # since pandas cannot infer a column's type from a single missing value: a
+        # request that states no producer would arrive as `object` against the batch
+        # path's string, which is how online and batch start to drift.
+        dtypes = {column: "float64" for column in spec.numeric}
+        dtypes |= {column: "str" for column in spec.categorical}
+        model_input = pd.DataFrame(features.select(spec.features).to_dicts()).astype(dtypes)
         prediction = served.model.predict(model_input)
         looked_up = [c for c in spec.features if c not in item]
         return Prediction(
