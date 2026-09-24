@@ -11,7 +11,7 @@ import duckdb
 
 from mlops_core.storage import latest_partition
 
-LAYERS = ("clean", "features", "predictions", "analysis")
+LAYERS = ("clean", "features", "predictions", "analysis", "evaluations")
 
 
 def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:

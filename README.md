@@ -132,7 +132,9 @@ flowchart TD
 
     subgraph AI["Stage 3: RAG and agent"]
         direction LR
-        questions[("evals/retrieval_questions.jsonl<br/>drafted by qwen3.5:4b<br/>decided by a person")]
+        questions[("evals/retrieval_questions.jsonl<br/>108 questions drafted by qwen3.5:4b<br/>excerpts checked, not reviewed")]
+        bm25["BM25 baseline<br/>Lucene's defaults · Snowball stems"]
+        retrieval_bm25[("evaluations/retrieval_bm25<br/>per question · MLflow run")]
         vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
@@ -157,6 +159,8 @@ flowchart TD
 
     document_chunks -- "mlops rag draft / review" --> questions
     document_chunks -.-> vectors -.-> agent
+    document_chunks --> bm25 --> retrieval_bm25
+    questions -- "mlops rag evaluate" --> retrieval_bm25
     questions -. "judges each search" .-> vectors
     roaster_coffees -. "descriptions" .-> vectors
     catalog -.-> agent
@@ -173,6 +177,8 @@ flowchart TD
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class vectors,agent planned
     class corpus_sources,questions domain
+    class bm25 core
+    class retrieval_bm25 store
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -184,7 +190,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
-| **rag** (stage 3) | `draft`, `review`; planned: `index`, `ask` | the corpus' clean tables | the questions retrieval is judged by; planned: the index and the agent |
+| **rag** (stage 3) | `draft`, `review`, `evaluate`; planned: `index`, `ask` | the corpus' clean tables | the questions retrieval is judged by, each search's scores; planned: the index and the agent |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -572,8 +578,7 @@ make review      # a person accepts, edits or rejects each draft (in your own te
   question it answers, plus a short answer in its own words, through Ollama with the
   reply constrained to a JSON schema. It was chosen by trying both installed models on
   the same five passages: `granite4.2:3b` wrote "the passage" into its questions and put
-  a second question where the answer belonged. A draft nobody checked measures the
-  drafter, not the search, so only accepted and edited questions count.
+  a second question where the answer belonged.
 - **Every draft is kept**, with what its reviewer did to it and when, the model's digest
   and the prompt's version. How many drafts were taken as written, fixed or thrown away
   is itself a result: how far a 4B model can be trusted to write an evaluation set.
@@ -606,8 +611,52 @@ make review      # a person accepts, edits or rejects each draft (in your own te
   flatters keyword search over semantic search. The prompt asks for the drafter's own
   words and the review can reword what it did not; the rest is a property of the set.
 
+- **Used as drafted, and said so.** A draft nobody checked measures the drafter as well as
+  the search, but 108 were more than the project's owner chose to review by hand. So
+  every question nobody rejected is evaluated, and every run records how many a person
+  checked (`questions_reviewed`: 0 today). The cost is noise in the labels, which lowers
+  every search's scores alike: searches are compared on the same questions, paired, so
+  the noise is shared rather than handed to one side - except the keyword bias above.
+  `make review` stays; a reviewed subset would be a stronger yardstick.
+
 The set is data the domain owns, versioned beside its code in
 `src/domains/coffee/evals/retrieval_questions.jsonl`, one question per line.
+
+### How well keyword search finds the answer
+
+`make retrieval` searches every question, grades each ranking and logs the run to
+MLflow (experiment `coffee-retrieval`); the per-question table lands in
+`evaluations.retrieval_bm25`, so `make sql` can ask which questions failed. A retrieved
+chunk is relevant when it holds the label's excerpt, and each label is credited once -
+overlapping neighbours that both hold it are one find, not two.
+
+The baseline is BM25 as Lucene and Elasticsearch ship it: k1 1.2, b 0.75, the Snowball
+English stemmer and Lucene's 33 stop words. A weak baseline would make semantic search
+look good for the wrong reason. Its weights are the term-frequency half of BM25 per chunk
+with the inverse document frequency applied at query time - the split Qdrant makes for a
+sparse vector - so the same encoding can be the keyword half of a hybrid search.
+
+| 108 questions, 1,373 chunks | Recall@1 | Recall@5 | Recall@10 | MRR | nDCG@10 |
+|---|---:|---:|---:|---:|---:|
+| **BM25** | 0.287 | 0.556 | 0.685 | 0.400 | 0.468 |
+
+| Topic (12 questions each) | Recall@1 | Recall@5 | Recall@10 | MRR |
+|---|---:|---:|---:|---:|
+| cultivation | 0.58 | 0.75 | 0.83 | 0.65 |
+| brewing | 0.25 | 0.75 | 0.83 | 0.40 |
+| varieties | 0.42 | 0.58 | 0.75 | 0.48 |
+| market | 0.42 | 0.50 | 0.67 | 0.47 |
+| processing | 0.33 | 0.50 | 0.67 | 0.44 |
+| sustainability | 0.17 | 0.50 | 0.67 | 0.30 |
+| cupping | 0.17 | 0.50 | 0.67 | 0.33 |
+| roasting | 0.17 | 0.50 | 0.58 | 0.30 |
+| chemistry | 0.08 | 0.42 | 0.50 | 0.23 |
+
+A third of the answers are not in the top ten, and fewer than a third come first. Each
+topic's figure rests on twelve questions - a standard error near 0.13 - so the ranking
+of the topics is a hint, not a finding. With one label per question, MAP equals MRR and recall
+at k is "was it in the top k"; the four metrics part ways once pooled judgments add
+graded labels. This is the number the semantic search has to beat, question by question.
 
 ## What a kilo costs (stage 3)
 

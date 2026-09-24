@@ -47,16 +47,20 @@ analysis = [
     "streamlit>=1.52.0",
 ]
 
-# The corpus the agent explains from: PDFs and article XML into text. `cryptography`
-# because the SCA's standards are encrypted with permissions (pypdf opens them with an
-# empty password, but needs AES to do it).
+# The corpus the agent explains from - PDFs and article XML into text - and how its
+# retrieval is judged. `cryptography` because the SCA's standards are encrypted with
+# permissions (pypdf opens them with an empty password, but needs AES to do it).
 rag = [
     "coffee-mlops[data]",
     "cryptography>=46.0.5",
     # The stdlib XML parser is a known hazard on files from the internet; this is the
     # standard mitigation, and Europe PMC's articles are XML.
     "defusedxml>=0.7.1",
+    # Every retrieval evaluation is a run, like every model.
+    "mlflow>=3.16.1",
     "pypdf>=6.6.1",
+    # BM25's stemmer: the Snowball English one Lucene and Elasticsearch ship. Pure Python.
+    "snowballstemmer>=3.0",
 ]
 
 # Dagster orchestrates both pipelines, so it needs both.
@@ -106,7 +110,7 @@ mypy_path = "src"
 files = ["src/mlops_core", "src/domains", "experiments"]
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "scipy.*"] # ship no type information
+module = ["sklearn.*", "scipy.*", "snowballstemmer"] # ship no type information
 ignore_missing_imports = true
 
 [tool.coverage.run]

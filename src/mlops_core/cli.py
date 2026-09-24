@@ -328,6 +328,38 @@ def review(domain: Domain = None) -> None:
     _echo_tally(questions)
 
 
+@rag_app.command()
+def evaluate(domain: Domain = None) -> None:
+    """Search every question with BM25, score the rankings and log the run to MLflow.
+
+    The per-question table lands in `evaluations/retrieval_bm25`, queryable with
+    `mlops sql`; the run says how many of the questions a person reviewed.
+    """
+    with _needs_extra("rag"):
+        from mlops_core.rag.evaluate import evaluate_retrieval
+        from mlops_core.rag.lexical import K1, B, Bm25
+
+    config, corpus, path, questions = _question_set(domain)
+    chunks, _ = _corpus_tables(config)
+    index = Bm25(chunks["text"].to_list())
+    run = evaluate_retrieval(
+        config,
+        "bm25",
+        index.search,
+        {"k1": K1, "b": B, "stemmer": "snowball-english", "stop_words": "lucene-english"},
+        questions,
+        path,
+        chunks,
+        corpus.chunking,
+        _data_dir(config),
+        Settings().mlflow_tracking_uri,
+    )
+    for name, value in sorted(run.overall.items()):
+        typer.echo(f"{name}: {value:.3f}")
+    typer.echo(f"table: {run.table}")
+    typer.echo(f"run {run.run_id}")
+
+
 def _corpus(config: DomainConfig) -> CorpusConfig:
     if config.corpus is None:
         typer.echo(f"{config.name} has no corpus: nothing to ask questions about", err=True)

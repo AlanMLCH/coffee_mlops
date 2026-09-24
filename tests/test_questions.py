@@ -43,7 +43,7 @@ from mlops_core.rag.questions import (
     save_questions,
     tally,
 )
-from mlops_core.storage import write_table
+from mlops_core.storage import read_table, write_table
 
 OLLAMA = Path(__file__).parent / "fixtures" / "ollama"
 TODAY = date(2026, 9, 24)
@@ -449,6 +449,22 @@ def test_review_saves_every_decision_and_leaves_skipped_drafts_waiting(workspace
     quit_at_once = CliRunner().invoke(cli.app, ["rag", "review"], input="q\n")
     assert quit_at_once.exit_code == 0
     assert {q.id: q.status for q in load_questions(path, coffee_topics())} == statuses
+
+
+def test_evaluate_scores_the_set_and_writes_a_table_sql_can_read(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(workspace)  # MLflow writes local artifacts under the working dir
+    save_questions(
+        questions_path(workspace / "domain"), [question("roasting-01", "pmc_roast_aroma", 3)]
+    )
+
+    result = CliRunner().invoke(cli.app, ["rag", "evaluate"])
+
+    assert result.exit_code == 0, result.output
+    assert "recall_at_10: 1.000" in result.output  # two chunks: it is in the top ten
+    evaluated = workspace / "data" / "coffee" / "evaluations" / "retrieval_bm25"
+    assert read_table(evaluated)["question_id"].to_list() == ["roasting-01"]
 
 
 def test_a_domain_without_a_corpus_has_no_questions(monkeypatch: pytest.MonkeyPatch) -> None:
