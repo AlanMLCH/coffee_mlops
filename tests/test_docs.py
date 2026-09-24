@@ -111,6 +111,7 @@ def test_the_architecture_diagram_shows_every_source_and_table(domain: str) -> N
         *adapter.config.sources,
         *adapter.json_readers(),
         *adapter.clean_contracts(),
+        *adapter.config.corpus_tables,
         *[model.features_table for model in adapter.config.models],
         *[model.predictions_table for model in adapter.config.models],
     }

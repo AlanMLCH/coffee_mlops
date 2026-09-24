@@ -1,7 +1,7 @@
 # Domain config for coffee. Everything domain-specific that is data, not code, lives here.
-# The sections the core runs (sources, models, analysis) are validated by
-# mlops_core.config; coffee's own (the API sources, cleaning, market_analysis) by
-# domains.coffee.config.
+# The sections the core runs (sources, documents, corpus, models, analysis) are
+# validated by mlops_core.config; coffee's own (the API sources, cleaning,
+# market_analysis) by domains.coffee.config.
 name: coffee
 
 sources:
@@ -315,37 +315,47 @@ documents:
     format: pdf
 
 # The corpus' own vocabulary: what coffee knowledge is filed under. Metadata, not
-# folders - almost no document is about one subject. The terms are what a question is
-# routed by and what joins a document to the tables' closed vocabularies.
+# folders - almost no document is about one subject. The terms are what a chunk is
+# tagged by, what a question is routed by, and what joins a document to the tables'
+# closed vocabularies. A term matches as a whole word in its inflections ("roast" finds
+# "roasting"), so a stem is written once; both spellings are listed where British and
+# American differ, because the corpus has both. A topic's own name is one of its terms.
+# A word with a second life outside the topic is written as the phrase the topic uses:
+# "development time", not "development", which in a report on development means aid.
 corpus:
+  # About 300 tokens a chunk: a passage an answer can cite whole, several of which fit
+  # a small model's context. A starting point, to be tuned against the retrieval eval.
+  chunking:
+    max_chars: 1200
+    overlap_chars: 200
   topics:
     cultivation:
       description: "Growing coffee: altitude, shade, soil, pruning, pests and the harvest."
-      terms: [altitude, shade, soil, pruning, harvest, cherry, leaf rust, agroforestry, nursery, yield]
+      terms: [cultivation, altitude, shade, soil, pruning, harvest, cherry, leaf rust, agroforestry, nursery, yield]
     varieties:
       description: "The plants themselves - their genetics, lineage and cup potential."
       terms: [variety, cultivar, typica, bourbon, caturra, gesha, heirloom, catimor, timor hybrid, genetics]
     processing:
       description: "Turning cherry into green coffee, and what each method does to the cup."
-      terms: [washed, natural, honey, semi_washed, fermentation, drying, pulping, mucilage, anaerobic, wet mill]
+      terms: [processing, washed, natural, honey, semi_washed, fermentation, drying, pulping, mucilage, anaerobic, wet mill]
     roasting:
       description: "The roast - its curve, its chemistry and the flavour it develops."
-      terms: [roast, roast level, development, first crack, maillard, caramelisation, agtron, degassing, roast profile]
+      terms: [roast, roast level, development time, first crack, maillard, caramelisation, caramelization, agtron, degassing, roast profile]
     chemistry:
       description: "What is in the bean and in the cup, and what it tastes of."
-      terms: [caffeine, chlorogenic acid, trigonelline, volatile, aroma compound, lipids, sugars, acidity, extraction yield]
+      terms: [chemistry, caffeine, chlorogenic acid, trigonelline, volatile, aroma compound, lipid, sugar, acidity, extraction yield]
     cupping:
       description: "How coffee is tasted and scored: protocols, attributes and calibration."
-      terms: [cupping, score, total cup points, descriptive assessment, affective assessment, attribute, protocol, calibration, flavour wheel]
+      terms: [cupping, score, total cup points, descriptive assessment, affective assessment, attribute, protocol, calibration, flavour wheel, flavor wheel]
     brewing:
       description: "Getting the coffee out of the grounds: grind, water, ratio, method."
-      terms: [extraction, espresso, filter, grind, brew ratio, tds, immersion, percolation, water chemistry]
+      terms: [brew, extraction, espresso, filter, grind, brew ratio, tds, immersion, percolation, water chemistry]
     market:
       description: "Prices, production, trade and consumption, in words rather than figures."
-      terms: [price, differential, futures, export, import, production, consumption, market year, supply, demand]
+      terms: [market, price, differential, futures, export, import, production, consumption, market year, supply, demand]
     sustainability:
-      description: "Who grows it and on what terms: livelihoods, climate and certification."
-      terms: [livelihood, smallholder, climate, certification, income, gender, deforestation, living income]
+      description: "Who grows it and on what terms: livelihoods, climate, certification and waste."
+      terms: [sustainability, livelihood, smallholder, climate, certification, income, gender, deforestation, living income, emission, waste, circular economy]
 
 # Rules for the clean layer. Vocabularies are closed on purpose: an unseen label
 # stops the pipeline so it gets mapped deliberately instead of guessed.

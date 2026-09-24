@@ -191,7 +191,7 @@ def test_attribute_missing_from_download_still_gets_a_null_column(frames: Frames
     assert context["soluble_exports"].null_count() == context.height
 
 
-def test_build_clean_writes_both_tables_with_lineage(
+def test_build_clean_writes_every_table_with_lineage(
     coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
     data_dir = raw_dir.parent
@@ -206,6 +206,9 @@ def test_build_clean_writes_both_tables_with_lineage(
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        # The corpus', built by the core from the documents the domain lists.
+        "documents",
+        "document_chunks",
     }
     assert read_table(data_dir / "clean" / "coffee_reviews").height == 25
     manifest = json.loads((paths["coffee_reviews"].parent / MANIFEST_NAME).read_text())

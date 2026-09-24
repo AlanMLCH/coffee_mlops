@@ -148,6 +148,10 @@ def _heading(element: Any) -> str | None:
 
 
 def _flat_text(element: Any) -> str:
-    """Every paragraph of a section, its subsections included, as one block of text."""
+    """Every paragraph of a section, its subsections included, as one block of text.
+
+    Paragraphs are separated by a blank line, as plain text marks them, so that cutting
+    into chunks can prefer a paragraph's end to a sentence's.
+    """
     paragraphs = (" ".join(" ".join(p.itertext()).split()) for p in element.iterfind(".//p"))
-    return "\n".join(paragraph for paragraph in paragraphs if paragraph)
+    return "\n\n".join(paragraph for paragraph in paragraphs if paragraph)

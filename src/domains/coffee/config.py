@@ -9,7 +9,7 @@ sense for a commodity with a world balance.
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mlops_core.config import DomainConfig
@@ -237,32 +237,6 @@ class MarketAnalysisConfig(BaseModel):
     history_since: int
 
 
-class TopicConfig(BaseModel):
-    """One subject of the corpus, in the domain's own words.
-
-    The terms are what a router matches a question against and what a glossary joins to
-    the tables' closed vocabularies ("washed" the process, in the text and in a column).
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    description: str  # what a document under this topic answers
-    terms: list[str] = Field(min_length=1)
-
-
-class CorpusConfig(BaseModel):
-    """The corpus' own vocabulary: which subjects coffee knowledge is filed under.
-
-    Metadata, not folders: almost no document is about one subject (the FAO manual covers
-    cultivation, varieties and processing), so a folder per subject would be the wrong
-    grain. `raw/` stays organised by source and ingestion, as every other source is.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    topics: dict[str, TopicConfig]
-
-
 class CoffeeConfig(DomainConfig):
     """Everything in `config.yaml`: the core's sections plus coffee's own."""
 
@@ -270,20 +244,6 @@ class CoffeeConfig(DomainConfig):
     overpass: OverpassConfig | None = None
     fas: FasConfig | None = None
     roasters: RoastersConfig | None = None
-    corpus: CorpusConfig
     cleaning: CleaningConfig
     production: ProductionConfig
     market_analysis: MarketAnalysisConfig
-
-    @model_validator(mode="after")
-    def _documents_are_filed_under_known_topics(self) -> Self:
-        """A topic nobody declared would route nothing and be found by nobody."""
-        unknown = {
-            f"{document.name}: {topic}"
-            for document in self.documents
-            for topic in document.topics
-            if topic not in self.corpus.topics
-        }
-        if unknown:
-            raise ValueError(f"Documents filed under topics corpus.topics lacks: {sorted(unknown)}")
-        return self

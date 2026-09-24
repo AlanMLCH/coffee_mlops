@@ -1,10 +1,11 @@
 """Runtime settings (environment) and the generic half of a domain's config (YAML).
 
 A domain's YAML has two kinds of section. The ones every domain has - its file
-downloads, its models (what one item is, what is predicted, how it is trained) and
-its analysis - are defined here, because the core runs them. The ones only one domain
-has (an API's paging, a cleaning vocabulary) are defined by that domain, which extends
-`DomainConfig` with them; pydantic still refuses any key that nobody declared.
+downloads, its corpus, its models (what one item is, what is predicted, how it is
+trained) and its analysis - are defined here, because the core runs them. The ones
+only one domain has (an API's paging, a cleaning vocabulary) are defined by that
+domain, which extends `DomainConfig` with them; pydantic still refuses any key that
+nobody declared.
 """
 
 from datetime import date
@@ -109,6 +110,61 @@ class DocumentConfig(BaseModel):
     # notwithstanding. Those are fetched by hand into <data_dir>/inbox/documents/ and
     # named here: a refusal is respected, never worked around.
     inbox: str | None = None
+
+
+class TopicConfig(BaseModel):
+    """One subject of the corpus, in the domain's own words.
+
+    The terms are what a chunk is tagged by and a question routed by, and what a glossary
+    joins to the tables' closed vocabularies (a process named in a text and in a column).
+    A term matches as a whole word or phrase, in its inflections - "roast" finds roasts,
+    roasted, roasting and roaster - and never inside another word.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    description: str  # what a document under this topic answers
+    terms: list[str] = Field(min_length=1)
+
+
+class ChunkingConfig(BaseModel):
+    """How long a chunk is: a retrieval setting, to be tuned through the gate like a model.
+
+    In characters, not tokens: cutting needs no tokenizer, and English text runs at about
+    four characters a token.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_chars: int = Field(gt=0)
+    # Carried from the end of one chunk into the next, in whole sentences, so a passage
+    # cut at a boundary is still found whole in one of the two.
+    overlap_chars: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _overlap_is_shorter_than_a_chunk(self) -> Self:
+        if self.overlap_chars >= self.max_chars:
+            raise ValueError("overlap_chars must be shorter than max_chars")
+        return self
+
+
+class CorpusConfig(BaseModel):
+    """What the corpus is filed under and how it is cut.
+
+    The topics are the domain's words; that they exist, and that every document is filed
+    under some, is the core's rule, because the core tags each chunk and routes each
+    question by them. Metadata, not folders: almost no document is about one subject.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    topics: dict[str, TopicConfig] = Field(min_length=1)
+    chunking: ChunkingConfig
+
+
+# The clean tables the core builds from a corpus, next to the domain's own.
+DOCUMENTS_TABLE = "documents"
+CHUNKS_TABLE = "document_chunks"
 
 
 class ItemsConfig(BaseModel):
@@ -316,6 +372,7 @@ class DomainConfig(BaseModel):
     name: str
     sources: dict[str, SourceConfig]
     documents: list[DocumentConfig] = []  # the corpus; empty until a domain has one
+    corpus: CorpusConfig | None = None  # required once there are documents
     models: list[ModelConfig] = Field(min_length=1)
     analysis: AnalysisConfig
 
@@ -328,12 +385,33 @@ class DomainConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _documents_are_filed_under_known_topics(self) -> Self:
+        """A topic nobody declared would route nothing and be found by nobody."""
+        if self.documents and self.corpus is None:
+            raise ValueError("Documents need a `corpus:` section: their topics and how to cut them")
+        known = self.corpus.topics if self.corpus else {}
+        unknown = {
+            f"{document.name}: {topic}"
+            for document in self.documents
+            for topic in document.topics
+            if topic not in known
+        }
+        if unknown:
+            raise ValueError(f"Documents filed under topics corpus.topics lacks: {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
     def _models_are_named_once(self) -> Self:
         names = [model.name for model in self.models]
         repeated = sorted({name for name in names if names.count(name) > 1})
         if repeated:
             raise ValueError(f"Model names must be unique; repeated: {repeated}")
         return self
+
+    @property
+    def corpus_tables(self) -> tuple[str, ...]:
+        """The clean tables the core builds from the corpus; none for a domain without one."""
+        return (DOCUMENTS_TABLE, CHUNKS_TABLE) if self.documents else ()
 
     def model_named(self, name: str) -> ModelConfig:
         """The model called `name`, or an error that lists the ones there are."""

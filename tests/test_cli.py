@@ -101,6 +101,8 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        "documents",
+        "document_chunks",
     }
 
 
@@ -128,6 +130,8 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        "documents",
+        "document_chunks",
     }
 
 

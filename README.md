@@ -90,7 +90,7 @@ flowchart TD
         end
         subgraph CORPUS["Documents: text, never figures"]
             direction TB
-            documents["17 documents<br/>WCR · FAO · SCA · ICO · papers<br/>fetched, or handed over at a 403"]
+            corpus_sources["17 documents<br/>WCR · FAO · SCA · ICO · papers<br/>fetched, or handed over at a 403"]
         end
     end
 
@@ -109,6 +109,8 @@ flowchart TD
         roaster_coffees["roaster_coffees<br/>the shops' coffees: 2026 items"]
         roaster_origins["roaster_origins<br/>one row per origin · blends split<br/>PSD · SIAP · CQI vocabularies"]
         roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
+        documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
+        document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
     end
     audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
 
@@ -130,7 +132,6 @@ flowchart TD
 
     subgraph AI["Stage 3, planned: RAG and agent"]
         direction LR
-        chunks["chunks + topics<br/>the domain's own vocabulary"]
         vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
@@ -153,8 +154,8 @@ flowchart TD
     CLEAN & review_features & review_predictions & analysis -.-> catalog
     offer_features & offer_predictions -.-> catalog
 
-    validate -.-> chunks -.-> vectors -.-> agent
-    roaster_coffees -. "descriptions" .-> chunks
+    document_chunks -.-> vectors -.-> agent
+    roaster_coffees -. "descriptions" .-> vectors
     catalog -.-> agent
     api -.-> agent
 
@@ -162,13 +163,13 @@ flowchart TD
     classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
     classDef store fill:#eeeeea,stroke:#898781,color:#111
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
-    class extract_files,validate,train,gate,api,analysis,dashboard core
+    class extract_files,validate,train,gate,api,analysis,dashboard,documents,document_chunks core
     class extract_apis,review_features,offer_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class chunks,vectors,agent planned
-    class documents domain
+    class vectors,agent planned
+    class corpus_sources domain
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -176,7 +177,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
-| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers` |
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.documents`, `clean.document_chunks` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
@@ -476,16 +477,83 @@ Four rules the ingestion follows, each of them a decision:
   the URL they came from. `make extract` says which are missing and where to put them;
   nothing is scraped around the refusal.
 - **Provenance travels with the text.** Publisher, year, licence, language and topics are
-  config, and every chunk will carry them, so an answer can say where it got that.
+  config, written to `clean.documents` with the date each file was retrieved, and every
+  chunk names its document and its page or section, so an answer can say where it got
+  that.
 - **Topics are metadata, not folders.** Nine of them - cultivation, varieties, processing,
   roasting, chemistry, cupping, brewing, market, sustainability - each with the terms a
-  question is routed by. Almost no document is about one subject (the FAO manual covers
-  three), so a folder per subject would be the wrong grain.
+  chunk is filed by and a question routed by. Almost no document is about one subject
+  (the FAO manual covers three), so a folder per subject would be the wrong grain.
 
 Two traps are handled where they are found: the SCA's standards are encrypted with
 permissions rather than a password (an empty one opens them), and Europe PMC's article
 XML is read by section, top level only, because a nested section's text is inside its
 parent's and both would index every paragraph twice.
+
+### From documents to chunks
+
+`mlops data clean` turns the corpus into two tables, `clean.documents` and
+`clean.document_chunks`. They are the core's, not the domain's: any domain that lists
+documents gets them, cut the same way; the domain supplies only the vocabulary.
+
+**Only prose is indexed.** Each rule below was written after reading this corpus, is
+about the shape of text rather than its subject, and is counted per document in
+`clean.documents` (`parts_kept`, `characters_kept`):
+
+| Removed | Characters | Why it would hurt |
+|---|---:|---|
+| Reference lists | 96,985 | Titles of other works: dense in exactly the words a question uses, saying nothing |
+| Runs of lines ending in a figure | 29,487 | Tables, contents pages, indexes, chart axes: figures come from SQL, not from a PDF's scrambled copy |
+| Running headers, footers, page numbers | 15,524 | The same line on every page, in every chunk of the document |
+| Spacing, dotted leaders, broken words | 15,328 | "fermen-tation" and "co ffee" are words no search matches |
+| **Kept** | **1,172,414 of 1,329,809** | 88% |
+
+- A reference list opens at its heading and runs on through the pages that follow
+  **while they cite densely** (2.2 to 15 citations per 1,000 characters on reference
+  pages, never above 1.8 on body pages) - not to the end of the document, because the
+  robusta catalogue puts its references on pages 12-15 of 67, before its varieties.
+- A table goes, the page it sits on stays: SCA-104 explains its cupping score and
+  tabulates it on the same page, and dropping the page would drop the explanation.
+- A word broken at a line end is joined unless the document writes the compound on one
+  line elsewhere ("wet-processed"); a ligature split by extraction ("co ffee", 103 times
+  in one review) is joined only where the document spells the word whole, so "the first"
+  never becomes "thefirst".
+
+**1,373 chunks**, median 1,055 characters (about 260 tokens), cut at the coarsest
+boundary that fits - paragraph, then sentence, then line - and packed up to 1,200, each
+opening with the last whole sentences of the one before (up to 200 characters). A chunk
+never spans two parts, so it cites one page or one section. Size and overlap are config:
+retrieval settings, to be tuned through the gate like a model's.
+
+**Each chunk is filed by the terms it uses.** A topic's terms match as whole words in
+their inflections ("roast" finds roasting and roaster, "import" never finds important).
+A chunk takes those of its document's topics whose terms it uses, and another topic only
+with two of that topic's terms, because one word out of place is not a subject. A chunk
+with no term keeps its document's topics rather than none: a topic filter that excludes
+a passage does it silently. 88% of chunks are filed by their own terms, 12% by their
+document (`topics_basis`), and 59% carry more than one topic.
+
+| Topic | Chunks | Documents |
+|---|---:|---:|
+| cultivation | 547 | 10 |
+| market | 357 | 13 |
+| sustainability | 311 | 3 |
+| processing | 310 | 10 |
+| varieties | 266 | 7 |
+| cupping | 233 | 11 |
+| chemistry | 208 | 10 |
+| roasting | 150 | 8 |
+| brewing | 80 | 7 |
+
+Brewing is the thin one - its only dedicated document is a paper on espresso extraction
+kinetics - and that is said here rather than padded: a document is added when the
+retrieval evaluation shows a question it cannot answer.
+
+Some debris survives, knowingly: 17 chunks (1.2%) are what is left of contents pages -
+the skeleton of the FAO manual's index, the SCA standards' "Contents" headings, and the
+ICO report's list of figures, whose lines alternate between a title and a page number
+and so never form a run. A rule aggressive enough to catch them would catch prose too;
+the retrieval evaluation will say whether they cost anything.
 
 ## What a kilo costs (stage 3)
 
