@@ -66,6 +66,12 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("data", "mlops_core.analysis"),
         ("ml", "mlops_core.analysis"),
         ("ml", "mlops_core.serving"),
+        # Retrieval reads the clean layer from disk, as the model pipeline does.
+        ("rag", "mlops_core.data"),
+        ("rag", "mlops_core.ml"),
+        ("data", "mlops_core.rag"),
+        ("ml", "mlops_core.rag"),
+        ("serving", "mlops_core.rag"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:
@@ -101,6 +107,16 @@ def test_every_domain_exposes_an_adapter() -> None:
         tree = ast.parse((package / "__init__.py").read_text(encoding="utf-8"))
         functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
         assert "adapter" in functions, f"domains/{package.name} has no adapter()"
+
+
+def test_every_domain_is_named_after_its_package() -> None:
+    """The core finds a domain's files (its config, its question set) by the name in its
+    config; a config named otherwise would send it to another package's directory."""
+    from mlops_core.adapter import available_domains, domain_dir, load_adapter
+
+    for domain in available_domains():
+        assert load_adapter(domain).config.name == domain
+        assert (domain_dir(domain) / "config.yaml").is_file()
 
 
 def test_every_source_file_is_actually_in_the_repository() -> None:

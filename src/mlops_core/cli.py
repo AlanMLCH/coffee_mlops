@@ -1,8 +1,9 @@
 """Command-line entry point.
 
 Two independent pipelines, one command group each. `data` produces the canonical
-clean tables; `ml` consumes them from disk. Every step runs on its own; `run`
-chains the steps of one pipeline when that is what you want. Every command takes
+clean tables; `ml` consumes them from disk. `rag` holds the questions retrieval is
+judged by: drafted by a local model, decided by a person. Every step runs on its own;
+`run` chains the steps of one pipeline when that is what you want. Every command takes
 `--domain`: the CLI knows the pipeline, the domain's adapter knows the rest. The `ml`
 steps also take `--model`; without it they run every model the domain declares.
 """
@@ -12,28 +13,44 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
+import click
+import polars as pl
 import typer
 
-from mlops_core.adapter import DomainAdapter, load_adapter
-from mlops_core.config import DomainConfig, Settings
+from mlops_core.adapter import DomainAdapter, domain_dir, load_adapter
+from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, CorpusConfig, DomainConfig, Settings
 from mlops_core.data.api import silence_request_urls
 from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
 from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
 from mlops_core.provenance import REPO_ROOT
-from mlops_core.storage import prune_layers
+from mlops_core.rag.questions import (
+    Question,
+    contains,
+    load_questions,
+    questions_path,
+    reviewed,
+    save_questions,
+    tally,
+)
+from mlops_core.storage import prune_layers, read_table
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
 ml_app = typer.Typer(no_args_is_help=True, help="Model pipeline: clean tables -> model.")
 analysis_app = typer.Typer(no_args_is_help=True, help="Analysis: layers -> tables and figures.")
+rag_app = typer.Typer(
+    no_args_is_help=True, help="RAG: the questions retrieval is judged by, reviewed by a person."
+)
 app.add_typer(data_app, name="data")
 app.add_typer(ml_app, name="ml")
 app.add_typer(analysis_app, name="analysis")
+app.add_typer(rag_app, name="rag")
 
 Domain = Annotated[
     str | None,
@@ -233,6 +250,138 @@ def dashboard(domain: Domain = None, port: int = 8501) -> None:
         "true",
     ]
     streamlit_cli.main()
+
+
+@rag_app.command()
+def draft(
+    domain: Domain = None,
+    per_topic: Annotated[
+        int, typer.Option(min=1, help="Questions nobody rejected that each topic should have")
+    ] = 12,
+    drafter: Annotated[
+        str | None, typer.Option(help="The Ollama model that drafts; defaults to the chosen one")
+    ] = None,
+) -> None:
+    """Have the local model draft retrieval questions until every topic has enough.
+
+    Each draft is saved as it is written, so an interrupted run loses nothing and the
+    next one carries on where it stopped. Drafts wait for `mlops rag review`.
+    """
+    with _needs_extra("rag"):
+        from mlops_core.rag.llm import LocalModel, ollama_client
+    from mlops_core.rag.questions import DRAFTING_MODEL, OPTIONS, Draft, draft_questions
+
+    config, corpus, path, questions = _question_set(domain)
+    chunks, documents = _corpus_tables(config)
+    with ollama_client(Settings().ollama_url) as client:
+        model = LocalModel(client, drafter or DRAFTING_MODEL, OPTIONS)
+        try:
+            drafted_by = f"{model.model}@{model.digest()}"
+        except (ConnectionError, LookupError) as unavailable:
+            typer.echo(str(unavailable), err=True)
+            raise typer.Exit(code=1) from unavailable
+        drafts = draft_questions(
+            chunks,
+            documents,
+            corpus.topics,
+            questions,
+            per_topic,
+            lambda prompt: model.ask(prompt, Draft),
+            drafted_by,
+            date.today(),
+        )
+        for question in drafts:
+            questions.append(question)
+            save_questions(path, questions)
+            typer.echo(f"{question.id}: {question.question}")
+    _echo_tally(questions)
+
+
+@rag_app.command()
+def review(domain: Domain = None) -> None:
+    """Go through the drafts one at a time: accept, edit, reject, skip or quit.
+
+    Every decision is saved when it is made, so a review can stop at any question and
+    resume there. Run it in a terminal of your own: it waits for your keys.
+    """
+    config, _, path, questions = _question_set(domain)
+    chunks, documents = _corpus_tables(config)
+    for question in [q for q in questions if q.status == "draft"]:
+        _show(question, chunks, documents)
+        choice = typer.prompt(
+            "[a]ccept [e]dit [r]eject [s]kip [q]uit",
+            type=click.Choice(["a", "e", "r", "s", "q"]),
+            show_choices=False,
+        )
+        if choice == "q":
+            break
+        if choice == "s":
+            continue
+        if choice == "e":
+            text = typer.prompt("Question", default=question.question)
+            answer = typer.prompt("Answer", default=question.answer)
+            decided = reviewed(question, "accept", date.today(), wording=text, answer=answer)
+        else:
+            decided = reviewed(question, "accept" if choice == "a" else "reject", date.today())
+        questions = [decided if q.id == decided.id else q for q in questions]
+        save_questions(path, questions)
+    _echo_tally(questions)
+
+
+def _corpus(config: DomainConfig) -> CorpusConfig:
+    if config.corpus is None:
+        typer.echo(f"{config.name} has no corpus: nothing to ask questions about", err=True)
+        raise typer.Exit(code=1)
+    return config.corpus
+
+
+def _question_set(
+    domain: str | None,
+) -> tuple[DomainConfig, CorpusConfig, Path, list[Question]]:
+    """The domain's config and corpus, where its question set lives, and the set as it
+    stands."""
+    config = _adapter(domain).config
+    corpus = _corpus(config)
+    path = questions_path(domain_dir(config.name))
+    return config, corpus, path, load_questions(path, corpus.topics)
+
+
+def _corpus_tables(config: DomainConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """The latest chunks and documents: what questions are drafted from and shown with."""
+    clean_dir = _data_dir(config) / "clean"
+    return read_table(clean_dir / CHUNKS_TABLE), read_table(clean_dir / DOCUMENTS_TABLE)
+
+
+def _show(question: Question, chunks: pl.DataFrame, documents: pl.DataFrame) -> None:
+    """What a reviewer needs to judge a draft: where it came from, the passage, the draft."""
+    source = question.source
+    document = documents.filter(pl.col("document_id") == source.document_id).row(0, named=True)
+    passage = chunks.filter(pl.col("chunk_id") == question.source_chunk)
+    if passage.is_empty():  # the corpus was cut again since: find the excerpt instead
+        mine = chunks.filter(pl.col("document_id") == source.document_id)
+        passage = mine.filter(
+            pl.col("text").map_elements(
+                lambda text: contains(text, source.excerpt), return_dtype=pl.Boolean
+            )
+        )
+    title = passage["part_title"].drop_nulls()
+    where = f"section '{title[0]}'" if len(title) else f"page {source.part}"
+    typer.echo("")
+    typer.echo(f"=== {question.id} ({question.topic})")
+    typer.echo(f'{document["publisher"]}, "{document["title"]}", {where}')
+    typer.echo("")
+    for text in passage["text"]:
+        typer.echo(text)
+    typer.echo("")
+    typer.echo(f"Q: {question.question}")
+    typer.echo(f"A: {question.answer}")
+    typer.echo(f"Excerpt (the label): {source.excerpt}")
+
+
+def _echo_tally(questions: list[Question]) -> None:
+    for topic, counts in sorted(tally(questions).items()):
+        statuses = ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
+        typer.echo(f"{topic}: {statuses}")
 
 
 @app.command()

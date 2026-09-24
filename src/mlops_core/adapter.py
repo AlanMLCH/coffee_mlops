@@ -17,6 +17,7 @@ A domain package exposes one function, `adapter()`, returning an object that sat
 from __future__ import annotations
 
 import importlib
+import importlib.resources
 import pkgutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -146,6 +147,13 @@ def available_domains() -> list[str]:
     """Every domain package installed under `domains/`."""
     package = importlib.import_module(DOMAINS_PACKAGE)
     return sorted(module.name for module in pkgutil.iter_modules(package.__path__))
+
+
+def domain_dir(domain: str) -> Path:
+    """Where a domain's package lives: its config and the files it keeps beside its code,
+    such as the questions its retrieval is judged by. Written to only from a checkout,
+    where this is the source tree."""
+    return Path(str(importlib.resources.files(f"{DOMAINS_PACKAGE}.{domain}")))
 
 
 def load_adapter(domain: str | None = None) -> DomainAdapter:

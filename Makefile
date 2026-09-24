@@ -6,7 +6,7 @@ export DAGSTER_HOME := $(CURDIR)/.dagster
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard sql prune dagster services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard questions review sql prune dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -29,6 +29,8 @@ help:
 	@echo "prune      drop old partitions, keeping the newest (KEEP=$(KEEP))"
 	@echo "analysis   compute the studies (tables + figures) from the latest layers"
 	@echo "dashboard  open the analysis dashboard (http://localhost:8501)"
+	@echo "questions  have the local model draft retrieval questions (needs Ollama)"
+	@echo "review     accept, edit or reject the drafts, one at a time (in your own terminal)"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
 install:
@@ -99,3 +101,9 @@ analysis:
 
 dashboard:
 	uv run mlops analysis dashboard --domain $(DOMAIN)
+
+questions:
+	uv run mlops rag draft --domain $(DOMAIN)
+
+review:
+	uv run mlops rag review --domain $(DOMAIN)

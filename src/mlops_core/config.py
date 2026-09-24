@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     model_cache_dir: Path | None = None
     # Complete partitions kept per table when pruning; history explains past predictions.
     keep_partitions: int = 3
+    # Ollama, serving the local models natively (it sees the GPU; a container would not).
+    ollama_url: str = "http://localhost:11434"
 
 
 class SpatialConfig(BaseModel):

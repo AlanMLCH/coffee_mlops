@@ -130,8 +130,9 @@ flowchart TD
         catalog[("DuckDB views over the<br/>newest partitions: mlops sql")]
     end
 
-    subgraph AI["Stage 3, planned: RAG and agent"]
+    subgraph AI["Stage 3: RAG and agent"]
         direction LR
+        questions[("evals/retrieval_questions.jsonl<br/>drafted by qwen3.5:4b<br/>decided by a person")]
         vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
@@ -154,7 +155,9 @@ flowchart TD
     CLEAN & review_features & review_predictions & analysis -.-> catalog
     offer_features & offer_predictions -.-> catalog
 
+    document_chunks -- "mlops rag draft / review" --> questions
     document_chunks -.-> vectors -.-> agent
+    questions -. "judges each search" .-> vectors
     roaster_coffees -. "descriptions" .-> vectors
     catalog -.-> agent
     api -.-> agent
@@ -169,7 +172,7 @@ flowchart TD
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class vectors,agent planned
-    class corpus_sources domain
+    class corpus_sources,questions domain
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -181,7 +184,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
-| **ai** (stage 3) | `index`, `ask` | clean tables + documents | RAG index, agent |
+| **rag** (stage 3) | `draft`, `review`; planned: `index`, `ask` | the corpus' clean tables | the questions retrieval is judged by; planned: the index and the agent |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -554,6 +557,57 @@ the skeleton of the FAO manual's index, the SCA standards' "Contents" headings, 
 ICO report's list of figures, whose lines alternate between a title and a page number
 and so never form a run. A rule aggressive enough to catch them would catch prose too;
 the retrieval evaluation will say whether they cost anything.
+
+### The questions retrieval is judged by
+
+No search is built before the questions that judge it. Each one is a question someone
+could ask, the passage that answers it, and what a person decided about it:
+
+```bash
+make questions   # the local model drafts, until every topic has 12 nobody rejected
+make review      # a person accepts, edits or rejects each draft (in your own terminal)
+```
+
+- **A local model drafts; a person decides.** `qwen3.5:4b` reads a passage and writes a
+  question it answers, plus a short answer in its own words, through Ollama with the
+  reply constrained to a JSON schema. It was chosen by trying both installed models on
+  the same five passages: `granite4.2:3b` wrote "the passage" into its questions and put
+  a second question where the answer belonged. A draft nobody checked measures the
+  drafter, not the search, so only accepted and edited questions count.
+- **Every draft is kept**, with what its reviewer did to it and when, the model's digest
+  and the prompt's version. How many drafts were taken as written, fixed or thrown away
+  is itself a result: how far a 4B model can be trusted to write an evaluation set.
+- **Spread by design.** A topic's passages are dealt from each of its documents in turn,
+  the document holding most of the topic first, so no single document writes a topic's
+  questions; only passages filed under the topic by their own terms and at least 600
+  characters long are asked about, and no passage is asked about twice - a rejected one
+  included.
+- **A label is an excerpt, not a chunk and not a page.** The drafter copies the sentence
+  that answers, and a retrieved chunk is relevant when it contains it - whatever the cut.
+  Chunk ids change with every cut, and chunk size is one of the settings these questions
+  exist to tune; a page or a section is too coarse, since an article's section can run to
+  thirty chunks and any of them would count as a hit. An excerpt is kept only if the
+  passage holds it word for word (a paraphrase would label words the corpus does not
+  have), it is a sentence or two, and no other page or section holds it ("brewed
+  coffee." would match any search). The source excerpt is the first label, graded 2
+  (answers it); when several searches run, the passages they return are judged and
+  appended with their own grade - 0 included, because "judged not relevant" is not
+  "never judged".
+- **The reply's shape was measured too.** On the same twelve passages, asking for the
+  excerpt before the question gave verbatim excerpts in 11 of 11 usable replies, against
+  10 with the excerpt last and 7 with a looser rule, and lifted no more of the passage's
+  words into the question (about 45% either way).
+- **The checks earn their keep.** The first full run asked about 180 passages to get 108
+  drafts (12 a topic): the drafter declined 18, and the checks threw out 44 excerpts that
+  were not verbatim, 9 found on other pages too and 1 that was not a sentence or two. A
+  4B model's drafts still wander - a "varieties" question about financial incentives, an
+  excerpt that does not answer its question - which is what the review is for.
+- **A known bias, stated.** A question drafted from a passage borrows its words, which
+  flatters keyword search over semantic search. The prompt asks for the drafter's own
+  words and the review can reword what it did not; the rest is a property of the set.
+
+The set is data the domain owns, versioned beside its code in
+`src/domains/coffee/evals/retrieval_questions.jsonl`, one question per line.
 
 ## What a kilo costs (stage 3)
 
