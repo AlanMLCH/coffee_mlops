@@ -151,6 +151,16 @@ def test_a_long_part_is_cut_at_sentences_with_whole_sentences_carried_over() -> 
     assert " ".join(sentences).endswith(chunks[-1])
 
 
+def test_what_is_carried_over_is_trimmed_to_let_the_next_sentence_fit() -> None:
+    """Both short sentences fit in the overlap, but with both the long one would push the
+    chunk past its limit: the older one is let go, never the limit."""
+    long = "Then " + "a long clause, " * 11 + "and it is done."
+
+    chunks = split(f"Short one. Short two. {long}", CORPUS.chunking)
+
+    assert chunks == ["Short one. Short two.", f"Short two. {long}"]
+
+
 def test_a_paragraph_end_is_preferred_to_a_sentence_end() -> None:
     """Packed by sentence, the first chunk would take the next paragraph's first sentence."""
     second = f"{SENTENCE} {SENTENCE}"
