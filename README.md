@@ -647,7 +647,7 @@ answer is found and how high, in the ten chunks an answer can be built from.
 |---|---:|---:|---:|---:|---:|---|
 | BM25 | 0.287 | 0.556 | 0.685 | 0.400 | 0.468 | the baseline |
 | **Dense** | **0.426** | **0.741** | **0.796** | 0.547 | **0.608** | **passes**: +0.140 vs BM25 [+0.070, +0.215], 100% sure |
-| Hybrid (RRF) | 0.435 | 0.704 | 0.769 | 0.548 | 0.601 | fails: -0.006 vs dense [-0.059, +0.045], 40% sure |
+| Hybrid (RRF) | 0.407 | 0.704 | 0.769 | 0.534 | 0.591 | fails: -0.017 vs dense [-0.070, +0.036], 26% sure |
 
 - **Dense search wins, against a set that favours its rival.** The questions borrow the
   passages' words, which helps keyword search, and still the semantic one finds the
@@ -702,6 +702,12 @@ judgments add graded labels.
   request - nobody ever searches half an index - then drops the builds before it. The
   collection records the chunks it was built from, and an evaluation refuses an index
   built from other chunks rather than misread it.
+- **A ranking has to repeat to be compared.** Fusing ranks produces exact ties, and
+  Qdrant orders tied points as it likes: 17 of 108 hybrid rankings changed between two
+  identical calls. Searches ask for ten more than they need, order them by score and then
+  chunk id, and cut; two runs now give the same numbers. What remains is Ollama on a GPU,
+  whose embedding of one query varies by up to 0.004 per component from call to call -
+  each question is embedded once per run, so dense and hybrid see the same vector.
 - **Tested without a server**: Qdrant's in-process mode runs the same collections,
   sparse vectors, fusion and aliases, so CI builds and searches a real index.
 

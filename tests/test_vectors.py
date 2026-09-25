@@ -283,3 +283,23 @@ def test_a_qdrant_that_answers_is_handed_over(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(qdrant_client, "QdrantClient", lambda url: QdrantClient(":memory:"))
 
     assert cli._qdrant("http://127.0.0.1:6333").get_collections().collections == []
+
+
+def test_tied_chunks_come_back_in_chunk_order_every_time() -> None:
+    """Fusing ranks makes exact ties, and Qdrant orders tied points as it likes; a
+    ranking that changes between two identical calls cannot be compared with another."""
+    twins = (
+        corpus()
+        .head(2)
+        .with_columns(
+            pl.lit(TEXTS[0]).alias("text"), pl.Series("chunk_id", ["doc-0002", "doc-0001"])
+        )
+    )
+    vectors = np.array([vector_of(TEXTS[0])] * 2, dtype=np.float32)
+    client = QdrantClient(":memory:")
+    build_index(client, "test", twins, embedding_table(twins, vectors), {}, "stamp")
+    served = IndexSearch(client, "test", twins, lambda text: vector_of(TEXTS[0]))
+
+    assert served.dense("light roast", 1) == [1]  # doc-0001, at position 1
+    assert served.hybrid("light roast", 2) == [1, 0]
+    assert served.keyword("light roast", 2) == [1, 0]

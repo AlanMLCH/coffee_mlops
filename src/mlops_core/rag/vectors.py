@@ -39,6 +39,11 @@ RRF_K = 60
 # How many candidates each half of a hybrid search offers the fusion.
 PREFETCH = 50
 UPSERT_BATCH = 256
+# Fusing ranks makes exact ties (rank 2 in one list and 5 in the other scores as 5 and 2),
+# and Qdrant orders tied points arbitrarily: 17 of 108 hybrid rankings changed between
+# two identical calls. So a few more are asked for, ordered here - by score, then by
+# chunk id - and cut, which makes a ranking repeatable unless a tie runs past the margin.
+TIE_MARGIN = 10
 
 
 def query_text(question: str) -> str:
@@ -142,10 +147,10 @@ class IndexSearch:
             self._alias,
             query=self._embed(query_text(question)),
             using=DENSE,
-            limit=k,
+            limit=k + TIE_MARGIN,
             with_payload=["chunk_id"],
         )
-        return self._located(found.points)
+        return self._located(found.points, k)
 
     def hybrid(self, question: str, k: int) -> list[int]:
         ids, weights = query_vector(question)
@@ -162,10 +167,10 @@ class IndexSearch:
                 ),
             ],
             query=models.RrfQuery(rrf=models.Rrf(k=RRF_K)),
-            limit=k,
+            limit=k + TIE_MARGIN,
             with_payload=["chunk_id"],
         )
-        return self._located(found.points)
+        return self._located(found.points, k)
 
     def keyword(self, question: str, k: int) -> list[int]:
         """BM25 as Qdrant computes it, to check it agrees with the in-process one."""
@@ -174,16 +179,21 @@ class IndexSearch:
             self._alias,
             query=models.SparseVector(indices=ids, values=weights),
             using=SPARSE,
-            limit=k,
+            limit=k + TIE_MARGIN,
             with_payload=["chunk_id"],
         )
-        return self._located(found.points)
+        return self._located(found.points, k)
 
-    def _located(self, points: list[models.ScoredPoint]) -> list[int]:
-        chunk_ids = [str((point.payload or {})["chunk_id"]) for point in points]
+    def _located(self, points: list[models.ScoredPoint], k: int) -> list[int]:
+        ranked = sorted(points, key=lambda point: (-point.score, _chunk_id(point)))
+        chunk_ids = [_chunk_id(point) for point in ranked[:k]]
         stale = [c for c in chunk_ids if c not in self._positions]
         if stale:
             # The corpus was cut again and the index was not rebuilt: its chunks are not
             # the ones the labels are being matched against.
             raise LookupError(f"The index holds chunks the corpus no longer has ({stale[0]}…)")
         return [self._positions[c] for c in chunk_ids]
+
+
+def _chunk_id(point: models.ScoredPoint) -> str:
+    return str((point.payload or {})["chunk_id"])
