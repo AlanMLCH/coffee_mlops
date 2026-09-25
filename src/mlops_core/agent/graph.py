@@ -26,7 +26,7 @@ from mlops_core.adapter import DomainAdapter
 from mlops_core.agent.prompts import ANSWER, FIX, PLAN, AnswerReply, PlanReply, Route
 from mlops_core.agent.routing import route
 from mlops_core.agent.text_to_sql import Generator, SqlAnswer, write_sql
-from mlops_core.agent.tools import PredictionAnswer, predict
+from mlops_core.agent.tools import PredictionAnswer, cite, predict
 from mlops_core.agent.verify import cited_ids, problems
 
 # Chosen by the benchmark (2026-09-25): the one candidate that cleared both bars.
@@ -224,15 +224,7 @@ class Agent:
         return "\n\n".join(blocks) or "No tool returned anything."
 
     def _source(self, passage: dict[str, Any]) -> str:
-        document = self.documents.get(passage["document_id"], {})
-        title = document.get("title", passage["document_id"])
-        year = f" ({document['year']})" if document.get("year") else ""
-        where = (
-            f"section '{passage['part_title']}'"
-            if passage.get("part_title")
-            else f"page {passage['part']}"
-        )
-        return f'{document.get("publisher", "")}, "{title}"{year}, {where}'.lstrip(", ")
+        return cite(passage, self.documents)
 
     def _reply(self, state: State) -> Reply:
         """The best answer, with a line per piece of evidence it cites, in the order given."""

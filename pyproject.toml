@@ -76,6 +76,12 @@ agent = [
     "coffee-mlops[rag]",
     "langgraph>=1.2.12",
 ]
+# The same three tools over MCP, for clients this project does not write. mcp 2.x: its
+# server class is MCPServer (1.x called it FastMCP).
+mcp = [
+    "coffee-mlops[rag]",
+    "mcp>=2.2.0",
+]
 
 [project.urls]
 # Sent in the user agent, so a service that sees trouble knows who to contact.

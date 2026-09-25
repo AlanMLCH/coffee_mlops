@@ -582,6 +582,48 @@ def ask(
     typer.echo(f"route: {reply.route} | trace: {mlflow.get_last_active_trace_id()}")
 
 
+@app.command("mcp")
+def mcp_server(domain: Domain = None) -> None:
+    """Serve the agent's tools over MCP, on stdio: for Claude Desktop, Claude Code or an IDE.
+
+    The same tools the agent uses - locked-down SQL, one prediction per model, document
+    search - with the data dictionary as a resource. Needs Ollama, Qdrant with a built
+    index, and the prediction API; stdout is the protocol, so everything else goes to
+    stderr.
+    """
+    with _needs_extra("mcp"):
+        from mlops_core.agent.dictionary import dictionary_path, schema_context
+        from mlops_core.agent.mcp_server import build_server
+        from mlops_core.agent.sql import read_only, views
+        from mlops_core.agent.tools import cite
+        from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
+
+    adapter = _adapter(domain)
+    config = adapter.config
+    _corpus(config)
+    settings = Settings()
+    con = read_only(_data_dir(config))
+    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    chunks, documents = _corpus_tables(config)
+    titles = {row["document_id"]: row for row in documents.iter_rows(named=True)}
+    client, _ = _current_index(config, settings)
+    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
+        embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
+        search = IndexSearch(
+            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
+        )
+        server = build_server(
+            adapter,
+            con,
+            schema_context(dictionary, views(con)),
+            search.passages,
+            api,
+            lambda passage: cite(passage, titles),
+        )
+        server.run("stdio")
+
+
 def _current_index(
     config: DomainConfig, settings: Settings
 ) -> tuple["QdrantClient", dict[str, Any]]:

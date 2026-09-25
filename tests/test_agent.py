@@ -6,9 +6,12 @@ What is under test is the workflow - which step runs, what each is shown, when a
 answer is written again and which one is kept - not a model.
 """
 
+import asyncio
 import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +21,7 @@ import mlflow
 import numpy as np
 import polars as pl
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from typer.testing import CliRunner
@@ -327,9 +331,9 @@ Script = Callable[[dict[str, Any]], dict[str, Any]]  # a reply shape's propertie
 
 
 @pytest.fixture
-def ask(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Script], Any]:
-    """`mlops agent ask`, with everything a real run needs stood in for: a corpus and its
-    index, the prediction API, and Ollama answering by the shape it is asked for."""
+def stood_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[Script], None]:
+    """Everything a real run needs, stood in for: a corpus and its index, the prediction
+    API, and - once given a script - Ollama answering by the shape it is asked for."""
     data = tmp_path / "data" / "coffee"
     chunks = pl.DataFrame([PASSAGE | {"chunk": 1, "characters": 60, "topics": ["cultivation"],
                                       "topics_basis": "terms"}], schema=CHUNKS_COLUMNS)  # fmt: skip
@@ -350,7 +354,7 @@ def ask(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Scrip
     monkeypatch.chdir(tmp_path)
     tags = json.loads((OLLAMA / "tags.json").read_text(encoding="utf-8"))
 
-    def run(question: str, script: Script) -> Any:
+    def with_ollama(script: Script) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             if request.url.path == "/api/tags":
                 return httpx.Response(200, json=tags)
@@ -365,6 +369,16 @@ def ask(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[str, Scrip
                 yield c
 
         monkeypatch.setattr(llm, "ollama_client", served)
+
+    return with_ollama
+
+
+@pytest.fixture
+def ask(stood_in: Callable[[Script], None]) -> Callable[[str, Script], Any]:
+    """`mlops agent ask`, in the stand-in environment."""
+
+    def run(question: str, script: Script) -> Any:
+        stood_in(script)
         return CliRunner().invoke(cli.app, ["agent", "ask", question])
 
     return run
@@ -428,3 +442,114 @@ def test_a_prediction_that_failed_is_evidence_too(session: duckdb.DuckDBPyConnec
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:
     with cli._api_client("http://api.example:8000") as client:
         assert str(client.base_url) == "http://api.example:8000"
+
+
+# --- MCP -----------------------------------------------------------------------------------
+
+
+def mcp_server(
+    session: duckdb.DuckDBPyConnection,
+    respond: Callable[[httpx.Request], httpx.Response] | None = None,
+) -> Any:
+    from mlops_core.agent.mcp_server import build_server
+
+    return build_server(
+        domains.coffee.adapter(),
+        session,
+        "## `clean.mexico_production` — coffee grown",
+        lambda question, k: [PASSAGE] * k,
+        api(respond or (lambda request: httpx.Response(200, json=PREDICTED))),
+        lambda passage: f"FAO, page {passage['part']}",
+    )
+
+
+def test_the_mcp_server_offers_the_agents_tools_all_read_only(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    server = mcp_server(session)
+
+    tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
+    resource = asyncio.run(server.read_resource("dictionary://tables"))
+
+    assert set(tools) == {"query_tables", "predict_review", "predict_offer", "search_documents"}
+    assert all(t.annotations is not None and t.annotations.read_only_hint for t in tools.values())
+    # A prediction tool's input is the model's own request body, descriptions included.
+    offer = json.dumps(tools["predict_offer"].input_schema)
+    assert "The roaster, as the catalogues name it" in offer
+    assert tools["predict_offer"].description.startswith("Predict the price per kilogram")
+    assert "`clean.mexico_production`" in next(iter(resource)).content
+
+
+def test_mcp_sql_keeps_its_guardrails_whoever_calls(session: duckdb.DuckDBPyConnection) -> None:
+    server = mcp_server(session)
+
+    result = asyncio.run(server.call_tool(
+        "query_tables", {"sql": "SELECT state FROM clean.mexico_production ORDER BY 1"}
+    ))  # fmt: skip
+
+    assert json.loads(result.content[0].text) == {
+        "columns": ["state"],
+        "rows": [["Chiapas"], ["Puebla"]],
+        "truncated": False,
+    }
+    with pytest.raises(ToolError, match="Only SELECT may run; this is COPY"):
+        asyncio.run(server.call_tool("query_tables", {"sql": "COPY (SELECT 1) TO 'x.csv'"}))
+
+
+def test_mcp_predictions_and_passages(session: duckdb.DuckDBPyConnection) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json=PREDICTED)
+
+    server = mcp_server(session, respond)
+    item = {"item": {"shop": "Almanegra", "bag_grams": 250}}
+
+    priced = json.loads(asyncio.run(server.call_tool("predict_offer", item)).content[0].text)
+    found = asyncio.run(server.call_tool("search_documents", {"question": "Why?", "k": 50}))
+
+    assert priced["item"] == {"shop": "almanegra", "bag_grams": 250.0}
+    assert priced["prediction"] == 1324.93
+    assert sent == [{"shop": "almanegra", "bag_grams": 250.0}]
+    passages = [json.loads(c.text) for c in found.content]
+    assert len(passages) == 10  # asked for 50: capped
+    assert passages[0]["source"] == "FAO, page 12"
+    with pytest.raises(ToolError, match="greater than 0"):
+        asyncio.run(server.call_tool("predict_offer", {"item": {"shop": "a", "bag_grams": -5}}))
+
+
+def test_mcp_says_when_the_prediction_service_fails(session: duckdb.DuckDBPyConnection) -> None:
+    server = mcp_server(session, lambda request: httpx.Response(503))
+
+    with pytest.raises(ToolError, match="The prediction service failed"):
+        asyncio.run(server.call_tool("predict_review", {"item": {"country": "Ethiopia"}}))
+
+
+def test_mcp_cells_travel_as_json() -> None:
+    from mlops_core.agent.mcp_server import _plain
+
+    assert _plain(date(2026, 9, 25)) == "2026-09-25"
+    assert _plain(Decimal("1.5")) == "1.5"
+    assert _plain(3) == 3
+
+
+def test_the_mcp_command_serves_on_stdio(
+    stood_in: Callable[[Script], None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mcp.server.mcpserver import MCPServer
+
+    stood_in(lambda shape: {})
+    served: list[tuple[str, list[str]]] = []
+
+    def run(self: MCPServer, transport: str) -> None:
+        served.append((transport, [t.name for t in asyncio.run(self.list_tools())]))
+
+    monkeypatch.setattr(MCPServer, "run", run)
+
+    result = CliRunner().invoke(cli.app, ["mcp"])
+
+    assert result.exit_code == 0, result.output
+    assert served == [
+        ("stdio", ["query_tables", "predict_review", "predict_offer", "search_documents"])
+    ]

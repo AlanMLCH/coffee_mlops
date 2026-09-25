@@ -13,7 +13,8 @@ Everything runs locally. No cloud, no recurring costs.
 
 ## Status
 
-**Stage 3 — scraping, RAG and the agent (in progress).** Stages 1 and 2 are complete.
+**Stage 3 — scraping, RAG and the agent: complete.** Stages 1, 2 and 3 are done; stage 4
+(time series, drift, retraining) is next.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -139,7 +140,7 @@ flowchart TD
         ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
-        mcp["MCP server over the three tools"]
+        mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents<br/>dictionary://tables · guardrails server-side"]
     end
 
     FILES & CORPUS --> extract_files
@@ -165,7 +166,7 @@ flowchart TD
     qdrant & questions --> ladder --> retrieval_runs
     ladder -- "dense passes the gate" --> mlflow
     qdrant -- "dense passages" --> agent
-    agent -.-> mcp
+    catalog & qdrant & api --> mcp
     roaster_coffees -. "descriptions" .-> qdrant
     catalog -- "locked-down SQL" --> agent
     api -- "predictions" --> agent
@@ -179,8 +180,7 @@ flowchart TD
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class agent core
-    class mcp planned
+    class agent,mcp core
     class corpus_sources,questions domain
     class embed,ladder core
     class chunk_embeddings,qdrant,retrieval_runs store
@@ -196,7 +196,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
 | **rag** (stage 3) | `draft`, `review`, `index`, `evaluate` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores |
-| **agent** (stage 3) | `benchmark`, `ask`; planned: the MCP server | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each |
+| **agent** (stage 3) | `benchmark`, `ask`, and `mlops mcp` | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each; the same tools over MCP |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -220,6 +220,8 @@ src/
 │   ├── ml/              # features, the model's split, tuning, gate, registry, batch
 │   ├── serving/         # FastAPI: the request body is whatever the domain declares
 │   ├── analysis/        # profiles, drift, feature evidence, residuals, dashboard
+│   ├── rag/             # question set, BM25, dense index in Qdrant, retrieval gate
+│   ├── agent/           # locked-down SQL, benchmark, LangGraph agent, MCP server
 │   └── orchestration/   # one Dagster graph per installed domain
 └── domains/
     └── coffee/          # config.yaml, sources, contracts, clean, enrich, own studies
@@ -812,6 +814,43 @@ route: prediction | trace: tr-4fbb2d0ed644b5d2fcc8d8c0a1204b13
 - The embedding model runs with a 512-token context for questions: at its default it
   did not fit in VRAM beside the generator, and Ollama would have swapped models on
   every question.
+
+### The same tools over MCP
+
+`mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for
+clients this project does not write - Claude Desktop, Claude Code, an IDE. Any MCP
+client that launches stdio servers takes the same entry (Claude Desktop's config file,
+a project's `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "coffee": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/coffee_mlops", "mlops", "mcp", "--domain", "coffee"]
+    }
+  }
+}
+```
+
+| Tool / resource | What it is |
+|---|---|
+| `query_tables(sql)` | One read-only SELECT over the layers - the agent's locked-down session, so the guardrails hold whatever model is calling |
+| `predict_review(item)`, `predict_offer(item)` | One tool per model the domain declares; the argument is the model's own request body, and its JSON schema, field descriptions included, is what the client sees and the server validates |
+| `search_documents(question, k)` | Dense search over the corpus, each passage with its publisher, title and page or section |
+| `dictionary://tables` | The data dictionary: what the client's model writes its SQL against |
+
+- **A wrapper, not a second agent.** Each tool calls the function the agent calls; no
+  logic is new. The client brings its own model, so the tools take what that model can
+  write itself - SQL, an item, a question - instead of asking the local one to.
+- **The guardrails are the server's.** A client that sends `COPY ... TO` gets the same
+  refusal the agent's model gets; an item with a negative bag size is rejected by the
+  schema before it reaches the API. Every tool says it is read-only.
+- **Any installed domain gets a server.** The tools, their descriptions and their input
+  schemas come from the domain's config and adapter; nothing in the server names coffee.
+- **Checked as a client sees it**: driven over stdio with the SDK's own client - list the
+  tools, read the dictionary, run a query, have a `COPY` refused, price a bag, score a
+  lot, search the documents - and tested in process against the same server.
 
 ## What a kilo costs (stage 3)
 

@@ -1,4 +1,6 @@
-"""The prediction tool: the model describes the item, the prediction API prices or scores it.
+"""The prediction tool, and how a passage is cited.
+
+The prediction: the model describes the item, the prediction API prices or scores it.
 
 Two small steps rather than one large one, because a 4B model does each reliably and the
 pair less so: first which of the domain's models answers the question - a choice
@@ -26,6 +28,20 @@ class PredictionAnswer:
     request: dict[str, Any]  # what was sent: the item as the model understood it
     response: dict[str, Any] | None  # the API's answer
     error: str | None
+
+
+def cite(passage: dict[str, Any], documents: dict[str, dict[str, Any]]) -> str:
+    """Where a passage comes from, as a reader can find it: publisher, title, year, and
+    the page or section. Written by the code, never by the model."""
+    document = documents.get(passage["document_id"], {})
+    title = document.get("title", passage["document_id"])
+    year = f" ({document['year']})" if document.get("year") else ""
+    where = (
+        f"section '{passage['part_title']}'"
+        if passage.get("part_title")
+        else f"page {passage['part']}"
+    )
+    return f'{document.get("publisher", "")}, "{title}"{year}, {where}'.lstrip(", ")
 
 
 def predict(
