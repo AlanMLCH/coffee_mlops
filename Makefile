@@ -6,7 +6,7 @@ export DAGSTER_HOME := $(CURDIR)/.dagster
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard questions review index retrieval sql prune dagster services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard questions review index retrieval benchmark sql prune dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -33,6 +33,7 @@ help:
 	@echo "review     accept, edit or reject the drafts, one at a time (in your own terminal)"
 	@echo "index      embed the chunks and (re)build the Qdrant index (needs Ollama + PROFILE=ai)"
 	@echo "retrieval  score BM25, dense and hybrid search on the question set, gated, in MLflow"
+	@echo "benchmark  measure the local models that could drive the agent (SQL, routing)"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
 install:
@@ -115,3 +116,6 @@ index:
 
 retrieval:
 	uv run mlops rag evaluate --domain $(DOMAIN)
+
+benchmark:
+	uv run mlops agent benchmark --domain $(DOMAIN)

@@ -324,6 +324,9 @@ class ModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str  # names its tables: <name>_features and <name>_predictions
+    # What it predicts, in the words of whoever would ask: the agent routes questions by
+    # it, and a tool offering the model to another client describes itself with it.
+    description: str = Field(min_length=1)
     items: ItemsConfig
     spec: ModelSpec
     training: TrainingConfig

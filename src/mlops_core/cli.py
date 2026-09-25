@@ -56,7 +56,11 @@ rag_app = typer.Typer(
 app.add_typer(data_app, name="data")
 app.add_typer(ml_app, name="ml")
 app.add_typer(analysis_app, name="analysis")
+agent_app = typer.Typer(
+    no_args_is_help=True, help="The agent: its tools, and the model that drives them."
+)
 app.add_typer(rag_app, name="rag")
+app.add_typer(agent_app, name="agent")
 
 Domain = Annotated[
     str | None,
@@ -456,6 +460,65 @@ def evaluate(domain: Domain = None) -> None:
                 )
             if run.comparisons:
                 typer.echo(f"  {'passes' if run.passes else 'does not pass'} the gate")
+
+
+@agent_app.command()
+def benchmark(
+    domain: Domain = None,
+    generator: Annotated[
+        list[str] | None,
+        typer.Option(help="An Ollama model to measure; repeat it. Defaults to the candidates"),
+    ] = None,
+) -> None:
+    """Measure how well each local model writes the SQL and routes the questions.
+
+    The bar - 70% of SQL questions right with repairs, 90% routed right - was set before
+    any model was measured. Each model's verdicts land in `evaluations.agent_*` and one
+    MLflow run each.
+    """
+    with _needs_extra("rag"):
+        from mlops_core.agent.benchmark import (
+            CANDIDATES,
+            GENERATOR_OPTIONS,
+            ROUTE_CASES_FILE,
+            SQL_CASES_FILE,
+            RouteCase,
+            SqlCase,
+            load_cases,
+            log_benchmark,
+            meets_bar,
+            run_benchmark,
+        )
+        from mlops_core.agent.dictionary import dictionary_path, schema_context
+        from mlops_core.agent.routing import routing_context
+        from mlops_core.agent.sql import read_only, views
+        from mlops_core.rag.llm import LocalModel, ollama_client
+
+    config = _adapter(domain).config
+    home = domain_dir(config.name)
+    data_dir = _data_dir(config)
+    con = read_only(data_dir)
+    dictionary = dictionary_path(home).read_text(encoding="utf-8")
+    schema = schema_context(dictionary, views(con))
+    context = routing_context(config, dictionary, views(con))
+    case_files = [home / SQL_CASES_FILE, home / ROUTE_CASES_FILE]
+    sql_cases = load_cases(case_files[0], SqlCase)
+    route_cases = load_cases(case_files[1], RouteCase)
+    settings = Settings()
+    for name in generator or CANDIDATES:
+        with ollama_client(settings.ollama_url) as http:
+            model = LocalModel(http, name, GENERATOR_OPTIONS)
+            identity = _identified(model)
+            sql, routes = run_benchmark(model, con, schema, context, sql_cases, route_cases)
+        summary, run_id = log_benchmark(
+            config, identity, sql, routes, case_files, data_dir, settings.mlflow_tracking_uri
+        )
+        verdict = "meets the bar" if meets_bar(summary) else "misses the bar"
+        typer.echo(
+            f"{identity}: SQL {summary['sql_accuracy']:.0%} right "
+            f"({summary['sql_first_try']:.0%} at the first try), "
+            f"routing {summary['route_accuracy']:.0%} right - {verdict} (run {run_id})"
+        )
 
 
 def _identified(model: "LocalModel") -> str:

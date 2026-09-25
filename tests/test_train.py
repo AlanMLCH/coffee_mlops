@@ -348,6 +348,7 @@ def toy_model(split: TemporalSplit | GroupSplit = GROUPED) -> ModelConfig:
     """A model no domain has: the core must train it from config alone."""
     return ModelConfig(
         name="price",
+        description="The price of a lot.",
         items=ItemsConfig(table="lots", id="item_id", time="observed_on", period="period"),
         spec=ModelSpec(target="price", categorical=["origin"], numeric=["size"], leakage=[]),
         training=TrainingConfig(

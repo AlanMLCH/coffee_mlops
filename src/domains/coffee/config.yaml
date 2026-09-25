@@ -548,6 +548,9 @@ cleaning:
 models:
   # How a lot cups: Total Cup Points from what is known before cupping.
   - name: review # -> review_features, review_predictions
+    description: >-
+      The Total Cup Points (0-100) a lot of green arabica would score at a CQI cupping,
+      from its origin country, variety, process, altitude, moisture and defects.
     # One item is one graded lot of green coffee.
     items:
       table: coffee_reviews
@@ -606,6 +609,10 @@ models:
   # shop and its sheet say. 130 of the 167 coffees are Almanegra's: read as Almanegra's
   # pricing first.
   - name: offer # -> offer_features, offer_predictions
+    description: >-
+      The price per kilogram, in Mexican pesos, of a roasted coffee on a Mexico City
+      roaster's shelf, from the shop, the bag's size and what the coffee's sheet says:
+      origin, process, variety and altitude.
     # One item is one coffee in one size, as a shop lists it.
     items:
       table: roaster_offers

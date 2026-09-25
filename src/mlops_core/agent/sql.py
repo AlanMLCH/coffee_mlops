@@ -42,7 +42,9 @@ class QueryResult:
     def as_text(self) -> str:
         """Pipe-separated rows under a header: what a model reads back."""
         lines = [" | ".join(self.columns)]
-        lines += [" | ".join("" if v is None else str(v) for v in row) for row in self.rows]
+        # A value's own line breaks (a shop's description) would read as more rows.
+        lines += [" | ".join("" if v is None else " ".join(str(v).split()) for v in row)
+                  for row in self.rows]  # fmt: skip
         if self.truncated:
             lines.append(f"(only the first {len(self.rows)} rows)")
         return "\n".join(lines)

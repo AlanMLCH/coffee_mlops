@@ -730,6 +730,38 @@ instructions of its own. Each was checked against DuckDB 1.5.5 before it was rel
   the sections of the tables that exist, verbatim - units, nulls and traps ("null means
   not reported, never zero") are what a model gets wrong unless it is told.
 
+### Which model drives the agent
+
+The agent's local model has to clear a floor, not win a contest: write SQL whose answer
+matches a reference, and send each question to the right tool - the tables, a model's
+prediction, the documents, or more than one. `make benchmark` measures it; the bar was
+set before any model was measured.
+
+| Generator (Ollama, temperature 0) | SQL right, with 2 repairs | At the first try | Routed right | Bar: 70% / 90% |
+|---|---:|---:|---:|---|
+| `granite4.2:3b` | 58% | 54% | 52% | misses |
+| **`qwen3.5:4b`** | **88%** | 83% | **92%** | **meets** |
+
+- **Granite was the plan and the benchmark overturned it.** Chosen on paper for its
+  tool-calling scores, it never routed a question to a prediction (0 of 10) and almost
+  never to more than one tool (1 of 10), and 7 of its 10 SQL failures never ran even
+  after two repairs. Qwen3.5-4B, the alternative named when the choice was made, clears
+  both bars; it is the agent's generator.
+- **SQL is judged by execution**, as Spider and BIRD judge it: the answer, not the
+  query's text. Columns the question did not ask for are tolerated, row order is not
+  judged, numbers are compared to four significant figures - rounding an average is fine,
+  a percentage where a share was asked is not.
+- **The loop only repairs what fails.** A query that runs and answers something else
+  looks right from inside the agent; the benchmark is where that shows.
+- **Two question sets**, written by the assistant that built the project rather than by
+  a person, and said so in every run: 24 SQL questions over nine tables, each reference
+  query run and checked against figures established earlier, and 40 routing questions,
+  ten per route - two of them traps that ask what a model *already* predicted, which is
+  a question for the tables.
+- The router is told what each tool covers in the domain's own terms, read from what the
+  domain already declares - the data dictionary's headings, each model's `description`,
+  the corpus topics - so a new domain gets a router without writing one.
+
 ## What a kilo costs (stage 3)
 
 The domain's second model, `offer`, prices a kilo of roasted coffee on a Mexico City

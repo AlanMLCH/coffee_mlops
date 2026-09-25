@@ -1,0 +1,40 @@
+{"id": "data-01", "question": "Which five countries have the highest average total cup points, counting only countries with at least 10 graded lots?", "route": "data"}
+{"id": "data-02", "question": "What is the average total cup points of washed lots and of natural lots?", "route": "data"}
+{"id": "data-03", "question": "Which country produced the most coffee in market year 2024?", "route": "data"}
+{"id": "data-04", "question": "What share of Brazil's coffee production was arabica in market year 2023?", "route": "data"}
+{"id": "data-05", "question": "Which borough has the most coffee shops according to DENUE?", "route": "data"}
+{"id": "data-06", "question": "How many ice-cream parlours are mapped in OpenStreetMap?", "route": "data"}
+{"id": "data-07", "question": "Which Mexican state produced the most coffee cherry in 2025?", "route": "data"}
+{"id": "data-08", "question": "What is the median price per kilogram of the roasters' offers, leaving out flagged outliers?", "route": "data"}
+{"id": "data-09", "question": "What is the mean absolute difference between predicted and actual total cup points for the lots of the 2023 snapshot?", "route": "data"}
+{"id": "data-10", "question": "For which roaster does the price model overestimate the price per kilogram the most, on average?", "route": "data"}
+{"id": "prediction-01", "question": "What cup score would a washed Colombian lot grown at 1,800 metres get?", "route": "prediction"}
+{"id": "prediction-02", "question": "Predict the total cup points of a natural Ethiopian heirloom lot from 2,000 m.", "route": "prediction"}
+{"id": "prediction-03", "question": "How much per kilogram would Almanegra charge for a 250 g bag of a washed Gesha from Chiapas?", "route": "prediction"}
+{"id": "prediction-04", "question": "Estimate the price per kilo of a 340 g honey-processed coffee from Veracruz sold by Buna.", "route": "prediction"}
+{"id": "prediction-05", "question": "If I submitted a semi-washed Indonesian lot with 3 category-two defects, what score would it be expected to get?", "route": "prediction"}
+{"id": "prediction-06", "question": "What would a 1 kg bag of a Brazilian natural cost per kilo at Almanegra?", "route": "prediction"}
+{"id": "prediction-07", "question": "Give me an estimated cup score for a Kenyan SL28 washed lot grown at 1,700 m.", "route": "prediction"}
+{"id": "prediction-08", "question": "What price per kg should a washed Oaxacan Typica from 1,600 m cost in a 250 g bag from Café con Jiribilla?", "route": "prediction"}
+{"id": "prediction-09", "question": "Would a Guatemalan Bourbon lot grown at 1,500 m be expected to score above 85?", "route": "prediction"}
+{"id": "prediction-10", "question": "How much should a 500 g bag of a washed Peruvian Caturra cost per kilogram?", "route": "prediction"}
+{"id": "knowledge-01", "question": "What chemical transformation does trigonelline undergo during the roasting process?", "route": "knowledge"}
+{"id": "knowledge-02", "question": "How is a coffee bean prepared after it is harvested from the cherry?", "route": "knowledge"}
+{"id": "knowledge-03", "question": "Why did the depulping method generate significantly more sugars and acids compared to demucilaging?", "route": "knowledge"}
+{"id": "knowledge-04", "question": "Why does coffee processed with incomplete mucilage removal produce stronger off-aromas compared to fully de-mucilaged beans?", "route": "knowledge"}
+{"id": "knowledge-05", "question": "Why does a lack of living income for coffee farmers worsen environmental challenges?", "route": "knowledge"}
+{"id": "knowledge-06", "question": "Who created the standards that govern how coffee is descriptively assessed?", "route": "knowledge"}
+{"id": "knowledge-07", "question": "How do grinding size differences affect the relative duration of surface dissolution versus bulk diffusion during espresso extraction?", "route": "knowledge"}
+{"id": "knowledge-08", "question": "What methods are used to control the roast level when preparing samples for cupping?", "route": "knowledge"}
+{"id": "knowledge-09", "question": "What distinguishes a simple commodity from items like coffee in terms of their market characteristics?", "route": "knowledge"}
+{"id": "knowledge-10", "question": "What specific chemical components in silverskin allow it to function as an organic fertilizer?", "route": "knowledge"}
+{"id": "mixed-01", "question": "Which country has the highest average cup score among countries with at least 10 lots, and why does growing coffee at high altitude improve quality?", "route": "mixed"}
+{"id": "mixed-02", "question": "Which Mexican state got the highest rural price per tonne of coffee cherry in 2025, and what quality factors could explain a higher price?", "route": "mixed"}
+{"id": "mixed-03", "question": "Do natural lots score higher than washed ones in the graded data, and what does each process do to the flavour?", "route": "mixed"}
+{"id": "mixed-04", "question": "What is the median altitude of the Ethiopian lots in the data, and why does altitude affect acidity?", "route": "mixed"}
+{"id": "mixed-05", "question": "Predict the cup score of a washed Ethiopian lot grown at 2,000 m and compare it with the average score of the Ethiopian lots in the data.", "route": "mixed"}
+{"id": "mixed-06", "question": "How much would a 250 g natural Ethiopian cost per kilo at Almanegra, and how does that compare with the median price per kilo of Almanegra's offers?", "route": "mixed"}
+{"id": "mixed-07", "question": "What does the SCA's descriptive assessment measure, and which sensory attribute has the highest average score in the graded lots?", "route": "mixed"}
+{"id": "mixed-08", "question": "What does the ICO say drove coffee prices in August 2026, and how did Brazil's production change from 2024 to 2025?", "route": "mixed"}
+{"id": "mixed-09", "question": "Why is the Gesha variety prized, and what is the median price per kilogram of the roasters' Gesha coffees?", "route": "mixed"}
+{"id": "mixed-10", "question": "What score would a natural Gesha from Panama grown at 1,700 m be expected to get, and what makes the Gesha variety distinctive?", "route": "mixed"}
