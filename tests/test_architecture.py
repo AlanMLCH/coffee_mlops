@@ -17,7 +17,7 @@ import pytest
 SRC = Path(__file__).resolve().parents[1] / "src"
 CORE = SRC / "mlops_core"
 DOMAINS = SRC / "domains"
-SHARED = ["config.py", "contracts.py", "storage.py", "catalog.py", "adapter.py"]
+SHARED = ["config.py", "contracts.py", "storage.py", "catalog.py", "adapter.py", "stats.py"]
 # Words that belong to a domain. The core naming any of them - in code, a comment or a
 # docstring - is how a domain's assumptions start leaking into what should be generic.
 DOMAIN_WORDS = re.compile(

@@ -16,8 +16,9 @@ from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
 from mlops_core.adapter import load_adapter
 from mlops_core.config import Settings
-from mlops_core.ml.evaluation import absolute_errors, compare
+from mlops_core.ml.evaluation import absolute_errors
 from mlops_core.ml.train import build_pipeline, experiment_name, fit_params, split_items, xy
+from mlops_core.stats import compare
 from mlops_core.storage import read_table
 
 # Fixed parameters across candidates: tuning each one separately would confound "fewer

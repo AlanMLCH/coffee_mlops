@@ -13,9 +13,10 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import UTC, date, datetime
+from functools import cache
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import click
 import polars as pl
@@ -38,7 +39,12 @@ from mlops_core.rag.questions import (
     save_questions,
     tally,
 )
-from mlops_core.storage import prune_layers, read_table
+from mlops_core.storage import latest_partition, prune_layers, read_table, write_table
+
+if TYPE_CHECKING:  # the `rag` extra's; imported where used, for installs without it
+    from qdrant_client import QdrantClient
+
+    from mlops_core.rag.llm import LocalModel
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
@@ -275,11 +281,7 @@ def draft(
     chunks, documents = _corpus_tables(config)
     with ollama_client(Settings().ollama_url) as client:
         model = LocalModel(client, drafter or DRAFTING_MODEL, OPTIONS)
-        try:
-            drafted_by = f"{model.model}@{model.digest()}"
-        except (ConnectionError, LookupError) as unavailable:
-            typer.echo(str(unavailable), err=True)
-            raise typer.Exit(code=1) from unavailable
+        drafted_by = _identified(model)
         drafts = draft_questions(
             chunks,
             documents,
@@ -329,35 +331,159 @@ def review(domain: Domain = None) -> None:
 
 
 @rag_app.command()
-def evaluate(domain: Domain = None) -> None:
-    """Search every question with BM25, score the rankings and log the run to MLflow.
+def index(domain: Domain = None) -> None:
+    """Embed every chunk, write the vectors to Parquet, and load them into Qdrant.
 
-    The per-question table lands in `evaluations/retrieval_bm25`, queryable with
-    `mlops sql`; the run says how many of the questions a person reviewed.
+    A new collection per build; the alias searches use moves onto it only once it is
+    complete, and the builds before it are dropped. Parquet stays the source of truth.
     """
     with _needs_extra("rag"):
-        from mlops_core.rag.evaluate import evaluate_retrieval
+        from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.vectors import (
+            EMBEDDING_MODEL,
+            EMBEDDINGS,
+            EMBEDDINGS_TABLE,
+            build_index,
+            embedding_table,
+        )
+
+    config = _adapter(domain).config
+    _corpus(config)
+    data_dir = _data_dir(config)
+    chunks, _ = _corpus_tables(config)
+    settings = Settings()
+    client = _qdrant(settings.qdrant_url)
+    with ollama_client(settings.ollama_url) as http:
+        embedder = LocalModel(http, EMBEDDING_MODEL, {})
+        model = _identified(embedder)
+        vectors = embedder.embed(chunks["text"].to_list())
+    built_at = datetime.now(UTC)
+    table = embedding_table(chunks, vectors)
+    source = _chunks_partition(data_dir)
+    path = write_table(table, data_dir / EMBEDDINGS / EMBEDDINGS_TABLE, {CHUNKS_TABLE: source})
+    collection = build_index(
+        client,
+        config.name,
+        chunks,
+        table,
+        {"chunks_partition": source, "embedding_model": model},
+        built_at.strftime("%Y%m%dT%H%M%SZ"),
+    )
+    typer.echo(f"{EMBEDDINGS_TABLE}: {path} ({table.height:,} chunks, {model})")
+    typer.echo(f"qdrant: {collection}")
+
+
+@rag_app.command()
+def evaluate(domain: Domain = None) -> None:
+    """Score every search on the ladder - BM25, dense, hybrid - and log a run for each.
+
+    Each search after the first is judged against the ones before it, question by
+    question; the per-question tables land in `evaluations/retrieval_<search>`, queryable
+    with `mlops sql`, and every run says how many of the questions a person reviewed.
+    """
+    with _needs_extra("rag"):
+        from mlops_core.rag.evaluate import GATE_METRIC, Search, evaluate_retrieval
         from mlops_core.rag.lexical import K1, B, Bm25
+        from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.vectors import (
+            EMBEDDING_MODEL,
+            PREFETCH,
+            QUERY_TASK,
+            RRF_K,
+            IndexSearch,
+            index_metadata,
+        )
 
     config, corpus, path, questions = _question_set(domain)
+    data_dir = _data_dir(config)
     chunks, _ = _corpus_tables(config)
-    index = Bm25(chunks["text"].to_list())
-    run = evaluate_retrieval(
-        config,
-        "bm25",
-        index.search,
-        {"k1": K1, "b": B, "stemmer": "snowball-english", "stop_words": "lucene-english"},
-        questions,
-        path,
-        chunks,
-        corpus.chunking,
-        _data_dir(config),
-        Settings().mlflow_tracking_uri,
-    )
-    for name, value in sorted(run.overall.items()):
-        typer.echo(f"{name}: {value:.3f}")
-    typer.echo(f"table: {run.table}")
-    typer.echo(f"run {run.run_id}")
+    settings = Settings()
+    client = _qdrant(settings.qdrant_url)
+    built = index_metadata(client, config.name)
+    if built.get("chunks_partition") != _chunks_partition(data_dir):
+        typer.echo("The index was built from other chunks: rebuild it with `make index`", err=True)
+        raise typer.Exit(code=1)
+
+    keyword: dict[str, str | float] = {
+        "k1": K1,
+        "b": B,
+        "stemmer": "snowball-english",
+        "stop_words": "lucene-english",
+    }
+    semantic: dict[str, str | float] = {
+        "embedding_model": built["embedding_model"],
+        "query_instruction": QUERY_TASK,
+    }
+    with ollama_client(settings.ollama_url) as http:
+        embedder = LocalModel(http, EMBEDDING_MODEL, {})
+
+        @cache  # dense and hybrid ask for the same question's vector
+        def embed(text: str) -> list[float]:
+            vector: list[float] = embedder.embed([text])[0].tolist()
+            return vector
+
+        served = IndexSearch(client, config.name, chunks, embed)
+        ladder: list[tuple[str, Search, dict[str, str | float]]] = [
+            ("bm25", Bm25(chunks["text"].to_list()).search, keyword),
+            ("dense", served.dense, semantic),
+            ("hybrid", served.hybrid, keyword | semantic | {"rrf_k": RRF_K, "prefetch": PREFETCH}),
+        ]
+        judged: dict[str, pl.DataFrame] = {}
+        for name, search, search_settings in ladder:
+            run = evaluate_retrieval(
+                config,
+                name,
+                search,
+                search_settings,
+                questions,
+                path,
+                chunks,
+                corpus.chunking,
+                data_dir,
+                settings.mlflow_tracking_uri,
+                references=judged,
+            )
+            judged[name] = run.frame
+            scores = ", ".join(
+                f"{metric} {run.overall[metric]:.3f}"
+                for metric in (GATE_METRIC, "recall_at_5", "recall_at_10", "reciprocal_rank")
+            )
+            typer.echo(f"{name}: {scores}")
+            for reference, c in run.comparisons.items():
+                typer.echo(
+                    f"  vs {reference}: {c.difference:+.3f} {GATE_METRIC} "
+                    f"[{c.ci_low:+.3f}, {c.ci_high:+.3f}], {c.probability_better:.0%} sure"
+                )
+            if run.comparisons:
+                typer.echo(f"  {'passes' if run.passes else 'does not pass'} the gate")
+
+
+def _identified(model: "LocalModel") -> str:
+    """model@digest, or a plain word on why the model cannot be used."""
+    try:
+        return f"{model.model}@{model.digest()}"
+    except (ConnectionError, LookupError) as unavailable:
+        typer.echo(str(unavailable), err=True)
+        raise typer.Exit(code=1) from unavailable
+
+
+def _qdrant(url: str) -> "QdrantClient":
+    """A client for the index, or a plain word on how to start it."""
+    from qdrant_client import QdrantClient
+    from qdrant_client.http.exceptions import ResponseHandlingException
+
+    client = QdrantClient(url=url)
+    try:
+        client.get_collections()
+    except ResponseHandlingException as down:
+        typer.echo(f"Qdrant is not answering at {url}: docker compose --profile ai up -d", err=True)
+        raise typer.Exit(code=1) from down
+    return client
+
+
+def _chunks_partition(data_dir: Path) -> str:
+    partition = latest_partition(data_dir / "clean" / CHUNKS_TABLE)
+    return partition.name if partition else ""
 
 
 def _corpus(config: DomainConfig) -> CorpusConfig:

@@ -6,6 +6,7 @@ query); the run against what it must record.
 """
 
 import math
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -17,8 +18,8 @@ from mlflow.tracking import MlflowClient
 import domains.coffee
 from mlops_core.config import ChunkingConfig
 from mlops_core.data.corpus import CHUNKS_COLUMNS
-from mlops_core.rag.evaluate import evaluate_retrieval, experiment_name
-from mlops_core.rag.lexical import Bm25, terms
+from mlops_core.rag.evaluate import evaluate_retrieval, experiment_name, judged_against
+from mlops_core.rag.lexical import Bm25, query_vector, term_id, terms
 from mlops_core.rag.metrics import grades, ranking_metrics
 from mlops_core.rag.questions import PROMPT_VERSION, Judgment, Question
 from mlops_core.storage import read_table
@@ -95,6 +96,21 @@ def test_a_long_text_is_discounted_and_a_query_word_counts_once() -> None:
     assert index.search("crack", 3) == [0, 1]
 
 
+def test_the_sparse_encoding_scores_as_bm25_once_the_index_applies_idf() -> None:
+    """What Qdrant computes - document weights times the query's IDF - is BM25."""
+    texts = ["dark roast bitter", "light roast", "cupping form"]
+    index = Bm25(texts)
+    ids, ones = query_vector("dark roast roast")
+    by_id = {term_id(term): term for term in ("dark", "roast")}
+
+    assert ones == [1.0, 1.0]  # distinct terms, each once
+    for position, text in enumerate(texts):
+        doc_ids, weights = index.document_vector(position)
+        weighted = dict(zip(doc_ids, weights, strict=True))
+        expected = sum(index.idf(by_id[i]) * weighted[i] for i in ids if i in weighted)
+        assert index.scores("dark roast")[position] == pytest.approx(expected), text
+
+
 # --- A run ---------------------------------------------------------------------------------
 
 
@@ -165,3 +181,47 @@ def test_a_run_records_the_rankings_the_settings_and_how_much_was_checked(
     assert logged.data.metrics["recall_at_3"] == 0.5
     experiment = mlflow.get_experiment(logged.info.experiment_id)
     assert experiment.name == experiment_name(config) == "coffee-retrieval"
+
+
+def test_a_search_passes_only_if_it_beats_every_search_before_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    texts = [f"Passage number {n} about roast {n}." for n in range(30)]
+    chunks = pl.DataFrame(
+        [
+            {"chunk_id": f"a-{n:04d}", "document_id": "a", "chunk": n + 1, "part": 1,
+             "part_title": None, "text": text, "characters": len(text), "topics": ["roasting"],
+             "topics_basis": "terms"}
+            for n, text in enumerate(texts)
+        ],
+        schema=CHUNKS_COLUMNS,
+    )  # fmt: skip
+    questions = [question(f"roasting-{n:02d}", texts[n]) for n in range(30)]
+    question_file = tmp_path / "questions.jsonl"
+    question_file.write_text("the set", encoding="utf-8")
+    config = domains.coffee.adapter().config
+    chunking = ChunkingConfig(max_chars=1200, overlap_chars=200)
+
+    def run(name: str, search: Callable[[str, int], list[int]], refs: dict[str, pl.DataFrame]):
+        return evaluate_retrieval(
+            config, name, search, {}, questions, question_file, chunks, chunking,
+            tmp_path / "data", tracking_uri, references=refs,
+        )  # fmt: skip
+
+    def exact(query: str, k: int) -> list[int]:
+        return [int(query.split("-")[1].rstrip("?"))][:k]
+
+    worse = run("worse", lambda query, k: [], {})  # finds nothing
+    better = run("better", exact, {"worse": worse.frame})
+
+    assert better.comparisons["worse"].probability_better == 1.0
+    assert better.passes
+    assert not run("same", exact, {"worse": worse.frame, "better": better.frame}).passes
+    logged = MlflowClient(tracking_uri).get_run(better.run_id)
+    assert logged.data.tags["passes_gate"] == "True"
+    assert logged.data.metrics["vs_worse_ndcg_at_10_probability_better"] == 1.0
+
+    with pytest.raises(ValueError, match="same questions"):
+        judged_against(better.frame, worse.frame.head(3))

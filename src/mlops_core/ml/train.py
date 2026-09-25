@@ -48,15 +48,14 @@ from mlops_core.config import (
     TemporalSplit,
 )
 from mlops_core.ml.evaluation import (
-    Comparison,
     absolute_errors,
-    compare,
     mae_interval,
     recalibration_gain,
     regression_metrics,
     stratified_metrics,
 )
 from mlops_core.provenance import code_version
+from mlops_core.stats import Comparison, compare
 from mlops_core.storage import latest_partition, read_table
 
 logger = logging.getLogger(__name__)

@@ -26,7 +26,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from mlops_core.adapter import load_adapter
 from mlops_core.config import GroupSplit, Settings
-from mlops_core.ml.evaluation import absolute_errors, compare
+from mlops_core.ml.evaluation import absolute_errors
 from mlops_core.ml.train import (
     baseline_predictions,
     build_pipeline,
@@ -36,6 +36,7 @@ from mlops_core.ml.train import (
     tune,
     xy,
 )
+from mlops_core.stats import compare
 from mlops_core.storage import read_table
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

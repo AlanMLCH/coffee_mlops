@@ -7,11 +7,11 @@ import pytest
 from mlops_core.config import DomainConfig, ModelSpec
 from mlops_core.ml.evaluation import (
     absolute_errors,
-    compare,
     mae_interval,
     recalibration_gain,
     stratified_metrics,
 )
+from mlops_core.stats import compare
 
 RESAMPLES = 400  # enough to be stable, small enough to stay fast
 
@@ -135,3 +135,13 @@ def test_families_of_one_are_just_rows() -> None:
     by_families = compare(candidate, reference, RESAMPLES, seed=3, groups=np.arange(4))
 
     assert by_rows == by_families
+
+
+def test_a_score_where_higher_is_better_is_compared_the_other_way_round() -> None:
+    """Recall and nDCG are scores, not errors: the candidate wins when its are larger."""
+    reference = np.linspace(0.2, 0.6, 100)
+
+    result = compare(reference + 0.1, reference, RESAMPLES, seed=0, higher_is_better=True)
+
+    assert result.difference == pytest.approx(0.1)
+    assert result.probability_better == 1.0

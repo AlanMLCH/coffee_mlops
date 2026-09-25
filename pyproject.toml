@@ -59,6 +59,8 @@ rag = [
     # Every retrieval evaluation is a run, like every model.
     "mlflow>=3.16.1",
     "pypdf>=6.6.1",
+    # The same minor version as the server in docker-compose.yml.
+    "qdrant-client>=1.19.1",
     # BM25's stemmer: the Snowball English one Lucene and Elasticsearch ship. Pure Python.
     "snowballstemmer>=3.0",
 ]

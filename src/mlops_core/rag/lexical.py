@@ -13,6 +13,7 @@ with its IDF modifier, so the same encoding can be the keyword half of a hybrid 
 
 import math
 import re
+import zlib
 from collections import Counter
 from collections.abc import Sequence
 
@@ -32,6 +33,24 @@ STOP_WORDS = frozenset(
 )  # fmt: skip
 _STEMMER = snowballstemmer.stemmer("english")
 _WORD = re.compile(r"[^\W_]+")
+
+
+# A sparse vector: term ids and their weights.
+Sparse = tuple[list[int], list[float]]
+
+
+def term_id(term: str) -> int:
+    """A term's index in a sparse vector. A stable hash rather than a vocabulary, so no
+    vocabulary file has to travel with the index; with a few tens of thousands of terms
+    in 32 bits, two colliding is a one-in-several-thousand event, and harmless."""
+    return zlib.crc32(term.encode())
+
+
+def query_vector(query: str) -> Sparse:
+    """A query as a sparse vector: each distinct term once, weight 1. The index applies
+    the inverse document frequency, as Qdrant's IDF modifier does."""
+    ids = sorted({term_id(term) for term in terms(query)})
+    return ids, [1.0] * len(ids)
 
 
 def terms(text: str) -> list[str]:
@@ -54,10 +73,23 @@ class Bm25:
             for term, tf in counts.items():
                 postings.setdefault(term, []).append((position, tf * (k1 + 1) / (tf + norm)))
         self.size = len(texts)
+        self._weights: list[dict[str, float]] = [{} for _ in texts]
+        for term, hits in postings.items():
+            for position, weight in hits:
+                self._weights[position][term] = weight
         self._postings = {
             term: (np.array([p for p, _ in hits]), np.array([w for _, w in hits]))
             for term, hits in postings.items()
         }
+
+    def document_vector(self, position: int) -> Sparse:
+        """One text's BM25 weights as a sparse vector, without the inverse document
+        frequency: what a Qdrant point stores for its IDF modifier to complete."""
+        by_id: dict[int, float] = {}
+        for term, weight in self._weights[position].items():
+            by_id[term_id(term)] = by_id.get(term_id(term), 0.0) + weight
+        ids = sorted(by_id)
+        return ids, [by_id[i] for i in ids]
 
     def idf(self, term: str) -> float:
         """Lucene's (and Qdrant's) inverse document frequency: never negative."""

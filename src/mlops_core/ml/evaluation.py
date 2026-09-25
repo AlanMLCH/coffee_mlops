@@ -1,43 +1,14 @@
-"""Evaluation shared by training and analysis.
-
-With a test split of a couple of hundred rows, point metrics decide nothing: a gap of
-0.1 MAE sits inside the noise. So comparisons here are **paired** (same rows, both
-models) and bootstrapped, which lets a quality gate ask "how sure are we?" instead of
-"which number is bigger?". A paired comparison is far more sensitive than comparing two
-independent confidence intervals, because the rows a model finds hard are hard for both.
-
-When the rows come in families (the sizes of one product), they are not independent
-evidence: a model that gets a product wrong gets every size of it wrong. Resampling rows
-would count one mistake several times and make every interval too narrow, so with
-`groups` the bootstrap resamples whole groups instead (a cluster bootstrap).
+"""Evaluation shared by training and analysis: errors, metrics by group, and the
+recalibration a deployed model would get. The paired bootstrap that turns two sets of
+errors into a gate decision is in `mlops_core.stats`, shared with retrieval.
 """
-
-from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
 from mlops_core.config import ModelSpec
-
-
-@dataclass(frozen=True)
-class Comparison:
-    """How much better a candidate is than a reference, measured on the same rows."""
-
-    # Mean paired difference of absolute errors; negative means the candidate is better.
-    difference: float
-    ci_low: float
-    ci_high: float
-    probability_better: float
-
-    def as_metrics(self, prefix: str) -> dict[str, float]:
-        return {
-            f"{prefix}_difference": self.difference,
-            f"{prefix}_ci_low": self.ci_low,
-            f"{prefix}_ci_high": self.ci_high,
-            f"{prefix}_probability_better": self.probability_better,
-        }
+from mlops_core.stats import bootstrap_means
 
 
 def absolute_errors(y: np.ndarray, prediction: np.ndarray) -> np.ndarray:
@@ -56,50 +27,12 @@ def regression_metrics(y: np.ndarray, prediction: np.ndarray) -> dict[str, float
     }
 
 
-def _bootstrap_means(
-    values: np.ndarray, resamples: int, seed: int, groups: np.ndarray | None = None
-) -> np.ndarray:
-    """Means of `resamples` resamples drawn with replacement, all at once: of rows, or of
-    whole groups when `groups` labels each row with its family."""
-    rng = np.random.default_rng(seed)
-    if groups is None:
-        draws = rng.integers(0, len(values), size=(resamples, len(values)))
-        return values[draws].mean(axis=1)
-    # Per-group sums and sizes, so a resample of groups is two sums, not a loop.
-    _, group_of_row = np.unique(groups, return_inverse=True)
-    sums = np.bincount(group_of_row, weights=values)
-    sizes = np.bincount(group_of_row).astype(float)
-    draws = rng.integers(0, len(sums), size=(resamples, len(sums)))
-    means: np.ndarray = sums[draws].sum(axis=1) / sizes[draws].sum(axis=1)
-    return means
-
-
 def mae_interval(
     errors: np.ndarray, resamples: int = 5000, seed: int = 0, groups: np.ndarray | None = None
 ) -> tuple[float, float]:
     """95% interval for the MAE itself: how precise the headline number is."""
-    means = _bootstrap_means(errors, resamples, seed, groups)
+    means = bootstrap_means(errors, resamples, seed, groups)
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
-
-
-def compare(
-    candidate: np.ndarray,
-    reference: np.ndarray,
-    resamples: int = 5000,
-    seed: int = 0,
-    groups: np.ndarray | None = None,
-) -> Comparison:
-    """Paired bootstrap of `candidate - reference` absolute errors, row by row or, with
-    `groups`, family by family."""
-    difference = candidate - reference
-    means = _bootstrap_means(difference, resamples, seed, groups)
-    return Comparison(
-        difference=float(difference.mean()),
-        ci_low=float(np.percentile(means, 2.5)),
-        ci_high=float(np.percentile(means, 97.5)),
-        # The candidate wins in this share of resamples (lower error = negative mean).
-        probability_better=float((means < 0).mean()),
-    )
 
 
 def stratified_metrics(

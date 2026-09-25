@@ -1,6 +1,30 @@
 {
   "models": [
     {
+      "name": "qwen3-embedding:0.6b",
+      "model": "qwen3-embedding:0.6b",
+      "modified_at": "2026-09-22T19:10:16.3225537-06:00",
+      "size": 639150858,
+      "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+      "details": {
+        "parent_model": "/Users/ollama/.ollama/models/blobs/sha256-06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+        "format": "gguf",
+        "family": "qwen3",
+        "families": [
+          "qwen3"
+        ],
+        "parameter_size": "595.78M",
+        "quantization_level": "Q8_0",
+        "context_length": 32768,
+        "embedding_length": 1024
+      },
+      "capabilities": [
+        "tools",
+        "thinking",
+        "embedding"
+      ]
+    },
+    {
       "name": "qwen3.5:4b",
       "model": "qwen3.5:4b",
       "modified_at": "2026-09-22T18:55:37.1089052-06:00",

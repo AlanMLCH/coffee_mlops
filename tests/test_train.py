@@ -25,7 +25,6 @@ from mlops_core.config import (
     TrainingConfig,
 )
 from mlops_core.data.clean import build_clean
-from mlops_core.ml.evaluation import Comparison
 from mlops_core.ml.features import build_features
 from mlops_core.ml.train import (
     CHAMPION,
@@ -43,6 +42,7 @@ from mlops_core.ml.train import (
     train_model,
     xy,
 )
+from mlops_core.stats import Comparison
 from mlops_core.storage import write_table
 from tests.fakes import with_training
 

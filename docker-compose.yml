@@ -67,6 +67,28 @@ services:
       retries: 6
     restart: unless-stopped
 
+  qdrant:
+    profiles: [ai, all]
+    # Pinned, and the client in uv.lock is the same minor version.
+    image: qdrant/qdrant:v1.19.1
+    environment:
+      # Qdrant reports usage to its makers by default; nothing here needs to leave the laptop.
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:6333:6333" # REST, this machine only
+    volumes:
+      # An index derived from the Parquet layers: rebuildable with `make index`, but a
+      # rebuild re-embeds every chunk, so it outlives `down` too.
+      - qdrant:/qdrant/storage
+    healthcheck:
+      # The image has bash but no curl: an open port is the readiness it can check.
+      test: ["CMD", "bash", "-c", ":> /dev/tcp/127.0.0.1/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
 volumes:
   mlflow:
   model-cache:
+  qdrant:

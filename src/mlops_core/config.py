@@ -37,7 +37,11 @@ class Settings(BaseSettings):
     # Complete partitions kept per table when pruning; history explains past predictions.
     keep_partitions: int = 3
     # Ollama, serving the local models natively (it sees the GPU; a container would not).
-    ollama_url: str = "http://localhost:11434"
+    # 127.0.0.1, not localhost: on Windows localhost resolves to IPv6 first, and a service
+    # listening on IPv4 only makes every new connection wait for that attempt to time out.
+    ollama_url: str = "http://127.0.0.1:11434"
+    # Qdrant, from docker-compose (profile `ai`), published on 127.0.0.1 only.
+    qdrant_url: str = "http://127.0.0.1:6333"
 
 
 class SpatialConfig(BaseModel):

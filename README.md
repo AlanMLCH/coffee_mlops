@@ -133,9 +133,11 @@ flowchart TD
     subgraph AI["Stage 3: RAG and agent"]
         direction LR
         questions[("evals/retrieval_questions.jsonl<br/>108 questions drafted by qwen3.5:4b<br/>excerpts checked, not reviewed")]
-        bm25["BM25 baseline<br/>Lucene's defaults · Snowball stems"]
-        retrieval_bm25[("evaluations/retrieval_bm25<br/>per question · MLflow run")]
-        vectors[("chunks + embeddings in Parquet<br/>indexed in Qdrant, hybrid search")]
+        embed["mlops rag index<br/>qwen3-embedding:0.6b via Ollama"]
+        chunk_embeddings[("embeddings/chunk_embeddings<br/>Parquet: the source of truth")]
+        qdrant[("Qdrant, alias coffee-chunks<br/>dense vector + BM25 weights<br/>rebuilt from Parquet, swapped atomically")]
+        ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
+        retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
     end
 
@@ -158,11 +160,11 @@ flowchart TD
     offer_features & offer_predictions -.-> catalog
 
     document_chunks -- "mlops rag draft / review" --> questions
-    document_chunks -.-> vectors -.-> agent
-    document_chunks --> bm25 --> retrieval_bm25
-    questions -- "mlops rag evaluate" --> retrieval_bm25
-    questions -. "judges each search" .-> vectors
-    roaster_coffees -. "descriptions" .-> vectors
+    document_chunks --> embed --> chunk_embeddings --> qdrant
+    qdrant & questions --> ladder --> retrieval_runs
+    ladder -- "dense passes the gate" --> mlflow
+    qdrant -.-> agent
+    roaster_coffees -. "descriptions" .-> qdrant
     catalog -.-> agent
     api -.-> agent
 
@@ -175,10 +177,10 @@ flowchart TD
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class vectors,agent planned
+    class agent planned
     class corpus_sources,questions domain
-    class bm25 core
-    class retrieval_bm25 store
+    class embed,ladder core
+    class chunk_embeddings,qdrant,retrieval_runs store
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -190,7 +192,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
-| **rag** (stage 3) | `draft`, `review`, `evaluate`; planned: `index`, `ask` | the corpus' clean tables | the questions retrieval is judged by, each search's scores; planned: the index and the agent |
+| **rag** (stage 3) | `draft`, `review`, `index`, `evaluate`; planned: `ask` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores; planned: the agent |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -283,6 +285,11 @@ make data                     # ETL: download, validate, clean
 make services-up PROFILE=ml   # MLflow at http://localhost:5000
 make ml                       # features + tuned training + batch predictions, every model
 make train MODEL=review       # one model only (also: features, predict, ml)
+
+# Retrieval (stage 3): needs Ollama with qwen3-embedding:0.6b, and Qdrant
+make services-up PROFILE=ai   # Qdrant at http://127.0.0.1:6333
+make index                    # embed the chunks, build the index
+make retrieval                # BM25 -> dense -> hybrid, each through the gate
 
 make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) AS bias \
   FROM predictions.review_predictions p JOIN features.review_features f USING (review_id) \
@@ -622,41 +629,81 @@ make review      # a person accepts, edits or rejects each draft (in your own te
 The set is data the domain owns, versioned beside its code in
 `src/domains/coffee/evals/retrieval_questions.jsonl`, one question per line.
 
-### How well keyword search finds the answer
+### How well retrieval finds the answer
 
-`make retrieval` searches every question, grades each ranking and logs the run to
-MLflow (experiment `coffee-retrieval`); the per-question table lands in
-`evaluations.retrieval_bm25`, so `make sql` can ask which questions failed. A retrieved
-chunk is relevant when it holds the label's excerpt, and each label is credited once -
-overlapping neighbours that both hold it are one find, not two.
+`make retrieval` searches every question with each search on a ladder - BM25, then
+dense, then hybrid - grades each ranking and logs one MLflow run per search (experiment
+`coffee-retrieval`); the per-question tables land in `evaluations.retrieval_<search>`, so
+`make sql` can ask which questions failed. A retrieved chunk is relevant when it holds
+the label's excerpt, and each label is credited once - overlapping neighbours that both
+hold it are one find, not two.
 
-The baseline is BM25 as Lucene and Elasticsearch ship it: k1 1.2, b 0.75, the Snowball
-English stemmer and Lucene's 33 stop words. A weak baseline would make semantic search
-look good for the wrong reason. Its weights are the term-frequency half of BM25 per chunk
-with the inverse document frequency applied at query time - the split Qdrant makes for a
-sparse vector - so the same encoding can be the keyword half of a hybrid search.
+**A search earns its place the way a model does.** Each one is compared with every
+search before it on the same questions, paired and bootstrapped, and passes only if it
+is better on nDCG@10 with 95% certainty - nDCG@10 because it counts both whether the
+answer is found and how high, in the ten chunks an answer can be built from.
 
-| 108 questions, 1,373 chunks | Recall@1 | Recall@5 | Recall@10 | MRR | nDCG@10 |
-|---|---:|---:|---:|---:|---:|
-| **BM25** | 0.287 | 0.556 | 0.685 | 0.400 | 0.468 |
+| 108 questions, 1,373 chunks | Recall@1 | Recall@5 | Recall@10 | MRR | nDCG@10 | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| BM25 | 0.287 | 0.556 | 0.685 | 0.400 | 0.468 | the baseline |
+| **Dense** | **0.426** | **0.741** | **0.796** | 0.547 | **0.608** | **passes**: +0.140 vs BM25 [+0.070, +0.215], 100% sure |
+| Hybrid (RRF) | 0.435 | 0.704 | 0.769 | 0.548 | 0.601 | fails: -0.006 vs dense [-0.059, +0.045], 40% sure |
 
-| Topic (12 questions each) | Recall@1 | Recall@5 | Recall@10 | MRR |
-|---|---:|---:|---:|---:|
-| cultivation | 0.58 | 0.75 | 0.83 | 0.65 |
-| brewing | 0.25 | 0.75 | 0.83 | 0.40 |
-| varieties | 0.42 | 0.58 | 0.75 | 0.48 |
-| market | 0.42 | 0.50 | 0.67 | 0.47 |
-| processing | 0.33 | 0.50 | 0.67 | 0.44 |
-| sustainability | 0.17 | 0.50 | 0.67 | 0.30 |
-| cupping | 0.17 | 0.50 | 0.67 | 0.33 |
-| roasting | 0.17 | 0.50 | 0.58 | 0.30 |
-| chemistry | 0.08 | 0.42 | 0.50 | 0.23 |
+- **Dense search wins, against a set that favours its rival.** The questions borrow the
+  passages' words, which helps keyword search, and still the semantic one finds the
+  answer in the top five for three questions in four, against a little over half.
+- **Hybrid adds nothing here.** In the top ten, BM25 finds 8 answers dense misses and
+  dense finds 20 that BM25 misses (14 neither finds), but fusing the two lists with equal
+  weight dilutes the better one as much as it rescues. Weighting the fusion or tuning its
+  depth would be fitting the search to these 108 questions; the gate refused hybrid as
+  specified, and that is the result.
+- **The query instruction pays for itself.** Qwen3-Embedding's model card asks for an
+  instruction on the query side ("Instruct: ... Query:") and puts leaving it out at 1-5%;
+  here it is worth +0.053 nDCG@10 [+0.022, +0.087], 100% sure
+  (`experiments/retrieval_checks.py`).
+- **The keyword half in Qdrant is the baseline's BM25**, checked rather than assumed: on
+  103 of 108 questions its top ten is the in-process top ten in order, and the other five
+  differ only in how two chunks with the same score are ordered - the robusta and
+  arabica catalogues share word-for-word introduction pages.
 
-A third of the answers are not in the top ten, and fewer than a third come first. Each
-topic's figure rests on twelve questions - a standard error near 0.13 - so the ranking
-of the topics is a hint, not a finding. With one label per question, MAP equals MRR and recall
-at k is "was it in the top k"; the four metrics part ways once pooled judgments add
-graded labels. This is the number the semantic search has to beat, question by question.
+| Topic (12 questions each) | BM25 Recall@10 | Dense | Hybrid |
+|---|---:|---:|---:|
+| varieties | 0.75 | 0.92 | 0.92 |
+| cultivation | 0.83 | 0.92 | 0.83 |
+| roasting | 0.58 | 0.92 | 0.75 |
+| market | 0.67 | 0.83 | 0.75 |
+| chemistry | 0.50 | 0.75 | 0.58 |
+| cupping | 0.67 | 0.75 | 0.67 |
+| sustainability | 0.67 | 0.75 | 0.83 |
+| brewing | 0.83 | 0.67 | 0.75 |
+| processing | 0.67 | 0.67 | 0.83 |
+
+Each topic's figure rests on twelve questions - a standard error near 0.13 - so the
+ranking of the topics is a hint, not a finding. With one label per question, MAP equals
+MRR and recall at k is "was it in the top k"; the four metrics part ways once pooled
+judgments add graded labels.
+
+**How the pieces are built.**
+
+- **BM25 as Lucene and Elasticsearch ship it**: k1 1.2, b 0.75, the Snowball English
+  stemmer and Lucene's 33 stop words - a weak baseline would make semantic search look
+  good for the wrong reason. Each chunk stores the term-frequency half of BM25 as a
+  sparse vector (term ids are a stable hash, so no vocabulary travels with the index)
+  and Qdrant applies Lucene's inverse document frequency at query time.
+- **Dense**: `qwen3-embedding:0.6b` through Ollama, 1,024 dimensions, cosine; the whole
+  corpus embeds in about a minute on the laptop's GPU. Ollama cuts a text longer than
+  the model's context without an error; a chunk is a few hundred tokens, far below it.
+- **Hybrid**: each half offers its best 50 and reciprocal rank fusion merges them by
+  rank (k = 60, as in the paper that introduced it), because a cosine and a BM25 score
+  are not on one scale.
+- **Parquet is the source of truth, Qdrant an index built from it.** `make index` writes
+  the vectors to `embeddings.chunk_embeddings`, loads them into a new collection with
+  their BM25 weights and payload, and moves the alias searches use onto it in one
+  request - nobody ever searches half an index - then drops the builds before it. The
+  collection records the chunks it was built from, and an evaluation refuses an index
+  built from other chunks rather than misread it.
+- **Tested without a server**: Qdrant's in-process mode runs the same collections,
+  sparse vectors, fusion and aliases, so CI builds and searches a real index.
 
 ## What a kilo costs (stage 3)
 
