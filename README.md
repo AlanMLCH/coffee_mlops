@@ -711,6 +711,25 @@ judgments add graded labels.
 - **Tested without a server**: Qdrant's in-process mode runs the same collections,
   sparse vectors, fusion and aliases, so CI builds and searches a real index.
 
+### The agent's SQL, locked down
+
+The agent answers figures with SQL over the same DuckDB views `make sql` uses, and the
+guardrails live in the session and a parser, never in the prompt - a prompt is a
+request, and the text the agent reads (a shop's description, a document) can carry
+instructions of its own. Each was checked against DuckDB 1.5.5 before it was relied on:
+
+- External access off, the allowed directories narrowed to the published layers, the
+  configuration locked: the views still read, while the raw layer, any other file, URLs,
+  extension installs and setting changes are refused.
+- That is not read-only: `COPY ... TO` into an allowed directory still wrote a file, and
+  `CREATE` and `DROP` ran. So each statement is parsed first and anything but a single
+  `SELECT` is refused before the engine sees it.
+- DuckDB has no statement timeout: a timer interrupts a query after ten seconds and the
+  session stays usable; results stream, and at most 50 rows come back.
+- The schema the model writes against is the [data dictionary](src/domains/coffee/data_dictionary.md),
+  the sections of the tables that exist, verbatim - units, nulls and traps ("null means
+  not reported, never zero") are what a model gets wrong unless it is told.
+
 ## What a kilo costs (stage 3)
 
 The domain's second model, `offer`, prices a kilo of roasted coffee on a Mexico City
@@ -802,7 +821,7 @@ The evaluation is built to survive a small test set:
   not be used for: [cup score](docs/model-card.md) and [price per kilo](docs/model-card-price.md).
 - `experiments/` — one-off studies that answer a question and get logged to MLflow, kept
   out of the pipelines. See "Alternatives tried" in the model card.
-- [Data dictionary](docs/data-dictionary.md) — every column of every layer, with units.
+- [Data dictionary](src/domains/coffee/data_dictionary.md) — every column of every layer, with units; the agent's SQL is written against it.
   A test fails if a column stops being documented.
 
 ## Development

@@ -72,6 +72,13 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("data", "mlops_core.rag"),
         ("ml", "mlops_core.rag"),
         ("serving", "mlops_core.rag"),
+        # The agent sits on top: it may use retrieval, never the pipelines that build.
+        ("agent", "mlops_core.data"),
+        ("agent", "mlops_core.ml"),
+        ("data", "mlops_core.agent"),
+        ("ml", "mlops_core.agent"),
+        ("rag", "mlops_core.agent"),
+        ("serving", "mlops_core.agent"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:

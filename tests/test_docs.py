@@ -19,13 +19,14 @@ from domains.coffee.schemas import (
     coffee_shops_schema,
     roaster_origins_schema,
 )
-from mlops_core.adapter import available_domains, load_adapter
+from mlops_core.adapter import available_domains, domain_dir, load_adapter
 from mlops_core.config import DomainConfig
 from mlops_core.ml.features import features_schema
 from mlops_core.ml.predict import predictions_schema
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
-DATA_DICTIONARY = (DOCS / "data-dictionary.md").read_text(encoding="utf-8")
+# Beside the domain's code: the agent reads it as the schema its SQL is written against.
+DATA_DICTIONARY = (domain_dir("coffee") / "data_dictionary.md").read_text(encoding="utf-8")
 MODEL_CARD = (DOCS / "model-card.md").read_text(encoding="utf-8")
 README = (DOCS.parent / "README.md").read_text(encoding="utf-8")
 
