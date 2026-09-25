@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     # Qdrant, from docker-compose (profile `ai`), published on 127.0.0.1 only.
     qdrant_url: str = "http://127.0.0.1:6333"
+    # The prediction API, from docker-compose (profile `api`): the agent's prediction tool.
+    api_url: str = "http://127.0.0.1:8000"
 
 
 class SpatialConfig(BaseModel):

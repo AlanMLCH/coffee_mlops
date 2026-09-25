@@ -138,7 +138,8 @@ flowchart TD
         qdrant[("Qdrant, alias coffee-chunks<br/>dense vector + BM25 weights<br/>rebuilt from Parquet, swapped atomically")]
         ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
-        agent["LangGraph agent<br/>text-to-SQL · predict · retrieve"]
+        agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
+        mcp["MCP server over the three tools"]
     end
 
     FILES & CORPUS --> extract_files
@@ -163,10 +164,11 @@ flowchart TD
     document_chunks --> embed --> chunk_embeddings --> qdrant
     qdrant & questions --> ladder --> retrieval_runs
     ladder -- "dense passes the gate" --> mlflow
-    qdrant -.-> agent
+    qdrant -- "dense passages" --> agent
+    agent -.-> mcp
     roaster_coffees -. "descriptions" .-> qdrant
-    catalog -.-> agent
-    api -.-> agent
+    catalog -- "locked-down SQL" --> agent
+    api -- "predictions" --> agent
 
     classDef core fill:#dbe9fb,stroke:#2a78d6,color:#111
     classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
@@ -177,7 +179,8 @@ flowchart TD
     class roaster_coffees,roaster_origins,roaster_offers domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class agent planned
+    class agent core
+    class mcp planned
     class corpus_sources,questions domain
     class embed,ladder core
     class chunk_embeddings,qdrant,retrieval_runs store
@@ -192,7 +195,8 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
-| **rag** (stage 3) | `draft`, `review`, `index`, `evaluate`; planned: `ask` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores; planned: the agent |
+| **rag** (stage 3) | `draft`, `review`, `index`, `evaluate` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores |
+| **agent** (stage 3) | `benchmark`, `ask`; planned: the MCP server | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -761,6 +765,53 @@ set before any model was measured.
 - The router is told what each tool covers in the domain's own terms, read from what the
   domain already declares - the data dictionary's headings, each model's `description`,
   the corpus topics - so a new domain gets a router without writing one.
+
+### The agent
+
+`make ask Q="..."` answers a question with the tables, the models and the documents,
+and says where each part of the answer came from:
+
+```text
+$ make ask Q="How much per kilogram would Almanegra charge for a 250 g bag of a washed Gesha from Chiapas?"
+Almanegra would charge 1324.93 MXN per kilogram for a washed Gesha from Chiapas.
+[prediction] the offer model, v5
+prediction (offer): {'shop': 'almanegra', 'bag_grams': 250.0, 'processing_method': 'washed', 'variety': 'gesha'}
+route: prediction | trace: tr-4fbb2d0ed644b5d2fcc8d8c0a1204b13
+```
+
+- **A workflow, with autonomy only where it pays.** LangGraph runs a fixed path - route,
+  plan, the tools the plan needs, answer, verify - and loops only where they help, each
+  capped: a failed query goes back for repair twice, and an answer that fails
+  verification is written again once. A 3-4B model with free rein picks tools badly (the
+  benchmark saw it); this one is only ever asked small questions, each answered in a
+  shape Ollama constrains it to.
+- **A mixed question is split** into the part each tool answers ("which state produced
+  the most, and why does altitude matter?" goes half to SQL, half to the documents).
+- **The prediction tool is two small steps**: which of the domain's models, then the
+  item, in that model's own request body - whose JSON schema, field descriptions
+  included, is what the reply is constrained to. The request is shown with the answer,
+  so an assumption is visible.
+- **Every piece of evidence has an id**, and every statement cites one: `[sql]` for the
+  query result, `[prediction]` for the model, `[c2]` for a passage. Sources are rendered
+  by the code, not the model: publisher, title, year and page or section.
+- **Verification is code, not a second model**: every figure in the answer must be one
+  the tools produced (a rounding or a share restated as a percentage is allowed), and
+  every citation must name evidence it was given. A failing answer is written again
+  with its problems listed, and **a rewrite is kept only if it fixes more than it
+  breaks** - that rule came from a trace, in which a correct answer was rewritten into a
+  wrong one because the check misread `"[prediction]"` in the citation list.
+- **One MLflow trace per answer** (experiment `coffee-agent`): a span per step and per
+  model call, prompt and reply included, and the prompt registry versions it ran. The
+  prompts live in the code; each is registered in MLflow's prompt registry when its
+  content changes, and the trace points at the exact words sent.
+- **Two bugs the agent surfaced, in code that was not the agent's.** The API container
+  answered `/health` with "ok" while every price prediction failed - its image predated
+  the variety columns the champion expects - so it was rebuilt. And the API took "Gesha"
+  and "gesha" for different varieties: an unseen category, silently, and a price $296
+  lower. The request bodies now lower-case the closed vocabularies.
+- The embedding model runs with a 512-token context for questions: at its default it
+  did not fit in VRAM beside the generator, and Ollama would have swapped models on
+  every question.
 
 ## What a kilo costs (stage 3)
 

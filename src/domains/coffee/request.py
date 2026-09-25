@@ -3,7 +3,13 @@
 from datetime import UTC, date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _lower(value: object) -> object:
+    """A closed vocabulary is lower case ("gesha", "washed", "almanegra"); "Gesha" is the
+    same word, and the model would otherwise take it for a category it never saw."""
+    return value.strip().lower() if isinstance(value, str) else value
 
 
 class Lot(BaseModel):
@@ -19,6 +25,8 @@ class Lot(BaseModel):
     category_two_defects: int = Field(0, ge=0)
     quakers: int | None = Field(None, ge=0)
     graded_on: date | None = Field(None, description="Defaults to today (UTC).")
+
+    _lowered = field_validator("variety", "processing_method", "color", mode="before")(_lower)
 
     def to_item(self) -> dict[str, Any]:
         """The lot as a row of the item table: `graded_on` is its time column."""
@@ -39,6 +47,8 @@ class Offer(BaseModel):
     producer: str | None = None
     altitude_m: float | None = Field(None, ge=0, le=9000)
     observed_on: date | None = Field(None, description="Defaults to today (UTC).")
+
+    _lowered = field_validator("shop", "processing_method", "variety", mode="before")(_lower)
 
     def to_item(self) -> dict[str, Any]:
         """The bag as a row of the offers table: `observed_on` is its time column."""

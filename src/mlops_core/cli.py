@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import click
 import polars as pl
@@ -42,6 +42,7 @@ from mlops_core.rag.questions import (
 from mlops_core.storage import latest_partition, prune_layers, read_table, write_table
 
 if TYPE_CHECKING:  # the `rag` extra's; imported where used, for installs without it
+    import httpx
     from qdrant_client import QdrantClient
 
     from mlops_core.rag.llm import LocalModel
@@ -395,18 +396,13 @@ def evaluate(domain: Domain = None) -> None:
             QUERY_TASK,
             RRF_K,
             IndexSearch,
-            index_metadata,
         )
 
     config, corpus, path, questions = _question_set(domain)
     data_dir = _data_dir(config)
     chunks, _ = _corpus_tables(config)
     settings = Settings()
-    client = _qdrant(settings.qdrant_url)
-    built = index_metadata(client, config.name)
-    if built.get("chunks_partition") != _chunks_partition(data_dir):
-        typer.echo("The index was built from other chunks: rebuild it with `make index`", err=True)
-        raise typer.Exit(code=1)
+    client, built = _current_index(config, settings)
 
     keyword: dict[str, str | float] = {
         "k1": K1,
@@ -519,6 +515,92 @@ def benchmark(
             f"({summary['sql_first_try']:.0%} at the first try), "
             f"routing {summary['route_accuracy']:.0%} right - {verdict} (run {run_id})"
         )
+
+
+@agent_app.command()
+def ask(
+    question: Annotated[str, typer.Argument(help="A question, in English")],
+    domain: Domain = None,
+) -> None:
+    """Answer a question with the tables, the models and the documents, citing each.
+
+    Needs Ollama, Qdrant with a built index, and the prediction API. Every answer is one
+    MLflow trace (experiment `<domain>-agent`), linked to the prompts' registry versions.
+    """
+    with _needs_extra("agent"):
+        import mlflow
+
+        from mlops_core.agent.benchmark import GENERATOR_OPTIONS
+        from mlops_core.agent.dictionary import dictionary_path, schema_context
+        from mlops_core.agent.graph import AGENT_GENERATOR, Agent
+        from mlops_core.agent.registry import register_prompts
+        from mlops_core.agent.routing import routing_context
+        from mlops_core.agent.sql import read_only, views
+        from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
+
+    adapter = _adapter(domain)
+    config = adapter.config
+    _corpus(config)
+    data_dir = _data_dir(config)
+    settings = Settings()
+    con = read_only(data_dir)
+    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    chunks, documents = _corpus_tables(config)
+    client, _ = _current_index(config, settings)
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    mlflow.set_experiment(f"{config.name}-agent")
+    prompts = register_prompts(settings.mlflow_tracking_uri)
+    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
+        generator = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
+        _identified(generator)
+        embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
+        search = IndexSearch(
+            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
+        )
+        agent = Agent(
+            generator,
+            adapter,
+            con,
+            schema_context(dictionary, views(con)),
+            routing_context(config, dictionary, views(con)),
+            search.passages,
+            api,
+            {row["document_id"]: row for row in documents.iter_rows(named=True)},
+            prompts,
+        )
+        reply = agent.ask(question)
+    typer.echo(reply.text)
+    for source in reply.sources:
+        typer.echo(source)
+    if reply.sql is not None:
+        typer.echo(f"sql: {reply.sql.sql}")
+    if reply.prediction is not None:
+        typer.echo(f"prediction ({reply.prediction.model}): {reply.prediction.request}")
+    for problem in reply.problems:
+        typer.echo(f"unverified: {problem}", err=True)
+    typer.echo(f"route: {reply.route} | trace: {mlflow.get_last_active_trace_id()}")
+
+
+def _current_index(
+    config: DomainConfig, settings: Settings
+) -> tuple["QdrantClient", dict[str, Any]]:
+    """The index, if it was built from the chunks on disk; a plain word if not."""
+    from mlops_core.rag.vectors import index_metadata
+
+    client = _qdrant(settings.qdrant_url)
+    built = index_metadata(client, config.name)
+    if built.get("chunks_partition") != _chunks_partition(settings.data_dir / config.name):
+        typer.echo("The index was built from other chunks: rebuild it with `make index`", err=True)
+        raise typer.Exit(code=1)
+    return client, built
+
+
+def _api_client(url: str) -> "httpx.Client":
+    """The prediction API, as the agent's prediction tool reaches it."""
+    import httpx
+
+    return httpx.Client(base_url=url, timeout=60.0)
 
 
 def _identified(model: "LocalModel") -> str:

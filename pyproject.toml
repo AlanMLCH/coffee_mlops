@@ -71,6 +71,11 @@ orchestration = [
     "dagster>=1.13.23",
     "dagster-webserver>=1.13.23",
 ]
+# The agent: a LangGraph workflow over the three tools, which need retrieval.
+agent = [
+    "coffee-mlops[rag]",
+    "langgraph>=1.2.12",
+]
 
 [project.urls]
 # Sent in the user agent, so a service that sees trouble knows who to contact.

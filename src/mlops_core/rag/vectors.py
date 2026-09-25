@@ -30,6 +30,12 @@ EMBEDDING_MODEL = "qwen3-embedding:0.6b"
 # asks for it in English. The format is the card's, to the character.
 QUERY_TASK = "Given a web search query, retrieve relevant passages that answer the query"
 
+# A question is a few dozen tokens. With the default context of 4,096 the embedding
+# model took 2.37 GB of VRAM and did not fit beside the agent's generator (3.27 GB) on a
+# 6 GB card; at 512 it takes 1.01 GB and both stay loaded. Indexing keeps the default: a
+# chunk can pass 512 tokens.
+QUERY_OPTIONS = {"num_ctx": 512}
+
 EMBEDDINGS = "embeddings"  # the layer
 EMBEDDINGS_TABLE = "chunk_embeddings"
 DENSE, SPARSE = "dense", "bm25"  # the collection's two named vectors
@@ -143,14 +149,25 @@ class IndexSearch:
         self._positions = {chunk_id: p for p, chunk_id in enumerate(chunks["chunk_id"])}
 
     def dense(self, question: str, k: int) -> list[int]:
+        return self._located(self._nearest(question, k), k)
+
+    def passages(self, question: str, k: int) -> list[dict[str, Any]]:
+        """The `k` nearest chunks whole - text, document, page or section - best first:
+        what the agent reads and cites."""
+        nearest = self._nearest(question, k)
+        self._located(nearest, k)  # refuses an index built from other chunks
+        ranked = sorted(nearest, key=lambda point: (-point.score, _chunk_id(point)))[:k]
+        return [dict(point.payload or {}) for point in ranked]
+
+    def _nearest(self, question: str, k: int) -> list[models.ScoredPoint]:
         found = self._client.query_points(
             self._alias,
             query=self._embed(query_text(question)),
             using=DENSE,
             limit=k + TIE_MARGIN,
-            with_payload=["chunk_id"],
+            with_payload=True,
         )
-        return self._located(found.points, k)
+        return found.points
 
     def hybrid(self, question: str, k: int) -> list[int]:
         ids, weights = query_vector(question)
