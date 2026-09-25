@@ -82,6 +82,18 @@ def test_an_answer_is_judged_by_its_values_not_its_shape() -> None:
     assert not same_answer(expected, result(["c", "p"], [("B", 80.0), ("A", 87.875)]))
 
 
+def test_a_value_per_label_may_come_laid_out_across() -> None:
+    """One row, a column per label: the same two averages as two rows."""
+    expected = result(["method", "points"], [("washed", 82.187), ("natural", 82.563)])
+
+    assert same_answer(expected, result(["avg_washed", "avg_natural"], [(82.19, 82.563)]))
+    assert same_answer(expected, result(["natural_avg", "washed_avg"], [(82.563, 82.187)]))
+    assert not same_answer(expected, result(["avg_washed", "avg_natural"], [(82.19, 82.19)]))
+    assert not same_answer(expected, result(["a", "b"], [(82.187, 82.563)]))  # labels unnamed
+    one = result(["method", "points"], [("washed", 82.187)])
+    assert not same_answer(one, result(["avg_washed"], [(82.187,)]))  # one row is not a layout
+
+
 def test_a_share_is_not_a_percentage() -> None:
     assert not same_answer(result(["s"], [(0.6772,)]), result(["pct"], [(67.72,)]))
 
@@ -127,13 +139,15 @@ def test_the_router_is_told_what_each_tool_covers_in_the_domains_terms() -> None
     config = domains.coffee.adapter().config
     dictionary = dictionary_path(domain_dir("coffee")).read_text(encoding="utf-8")
 
-    context = routing_context(config, dictionary, {"clean.coffee_reviews"})
+    built = {"clean.coffee_reviews", "features.review_features"}
+    context = routing_context(config, dictionary, built)
     model = Scripted(lambda prompt: {"route": "prediction"})
 
     assert route(model, context, "What would it score?") == "prediction"
     prompt = model.prompts[0]
     assert "clean.coffee_reviews — one graded lot" in prompt
     assert "clean.market_context" not in prompt  # not built, not offered
+    assert "review_features" not in prompt  # a model's inputs, never offered
     assert f"review: {config.model_named('review').description}" in prompt
     assert "roasting: The roast" in prompt
     assert "Question: What would it score?" in prompt
@@ -151,7 +165,16 @@ def test_the_benchmark_scores_each_question_and_logs_the_verdicts(
         SqlCase(id="n", question="How many lots?", sql="SELECT count(*) FROM clean.lots"),
         SqlCase(id="top", question="Best?", sql="SELECT max(points) FROM clean.lots"),
     ]
-    route_cases = [RouteCase(id=f"r{n}", question=f"{r}?", route=r) for n, r in enumerate(ROUTES)]
+    expects: dict[str, dict[str, Any]] = {  # what the end-to-end evaluation would check
+        "prediction": {"model": "review", "item": {"country": "Kenya"}},
+        "mixed": {"tools": ["data", "knowledge"]},
+    }
+    route_cases = [
+        RouteCase.model_validate(
+            {"id": f"r{n}", "question": f"{r}?", "route": r} | expects.get(r, {})
+        )
+        for n, r in enumerate(ROUTES)
+    ]
 
     def answer(prompt: str) -> dict[str, Any]:
         if "Question: How many lots?" in prompt:

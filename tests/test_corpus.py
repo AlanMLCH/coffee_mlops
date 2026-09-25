@@ -253,6 +253,30 @@ def test_the_tables_meet_their_contracts_and_count_what_was_dropped() -> None:
     assert tables[CHUNKS_TABLE].inputs == ("paper",)
 
 
+def test_a_chunk_an_earlier_one_already_had_is_dropped() -> None:
+    """Two catalogues of one publisher open on the same page; four standards end on the
+    same address. The first document keeps the text; the chunks are numbered without gaps."""
+    read_at = {name: datetime(2026, 9, 24, tzinfo=UTC) for name in ("arabica", "robusta")}
+    intro = "About the catalogue. Information is power, and washed coffees need it."
+    robusta = "Robusta cherries are dried on the farm, then hulled."
+    raw = {
+        "arabica": raw_parts(intro, SENTENCE),
+        "robusta": raw_parts(intro.replace(" ", "\n", 3), robusta, intro),
+    }
+    documents = [document("arabica"), document("robusta")]
+
+    tables = corpus_tables(documents, CORPUS, raw, read_at)
+    contracts = corpus_contracts(CORPUS)
+    described = check_contract(contracts[DOCUMENTS_TABLE], tables[DOCUMENTS_TABLE].frame)
+    chunks = check_contract(contracts[CHUNKS_TABLE], tables[CHUNKS_TABLE].frame)
+
+    assert chunks["chunk_id"].to_list() == ["arabica-0001", "arabica-0002", "robusta-0001"]
+    assert chunks["text"].to_list()[2] == robusta
+    assert described["chunks_repeated"].to_list() == [0, 2]
+    with pytest.raises(SchemaErrors, match="no two chunks share their text"):
+        check_contract(contracts[CHUNKS_TABLE], pl.concat([chunks, chunks.head(1)]))
+
+
 def test_a_chunk_filed_under_an_undeclared_topic_breaks_the_contract() -> None:
     read_at = {"paper": datetime(2026, 9, 24, tzinfo=UTC)}
     tables = corpus_tables([document("paper")], CORPUS, {"paper": raw_parts(SENTENCE)}, read_at)
@@ -268,8 +292,9 @@ def test_the_clean_layer_builds_the_corpus_tables_beside_the_domains(
     coffee_adapter: CoffeeAdapter, raw_dir: Path
 ) -> None:
     """The fixture publishers serve one-line PDFs and a short article: the PDFs are too
-    short to keep, the article's introduction is a chunk, and every ingested document is
-    described - the ones behind a 403 were never handed over, so they are absent."""
+    short to keep, the article's introduction is a chunk - once, since every article is
+    that same one - and every ingested document is described; the ones behind a 403 were
+    never handed over, so they are absent."""
     data_dir = raw_dir.parent
     documents = coffee_adapter.config.documents
 
@@ -279,8 +304,11 @@ def test_the_clean_layer_builds_the_corpus_tables_beside_the_domains(
     chunks = read_table(data_dir / "clean" / CHUNKS_TABLE)
     served = {d.name for d in documents if d.inbox is None}
     assert set(described["document_id"]) == served
-    assert set(chunks["document_id"]) == {d.name for d in documents if d.format == "jats"}
-    assert set(chunks["part_title"]) == {"Introduction"}
+    articles = [d.name for d in documents if d.format == "jats"]
+    assert chunks["document_id"].to_list() == articles[:1]
+    assert chunks["part_title"].to_list() == ["Introduction"]
+    repeated = described.filter(pl.col("document_id").is_in(articles[1:]))["chunks_repeated"]
+    assert repeated.to_list() == [1] * (len(articles) - 1)
     manifest = json.loads((paths[CHUNKS_TABLE].parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == served
 

@@ -141,6 +141,8 @@ flowchart TD
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
         mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents<br/>dictionary://tables · guardrails server-side"]
+        agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
+        agent_answers[("evaluations/agent_answers<br/>per question · one MLflow run, a trace each")]
     end
 
     FILES & CORPUS --> extract_files
@@ -170,6 +172,7 @@ flowchart TD
     roaster_coffees -. "descriptions" .-> qdrant
     catalog -- "locked-down SQL" --> agent
     api -- "predictions" --> agent
+    agent & questions --> agent_eval --> agent_answers
 
     classDef core fill:#dbe9fb,stroke:#2a78d6,color:#111
     classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
@@ -182,8 +185,8 @@ flowchart TD
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp core
     class corpus_sources,questions domain
-    class embed,ladder core
-    class chunk_embeddings,qdrant,retrieval_runs store
+    class embed,ladder,agent_eval core
+    class chunk_embeddings,qdrant,retrieval_runs,agent_answers store
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -196,7 +199,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
 | **rag** (stage 3) | `draft`, `review`, `index`, `evaluate` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores |
-| **agent** (stage 3) | `benchmark`, `ask`, and `mlops mcp` | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each; the same tools over MCP |
+| **agent** (stage 3) | `benchmark`, `ask`, `evaluate`, and `mlops mcp` | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each; the same tools over MCP |
 
 The boundary is enforced, not just documented: `ml` never imports `data` (a test fails
 if it does), each installs on its own (`uv sync --extra data`), and the coupling between
@@ -541,30 +544,38 @@ about the shape of text rather than its subject, and is counted per document in
   in one review) is joined only where the document spells the word whole, so "the first"
   never becomes "thefirst".
 
-**1,373 chunks**, median 1,055 characters (about 260 tokens), cut at the coarsest
+**1,353 chunks**, median 1,056 characters (about 260 tokens), cut at the coarsest
 boundary that fits - paragraph, then sentence, then line - and packed up to 1,200, each
 opening with the last whole sentences of the one before (up to 200 characters). A chunk
 never spans two parts, so it cites one page or one section. Size and overlap are config:
 retrieval settings, to be tuned through the gate like a model's.
+
+**A text is indexed once.** The two WCR catalogues open with the same thirteen pages, the
+four SCA standards end on the same address, and one article says "Data are available from
+the authors upon reasonable request" twice: 20 chunks repeated an earlier one. The first
+document to have a text keeps it (in config order), `clean.documents` counts what each
+lost (`chunks_repeated`), and the contract refuses two chunks with the same text. Left
+in, a question about them finds the same passage twice in its five. Retrieval did not
+move (dense nDCG@10 0.608 before and after): this is hygiene, not a gain.
 
 **Each chunk is filed by the terms it uses.** A topic's terms match as whole words in
 their inflections ("roast" finds roasting and roaster, "import" never finds important).
 A chunk takes those of its document's topics whose terms it uses, and another topic only
 with two of that topic's terms, because one word out of place is not a subject. A chunk
 with no term keeps its document's topics rather than none: a topic filter that excludes
-a passage does it silently. 88% of chunks are filed by their own terms, 12% by their
+a passage does it silently. 89% of chunks are filed by their own terms, 11% by their
 document (`topics_basis`), and 59% carry more than one topic.
 
 | Topic | Chunks | Documents |
 |---|---:|---:|
-| cultivation | 547 | 10 |
-| market | 357 | 13 |
+| cultivation | 538 | 10 |
+| market | 356 | 13 |
 | sustainability | 311 | 3 |
-| processing | 310 | 10 |
-| varieties | 266 | 7 |
-| cupping | 233 | 11 |
-| chemistry | 208 | 10 |
-| roasting | 150 | 8 |
+| processing | 309 | 10 |
+| varieties | 253 | 7 |
+| cupping | 229 | 11 |
+| chemistry | 206 | 10 |
+| roasting | 148 | 8 |
 | brewing | 80 | 7 |
 
 Brewing is the thin one - its only dedicated document is a paper on espresso extraction
@@ -655,6 +666,9 @@ answer is found and how high, in the ten chunks an answer can be built from.
 | **Dense** | **0.426** | **0.741** | **0.796** | 0.547 | **0.608** | **passes**: +0.140 vs BM25 [+0.070, +0.215], 100% sure |
 | Hybrid (RRF) | 0.407 | 0.704 | 0.769 | 0.534 | 0.591 | fails: -0.017 vs dense [-0.070, +0.036], 26% sure |
 
+Measured again on the 1,353 chunks left once repeated texts were dropped: BM25 0.465,
+dense 0.608, hybrid 0.589 nDCG@10, and the same two verdicts.
+
 - **Dense search wins, against a set that favours its rival.** The questions borrow the
   passages' words, which helps keyword search, and still the semantic one finds the
   answer in the top five for three questions in four, against a little over half.
@@ -670,7 +684,7 @@ answer is found and how high, in the ten chunks an answer can be built from.
 - **The keyword half in Qdrant is the baseline's BM25**, checked rather than assumed: on
   103 of 108 questions its top ten is the in-process top ten in order, and the other five
   differ only in how two chunks with the same score are ordered - the robusta and
-  arabica catalogues share word-for-word introduction pages.
+  arabica catalogues shared word-for-word introduction pages (since indexed once).
 
 | Topic (12 questions each) | BM25 Recall@10 | Dense | Hybrid |
 |---|---:|---:|---:|
@@ -789,10 +803,11 @@ route: prediction | trace: tr-4fbb2d0ed644b5d2fcc8d8c0a1204b13
   shape Ollama constrains it to.
 - **A mixed question is split** into the part each tool answers ("which state produced
   the most, and why does altitude matter?" goes half to SQL, half to the documents).
-- **The prediction tool is two small steps**: which of the domain's models, then the
-  item, in that model's own request body - whose JSON schema, field descriptions
-  included, is what the reply is constrained to. The request is shown with the answer,
-  so an assumption is visible.
+- **The prediction tool is two small steps**: which of the domain's models - each
+  offered with the target it predicts - then the item, in that model's own request
+  body, whose JSON schema is what the reply is constrained to and whose fields, with the
+  vocabulary each description gives, are written into the prompt. The request is shown
+  with the answer, so an assumption is visible.
 - **Every piece of evidence has an id**, and every statement cites one: `[sql]` for the
   query result, `[prediction]` for the model, `[c2]` for a passage. Sources are rendered
   by the code, not the model: publisher, title, year and page or section.
@@ -808,12 +823,63 @@ route: prediction | trace: tr-4fbb2d0ed644b5d2fcc8d8c0a1204b13
   content changes, and the trace points at the exact words sent.
 - **Two bugs the agent surfaced, in code that was not the agent's.** The API container
   answered `/health` with "ok" while every price prediction failed - its image predated
-  the variety columns the champion expects - so it was rebuilt. And the API took "Gesha"
-  and "gesha" for different varieties: an unseen category, silently, and a price $296
-  lower. The request bodies now lower-case the closed vocabularies.
+  the variety columns the champion expects. The API now predicts each model's `example`
+  (declared in the YAML) whenever it loads it, and does not serve a model that cannot:
+  `/health` says "partial" and `/reload` says why. And the API took "Gesha" and "gesha"
+  for different varieties: an unseen category, silently, and a price $296 lower. The
+  request bodies now lower-case the closed vocabularies.
 - The embedding model runs with a 512-token context for questions: at its default it
   did not fit in VRAM beside the generator, and Ollama would have swapped models on
   every question.
+
+### The agent, end to end
+
+`make agent-eval` asks the agent the 40 routing questions and checks each answer against
+what is known to be right for it, where it is: the SQL set's reference query for a data
+question, the retrieval set's labelled excerpt for a knowledge one (both matched by the
+question's own words), and for a prediction the model it belongs to and every field the
+question states, spelled as the model spells it. A mixed question must run every tool it
+needs, whatever the route. An answer is **correct** when verification found nothing and
+every check that applies passes. The answers land in `evaluations.agent_answers`, one
+MLflow run holds the metrics and a trace per question (experiment `coffee-agent-eval`),
+and each run is compared with the one before it, question by question, paired and
+bootstrapped: a change to a prompt is judged as a model is.
+
+| 40 questions | Correct | Verified | Routed right | SQL right | Passage found | Item right | Median |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| First run | 57% | 90% | 92% | 69% | 80% | 23% | 9 s |
+| **After the fixes below** | **78%** | **100%** | 95% | 69% | 80% | 85% | 5 s |
+
++20 points correct [+8, +35], 100% sure. What the first run found, and what fixed it:
+
+- **The model never saw the fields it was filling.** Ollama constrains a reply to the
+  JSON schema but does not show the schema to the model, so the field descriptions never
+  reached it: 10 of 13 predictions arrived as the question worded them - "Indonesian",
+  "semi-washed", "heirloom", "café con jiribilla" - which the model takes for categories it
+  never saw, or with "from Chiapas" left out of `state`. The prompt now lists each field
+  with its description, and the request bodies' descriptions give their vocabularies.
+- **A question about a cup score went to the price model.** "review" does not say what
+  it predicts; the model list now names each model's target.
+- **The agent read a feature as a fact.** Asked for Brazil's arabica share in 2023, it
+  read `features.review_features`, whose market context is the year *before* each lot's
+  grading on purpose, and answered with it. The models' inputs are no longer offered to
+  the agent: everything in them comes from the clean layer, where it means what it says.
+- **The dictionary did not say how values are written** (`shop = 'Almanegra'` found no
+  rows): it now does, and says how a state's rural price is made from its
+  municipalities'.
+- **The judge was wrong once.** The two averages laid out across one row (`avg_washed`,
+  `avg_natural`) are the same answer as two rows; the SQL judge, the benchmark's too, now
+  accepts it.
+
+What is left is the model: a query that averages the wrong rows or takes a maximum for a
+state's price (4), a hypothetical bag routed to the tables or a plan that drops its
+prediction (3), and two passages the search does not find in its five. Verification
+catches a made-up figure, not a wrong query, so all nine read as confident answers.
+
+The fixes were found on these 40 questions, so the second figure is optimistic; each
+fixes a cause, not a question, and none names one. The model is deterministic enough to
+repeat a run exactly - not always: data-02's query changed between two runs with the
+same prompts.
 
 ### The same tools over MCP
 
@@ -1002,7 +1068,9 @@ The evaluation is built to survive a small test set:
   and `context` holds every feature the domain looked up for the request. Each model has
   its own route because each has its own request body, which FastAPI validates and
   documents only when the route knows its type. `/health` reports every model's version,
-  and `/reload` reloads them all, saying which failed and why.
+  and `/reload` reloads them all, saying which failed and why. A model counts as loaded
+  only once it has predicted the `example` its YAML declares, through the same path a
+  request takes; the example is also the one the API's docs show.
 - Settings are `MLOPS_*` (data dir, MLflow URI, which domain); a domain's credentials
   use its own prefix, so the core never holds another project's keys.
 

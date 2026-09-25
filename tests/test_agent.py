@@ -28,6 +28,7 @@ from typer.testing import CliRunner
 
 import domains.coffee
 from mlops_core import cli
+from mlops_core.adapter import domain_dir
 from mlops_core.agent import registry
 from mlops_core.agent.graph import Agent
 from mlops_core.agent.prompts import PROMPTS
@@ -43,6 +44,7 @@ from mlops_core.rag.vectors import build_index, embedding_table
 from mlops_core.storage import latest_partition, write_table
 
 OLLAMA = Path(__file__).parent / "fixtures" / "ollama"
+TOP = "SELECT state FROM clean.mexico_production ORDER BY production_t DESC LIMIT 1"
 PASSAGE = {
     "chunk_id": "doc-0001",
     "document_id": "fao",
@@ -158,7 +160,7 @@ def test_a_prediction_is_the_model_chosen_and_the_item_it_describes() -> None:
     assert answer.model == "offer" and answer.error is None
     # The closed vocabularies are lower case, whatever the model wrote.
     assert sent == [{"shop": "almanegra", "bag_grams": 250.0, "variety": "gesha"}]
-    assert "- offer: The price per kilogram" in generator.asked("ModelChoice")[0]
+    assert "- offer (predicts price_mxn_per_kg): The price" in generator.asked("ModelChoice")[0]
     assert "A model predicts The price per kilogram" in generator.asked("Offer")[0]
 
 
@@ -236,6 +238,13 @@ def test_a_prediction_question_cites_the_model_and_its_version(
     assert reply.verified
     assert reply.sources == ["[prediction] the offer model, v5"]
     assert "price_mxn_per_kg = 1324.93" in generator.asked("AnswerReply")[0]
+    # A model is offered with what it predicts, since its name need not say.
+    assert "- review (predicts total_cup_points): " in generator.asked("ModelChoice")[0]
+    # The fields and their vocabulary are in the prompt: Ollama never shows the schema.
+    described = generator.asked("Offer")[0]
+    assert "- bag_grams (number, required): The bag's size, grams" in described
+    assert "- processing_method (string): washed, natural, honey, semi_washed or other" in described
+    assert "- observed_on (date): Defaults to today (UTC)." in described
 
 
 def test_a_plan_that_names_no_tool_asks_the_tables_and_the_documents(
@@ -442,6 +451,66 @@ def test_a_prediction_that_failed_is_evidence_too(session: duckdb.DuckDBPyConnec
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:
     with cli._api_client("http://api.example:8000") as client:
         assert str(client.base_url) == "http://api.example:8000"
+
+
+def test_evaluate_asks_every_question_and_compares_with_the_last_run(
+    stood_in: Callable[[Script], None], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two runs of `mlops agent evaluate` on a domain with two questions, whose references
+    live in the other sets under the same words; the second run's query is wrong."""
+    home = tmp_path / "domain"
+    (home / "evals").mkdir(parents=True)
+    real = domain_dir("coffee")
+    (home / "data_dictionary.md").write_text(
+        (real / "data_dictionary.md").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    lines = {
+        "routing_questions.jsonl": [
+            {"id": "data-01", "question": "Top state?", "route": "data"},
+            {"id": "knowledge-01", "question": "Why altitude?", "route": "knowledge"},
+        ],
+        "sql_questions.jsonl": [{"id": "production-01", "question": "Top state?", "sql": TOP}],
+        "retrieval_questions.jsonl": [
+            {"id": "cultivation-01", "topic": "cultivation", "question": "Why altitude?",
+             "answer": "It delays ripening.", "status": "draft", "drafted_by": "m@1",
+             "prompt": "p", "drafted_on": "2026-09-24", "source_chunk": "doc-0001",
+             "relevant": [{"document_id": "fao", "part": 12, "grade": 2,
+                           "excerpt": "Cooler temperatures at altitude delay ripening"}]},
+        ],
+    }  # fmt: skip
+    for name, rows in lines.items():
+        text = "".join(json.dumps(row) + "\n" for row in rows)
+        (home / "evals" / name).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(cli, "domain_dir", lambda name: home)
+    write_table(pl.DataFrame({"state": ["Chiapas", "Puebla"], "production_t": [391690.56, 1.0]}),
+                tmp_path / "data" / "coffee" / "clean" / "mexico_production", {})  # fmt: skip
+
+    def run(sql: str) -> Any:
+        def script(shape: dict[str, Any]) -> dict[str, Any]:
+            if "route" in shape:
+                return {"route": "mixed"}
+            if "knowledge" in shape:
+                return {"data": "Top state?", "prediction": None, "knowledge": "Why altitude?"}
+            if "sql" in shape:
+                return {"sql": sql}
+            return {"text": "It is so [sql] [c1].", "citations": ["sql", "c1"]}
+
+        stood_in(script)
+        return CliRunner().invoke(cli.app, ["agent", "evaluate"])
+
+    first = run(TOP)
+    second = run(TOP.replace("DESC", "ASC"))
+
+    assert first.exit_code == 0, first.output
+    assert "100% correct, 100% verified, routing 0%" in first.output
+    assert "sql: 100% of the questions it applies to" in first.output
+    assert "passage: 100% of the questions it applies to" in first.output
+    assert "vs the previous run" not in first.output
+    assert second.exit_code == 0, second.output
+    assert "x data-01: route mixed; wrong query result" in second.output
+    assert "vs the previous run: -50% correct" in second.output
+    answers = tmp_path / "data" / "coffee" / "evaluations" / "agent_answers"
+    assert len(list(answers.glob("built_at=*"))) == 2
 
 
 # --- MCP -----------------------------------------------------------------------------------

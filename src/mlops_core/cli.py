@@ -29,7 +29,7 @@ from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
 from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
-from mlops_core.provenance import REPO_ROOT
+from mlops_core.provenance import REPO_ROOT, code_version
 from mlops_core.rag.questions import (
     Question,
     contains,
@@ -45,6 +45,7 @@ if TYPE_CHECKING:  # the `rag` extra's; imported where used, for installs withou
     import httpx
     from qdrant_client import QdrantClient
 
+    from mlops_core.agent.graph import Agent
     from mlops_core.rag.llm import LocalModel
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -530,45 +531,11 @@ def ask(
     with _needs_extra("agent"):
         import mlflow
 
-        from mlops_core.agent.benchmark import GENERATOR_OPTIONS
-        from mlops_core.agent.dictionary import dictionary_path, schema_context
-        from mlops_core.agent.graph import AGENT_GENERATOR, Agent
-        from mlops_core.agent.registry import register_prompts
-        from mlops_core.agent.routing import routing_context
-        from mlops_core.agent.sql import read_only, views
-        from mlops_core.rag.llm import LocalModel, ollama_client
-        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
-
     adapter = _adapter(domain)
-    config = adapter.config
-    _corpus(config)
-    data_dir = _data_dir(config)
     settings = Settings()
-    con = read_only(data_dir)
-    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
-    chunks, documents = _corpus_tables(config)
-    client, _ = _current_index(config, settings)
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment(f"{config.name}-agent")
-    prompts = register_prompts(settings.mlflow_tracking_uri)
-    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
-        generator = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
-        _identified(generator)
-        embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
-        search = IndexSearch(
-            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
-        )
-        agent = Agent(
-            generator,
-            adapter,
-            con,
-            schema_context(dictionary, views(con)),
-            routing_context(config, dictionary, views(con)),
-            search.passages,
-            api,
-            {row["document_id"]: row for row in documents.iter_rows(named=True)},
-            prompts,
-        )
+    mlflow.set_experiment(f"{adapter.config.name}-agent")
+    with _agent(adapter, settings) as (agent, _):
         reply = agent.ask(question)
     typer.echo(reply.text)
     for source in reply.sources:
@@ -580,6 +547,97 @@ def ask(
     for problem in reply.problems:
         typer.echo(f"unverified: {problem}", err=True)
     typer.echo(f"route: {reply.route} | trace: {mlflow.get_last_active_trace_id()}")
+
+
+@agent_app.command("evaluate")
+def evaluate_agent(domain: Domain = None) -> None:
+    """Ask the agent every routing question and check each answer end to end.
+
+    Checks the tools that ran, verification, the query's answer against the SQL set's
+    reference, the passages against the retrieval set's labels, and the prediction's
+    request against the fields the question states. The answers land in
+    `evaluations.agent_answers`; one MLflow run (experiment `<domain>-agent-eval`) holds
+    the metrics, a trace per question, and the comparison with the previous run.
+    """
+    with _needs_extra("agent"):
+        import mlflow
+
+        from mlops_core.agent.benchmark import (
+            GENERATOR_OPTIONS,
+            ROUTE_CASES_FILE,
+            SQL_CASES_FILE,
+            RouteCase,
+            SqlCase,
+            case_digest,
+            load_cases,
+        )
+        from mlops_core.agent.evaluate import (
+            known_answers,
+            log_evaluation,
+            record,
+            run_evaluation,
+            versus,
+        )
+        from mlops_core.agent.prompts import PROMPTS, version
+
+    adapter = _adapter(domain)
+    config = adapter.config
+    home = domain_dir(config.name)
+    case_files = [home / ROUTE_CASES_FILE, home / SQL_CASES_FILE, questions_path(home)]
+    truths = known_answers(
+        load_cases(case_files[0], RouteCase),
+        load_cases(case_files[1], SqlCase),
+        load_questions(case_files[2], _corpus(config).topics),
+    )
+    settings = Settings()
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    mlflow.set_experiment(f"{config.name}-agent-eval")
+    with _agent(adapter, settings) as (agent, generator), mlflow.start_run() as run:
+        answers = run_evaluation(agent.ask, truths, agent.con)
+        table, previous = record(answers, _data_dir(config))
+        comparison = versus(previous, answers) if previous is not None else None
+        version_ = code_version()
+        mlflow.set_tags(version_.as_tags() if version_ else {})
+        summary = log_evaluation(
+            answers,
+            comparison,
+            {
+                "generator": generator,
+                **{f"option_{k}": v for k, v in GENERATOR_OPTIONS.items()},
+                **{
+                    f"prompt_{name}": version(template, reply) if reply else "domain"
+                    for name, (template, reply) in PROMPTS.items()
+                },
+                "cases": answers.height,
+                "cases_written_by": "assistant",
+                "case_files_sha256": case_digest(case_files),
+            },
+            table,
+        )
+    typer.echo(
+        f"{summary['correct']:.0%} correct, {summary['verified']:.0%} verified, "
+        f"routing {summary['route_accuracy']:.0%}; median {summary['seconds_median']:.0f} s "
+        f"a question (run {run.info.run_id})"
+    )
+    for name in ("sql", "passage", "item"):
+        if name in summary:
+            typer.echo(f"  {name}: {summary[name]:.0%} of the questions it applies to")
+    for row in answers.filter(~pl.col("correct")).iter_rows(named=True):
+        why = [
+            f"route {row['route']}" if not row["route_ok"] else "",
+            f"tools {row['tools'] or 'none'}" if not row["tools_ok"] else "",
+            "wrong query result" if row["sql_ok"] is False else "",
+            "no relevant passage" if row["passage_ok"] is False else "",
+            f"item: {row['item_errors']}" if row["item_ok"] is False else "",
+            f"unverified: {row['problems']}" if not row["verified"] else "",
+        ]
+        typer.echo(f"  x {row['case_id']}: {'; '.join(w for w in why if w)}")
+    if comparison is not None:
+        typer.echo(
+            f"vs the previous run: {comparison.difference:+.0%} correct "
+            f"[{comparison.ci_low:+.0%}, {comparison.ci_high:+.0%}], "
+            f"{comparison.probability_better:.0%} sure it is better"
+        )
 
 
 @app.command("mcp")
@@ -622,6 +680,50 @@ def mcp_server(domain: Domain = None) -> None:
             lambda passage: cite(passage, titles),
         )
         server.run("stdio")
+
+
+@contextmanager
+def _agent(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent", str]]:
+    """The agent with every service it needs - Ollama, the index, the prediction API -
+    and its generator's identity (model@digest). Tracking must already point at MLflow:
+    the prompts are registered there."""
+    from mlops_core.agent.benchmark import GENERATOR_OPTIONS
+    from mlops_core.agent.dictionary import dictionary_path, schema_context
+    from mlops_core.agent.graph import AGENT_GENERATOR, Agent
+    from mlops_core.agent.registry import register_prompts
+    from mlops_core.agent.routing import routing_context
+    from mlops_core.agent.sql import read_only, views
+    from mlops_core.rag.llm import LocalModel, ollama_client
+    from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
+
+    config = adapter.config
+    _corpus(config)
+    con = read_only(_data_dir(config))
+    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    chunks, documents = _corpus_tables(config)
+    client, _ = _current_index(config, settings)
+    prompts = register_prompts(settings.mlflow_tracking_uri)
+    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
+        generator = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
+        identity = _identified(generator)
+        embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
+        search = IndexSearch(
+            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
+        )
+        yield (
+            Agent(
+                generator,
+                adapter,
+                con,
+                schema_context(dictionary, views(con)),
+                routing_context(config, dictionary, views(con)),
+                search.passages,
+                api,
+                {row["document_id"]: row for row in documents.iter_rows(named=True)},
+                prompts,
+            ),
+            identity,
+        )
 
 
 def _current_index(

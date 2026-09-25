@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 Route = Literal["data", "prediction", "knowledge", "mixed"]
 ROUTES: tuple[Route, ...] = ("data", "prediction", "knowledge", "mixed")
+Tool = Literal["data", "prediction", "knowledge"]  # a route that is one tool
 
 
 class SqlReply(BaseModel):
@@ -66,8 +67,8 @@ ROUTER = """You route questions about {subject} to the tool that can answer them
 
 - data: figures, counts, rankings and comparisons that can be read from these tables:
 {tables}
-- prediction: what a model would predict for an item the question describes, which is
-  not in the tables. The models:
+- prediction: what a model would predict for an item the question describes rather
+  than one the tables list - what such an item would be, not what one was. The models:
 {models}
 - knowledge: how and why - explanations from a library of documents on:
 {topics}
@@ -85,7 +86,8 @@ each tool answers, written as a question of its own, and leave a tool out (null)
 the question does not need it.
 
 - data: figures, counts and rankings read from the tables.
-- prediction: what a model would predict for an item the question describes.
+- prediction: what a model would predict for an item the question describes rather
+  than one the tables list. Keep every detail the question gives about the item.
 - knowledge: how and why, explained by documents.
 
 Question: {question}
@@ -100,8 +102,12 @@ Question: {question}
 
 DESCRIBE_ITEM = """A model predicts {description}
 
-Describe the item the question is about, for that model. Fill in only what the question
-states, in the vocabulary the fields describe, and leave everything else empty (null).
+Describe the item the question is about, for that model. Fill in every field the question
+states, in the vocabulary its description gives - a place by its name, not an adjective
+("Kenya", not "Kenyan") - and leave everything else empty (null).
+
+The fields:
+{fields}
 
 Question: {question}
 """

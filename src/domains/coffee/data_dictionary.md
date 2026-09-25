@@ -12,9 +12,9 @@ Both CQI snapshots harmonised into one table. 1,516 rows.
 |---|---|---|
 | `review_id` | String | `<snapshot>-<upstream id>`, unique |
 | `snapshot` | String | `cqi_2018` or `cqi_2023`: which scrape the row came from |
-| `country` | String | Origin, renamed to match USDA PSD (Hawaii and Puerto Rico → United States) |
+| `country` | String | Origin, renamed to match USDA PSD (Hawaii and Puerto Rico → United States): `Ethiopia`, `Colombia` |
 | `region` | String? | Growing region, free text as submitted |
-| `variety` | String? | Lower-cased; blends and "unknown" are kept as written |
+| `variety` | String? | Lower-cased (`caturra`, `gesha`, `sl28`, `ethiopian heirlooms`); blends and "unknown" are kept as written |
 | `processing_method` | String? | `washed`, `natural`, `honey`, `semi_washed`, `other` |
 | `color` | String? | Green bean colour, normalised to a closed vocabulary |
 | `grading_date` | Date | When the lot was cupped. Drives the temporal split and the market-context join |
@@ -103,6 +103,10 @@ and water regime; those rows are summed, and yield and price derived from the to
 | `yield_t_per_ha` | Float? | `production_t / harvested_ha`; null when nothing was harvested |
 | `rural_price_mxn_per_t` | Float? | `value_mxn / production_t`; null when nothing was produced |
 
+A state's rural price is its total `value_mxn` over its total `production_t`, and its
+yield its total production over its total harvested area - never the average or the
+maximum of its municipalities' own.
+
 ## `clean.roaster_coffees` — one coffee a roaster sells
 
 What four Mexico City roasters list as coffee in their own shops (stage 3), read
@@ -112,7 +116,7 @@ not a graded sample: nothing here was cupped by a third party.
 | Column | Type | Meaning |
 |---|---|---|
 | `coffee_id` | String | `<shop>-<product id>`: the one-column key that joins the three roaster tables |
-| `shop`, `product_id` | String | The shop (as named in the config) and the platform's own product id |
+| `shop`, `product_id` | String | The shop, lower case as the config names it (`almanegra`, `buna`, `cucurucho`, `jiribilla` for Café con Jiribilla), and the platform's own product id |
 | `title` | String | As the shop titles it |
 | `url` | String | The product page |
 | `description` | String? | The shop's own text, markup stripped; the source of RAG documents later |
@@ -174,7 +178,7 @@ sensory scores are dropped here, so no downstream consumer can pick them up.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `review_id`, `snapshot`, `grading_date` | | Keys back to the feature table |
+| `review_id`, `snapshot`, `grading_date` | | Keys back to `clean.coffee_reviews`: join on `review_id` for the lot's country, variety or actual score |
 | `prediction` | Float | Predicted `total_cup_points` |
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
@@ -201,7 +205,7 @@ states it. The listed `price_mxn` is dropped: the target is it divided by the si
 
 | Column | Type | Meaning |
 |---|---|---|
-| `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys back to the feature table |
+| `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys back to `clean.roaster_offers`: join on `offer_id` for the shop, size or listed price |
 | `prediction` | Float | Predicted `price_mxn_per_kg` |
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |

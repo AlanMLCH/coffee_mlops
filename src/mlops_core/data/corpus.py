@@ -11,6 +11,11 @@ about a subject, and what each document loses is counted in the `documents` tabl
 A chunk never spans two parts, so it cites one page or one section. The price is a
 paragraph broken by a page turn, which becomes two chunks.
 
+A chunk whose text an earlier one already had is dropped: two catalogues of one
+publisher open with the same pages, and four standards end on the same address. Left
+in, a question about them finds the same text twice and five passages carry four
+answers. The first document to have it keeps it, in the order the config lists them.
+
 The topics are the domain's vocabulary. A chunk is filed under those of its document's
 topics whose terms it uses, and under another topic only on stronger evidence - two of
 its terms - because the document's topics are a curated prior and one word out of place
@@ -124,6 +129,7 @@ def corpus_tables(
     tagger = TopicTagger(corpus.topics)
     described: list[dict[str, object]] = []
     chunks: list[dict[str, object]] = []
+    seen: set[str] = set()  # every chunk's text so far, spacing aside
     for document in documents:
         frame = raw.get(document.name)
         if frame is None:
@@ -131,7 +137,13 @@ def corpus_tables(
             continue
         read = [Part(*row) for row in frame.select("part", "part_title", "text").iter_rows()]
         kept = prose(read, paged=document.format == "pdf")
-        pieces = [(part, text) for part in kept for text in split(part.text, corpus.chunking)]
+        cut = [(part, text) for part in kept for text in split(part.text, corpus.chunking)]
+        pieces = []
+        for part, text in cut:
+            flat = " ".join(text.split())
+            if flat not in seen:
+                seen.add(flat)
+                pieces.append((part, text))
         for number, (part, text) in enumerate(pieces, start=1):
             topics, basis = tagger.tag(text, document.topics)
             chunks.append(
@@ -164,14 +176,16 @@ def corpus_tables(
                 "characters": sum(len(part.text) for part in read),
                 "characters_kept": sum(len(part.text) for part in kept),
                 "chunks": len(pieces),
+                "chunks_repeated": len(cut) - len(pieces),
             }
         )
         logger.info(
-            "%s: %d of %d parts kept, %d chunks",
+            "%s: %d of %d parts kept, %d chunks (%d repeated an earlier one)",
             document.name,
             len(kept),
             len(read),
             len(pieces),
+            len(cut) - len(pieces),
         )
     inputs = tuple(str(row["document_id"]) for row in described)
     return {
@@ -272,6 +286,7 @@ def corpus_contracts(corpus: CorpusConfig) -> dict[str, pa.DataFrameSchema]:
             "characters": pa.Column(pl.Int64, pa.Check.ge(1)),
             "characters_kept": pa.Column(pl.Int64, pa.Check.ge(0)),
             "chunks": pa.Column(pl.Int64, pa.Check.ge(0)),
+            "chunks_repeated": pa.Column(pl.Int64, pa.Check.ge(0)),
         },
         checks=[
             pa.Check(
@@ -304,7 +319,13 @@ def corpus_contracts(corpus: CorpusConfig) -> dict[str, pa.DataFrameSchema]:
                     pl.col("characters") == pl.col("text").str.len_chars()
                 ),
                 error="characters counts the chunk's text",
-            )
+            ),
+            pa.Check(
+                lambda data: data.lazyframe.select(
+                    pl.col("text").str.replace_all(r"\s+", " ").str.strip_chars().is_unique()
+                ),
+                error="no two chunks share their text",
+            ),
         ],
     )
     return {DOCUMENTS_TABLE: documents, CHUNKS_TABLE: chunks}
@@ -327,6 +348,7 @@ DOCUMENTS_COLUMNS = pl.Schema(
         "characters": pl.Int64(),
         "characters_kept": pl.Int64(),
         "chunks": pl.Int64(),
+        "chunks_repeated": pl.Int64(),
     }
 )
 CHUNKS_COLUMNS = pl.Schema(

@@ -10,7 +10,7 @@ nobody declared.
 
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
@@ -329,6 +329,10 @@ class ModelConfig(BaseModel):
     # What it predicts, in the words of whoever would ask: the agent routes questions by
     # it, and a tool offering the model to another client describes itself with it.
     description: str = Field(min_length=1)
+    # A request the model must answer, in the domain's request body: the API predicts it
+    # whenever it loads the model and does not serve one that cannot. A stale image once
+    # loaded the champion, reported itself healthy and failed every request.
+    example: dict[str, Any] = Field(min_length=1)
     items: ItemsConfig
     spec: ModelSpec
     training: TrainingConfig

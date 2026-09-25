@@ -13,6 +13,12 @@ from itertools import pairwise
 from pathlib import Path
 
 DICTIONARY_FILE = "data_dictionary.md"
+# The models' inputs are not offered. Everything in them comes from the clean layer, some
+# of it shifted on purpose - an item's context is the period before its own - and a
+# question read against them gets the shifted figure for the fact. Measured (2026-09-25):
+# asked for a country's figure in one year, the agent read one item's lagged context and
+# answered with it.
+MODEL_INPUTS = "features."
 
 _SECTION = re.compile(r"^## ", re.MULTILINE)
 _VIEW = re.compile(r"^## `(\w+\.\w+)`")
@@ -35,7 +41,16 @@ def table_sections(text: str) -> dict[str, str]:
     return sections
 
 
+def offered(text: str, views: Collection[str]) -> dict[str, str]:
+    """The sections of the tables the agent answers from: those that exist as views - a
+    table the pipeline has not built yet is not offered - and are not a model's inputs."""
+    return {
+        view: section
+        for view, section in table_sections(text).items()
+        if view in views and not view.startswith(MODEL_INPUTS)
+    }
+
+
 def schema_context(text: str, views: Collection[str]) -> str:
-    """The dictionary's sections for the tables that exist as views, in its own order:
-    a table the pipeline has not built yet is not offered to the model."""
-    return "\n\n".join(section for view, section in table_sections(text).items() if view in views)
+    """The offered tables' sections, in the dictionary's own order."""
+    return "\n\n".join(offered(text, views).values())

@@ -14,11 +14,11 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import pandas as pd
 import polars as pl
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from mlops_core.adapter import DomainAdapter, ItemRequest, load_adapter
@@ -69,11 +69,14 @@ class Service:
         self.contexts: dict[str, dict[str, pl.DataFrame]] = {}
 
     def reload(self, name: str) -> None:
-        """Load one model's champion and its context together, or neither.
+        """Load one model's champion and its context together, or neither - and only if
+        together they predict the model's example.
 
-        Both are read before either is kept: a model whose context failed to load would
-        report itself healthy on /health and fail every predict. That happened, when a
-        mounted data path was wrong.
+        A model that loads is not a model that answers. A context that failed to load
+        once left a model healthy on /health and failing every predict (a mounted data
+        path was wrong); an image built before the domain's code changed did the same with
+        everything loaded. So nothing is kept until the domain's example has been
+        predicted, through the same path a request takes.
         """
         model = self.config.model_named(name)
         served = load_champion(model.training.registered_model, self.tracking_uri, self.cache_dir)
@@ -81,6 +84,11 @@ class Service:
             table: read_table(self.data_dir / "clean" / table)
             for table in self.adapter.context_tables(name)
         }
+        try:
+            example = self.adapter.request_model(name).model_validate(model.example)
+            self._predict(name, served, context, cast(ItemRequest, example))
+        except Exception as failed:
+            raise RuntimeError(f"cannot predict its example: {failed}") from failed
         self.served[name], self.contexts[name] = served, context
 
     def reload_all(self) -> dict[str, str]:
@@ -116,10 +124,18 @@ class Service:
         )
 
     def predict(self, name: str, request: ItemRequest) -> Prediction:
-        served = self.ready(name)
+        return self._predict(name, self.ready(name), self.contexts[name], request)
+
+    def _predict(
+        self,
+        name: str,
+        served: ServedModel,
+        context: dict[str, pl.DataFrame],
+        request: ItemRequest,
+    ) -> Prediction:
         spec = self.config.model_named(name).spec
         item = request.to_item()
-        features = self.adapter.enrich(name, pl.DataFrame([item]), self.contexts[name])
+        features = self.adapter.enrich(name, pl.DataFrame([item]), context)
         features = features.with_columns(pl.col(c).cast(pl.Float64) for c in spec.numeric)
         # Built from rows rather than polars.to_pandas(), which needs pyarrow: 156 MB in
         # the image for one conversion. The casts keep the dtypes the model trained on,
@@ -179,14 +195,14 @@ def create_app(adapter: DomainAdapter, settings: Settings) -> FastAPI:
         return ReloadResult(loaded=loaded, failed=failed)
 
     for model in config.models:
-        _model_routes(app, model.name, adapter.request_model(model.name), get_service)
+        body = Annotated[adapter.request_model(model.name), Body(examples=[model.example])]  # type: ignore[valid-type]
+        _model_routes(app, model.name, body, get_service)
     return app
 
 
-def _model_routes(
-    app: FastAPI, name: str, body: type[BaseModel], get_service: Callable[[], Service]
-) -> None:
-    """`GET /models/<name>` and `POST /models/<name>/predict`, typed with its body."""
+def _model_routes(app: FastAPI, name: str, body: Any, get_service: Callable[[], Service]) -> None:
+    """`GET /models/<name>` and `POST /models/<name>/predict`, typed with its body - the
+    domain's request model, with the model's example for the docs."""
     Injected = Annotated[Service, Depends(get_service)]
 
     @app.get(f"/models/{name}", response_model=ModelStatus, name=f"{name}_status")
@@ -196,7 +212,7 @@ def _model_routes(
     # The body's type is the domain's, known only at runtime: FastAPI reads it from the
     # annotation to validate and document the request, which a static checker cannot follow.
     @app.post(f"/models/{name}/predict", response_model=Prediction, name=f"{name}_predict")
-    def predict(request: body, service: Injected) -> Prediction:  # type: ignore[valid-type]
+    def predict(request: body, service: Injected) -> Prediction:
         return service.predict(name, request)
 
 

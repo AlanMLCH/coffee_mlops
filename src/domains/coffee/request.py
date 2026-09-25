@@ -12,18 +12,30 @@ def _lower(value: object) -> object:
     return value.strip().lower() if isinstance(value, str) else value
 
 
+# The vocabularies the models learned, said where a caller - or the agent's model, which
+# reads these descriptions - chooses the words.
+COUNTRY = "The origin country as USDA PSD names it, e.g. Ethiopia, Colombia, United States"
+METHODS = "washed, natural, honey, semi_washed or other"
+
+
 class Lot(BaseModel):
     """What a caller knows about a green coffee lot before it is cupped."""
 
-    country: str
-    variety: str | None = None
-    processing_method: str | None = None
-    color: str | None = None
-    altitude_m: float | None = Field(None, ge=0, le=9000)
-    moisture_pct: float | None = Field(None, ge=0, le=100)
-    category_one_defects: int = Field(0, ge=0)
-    category_two_defects: int = Field(0, ge=0)
-    quakers: int | None = Field(None, ge=0)
+    country: str = Field(description=COUNTRY)
+    variety: str | None = Field(
+        None,
+        description="Lower case, as the CQI spells it, e.g. caturra, bourbon, typica, gesha, "
+        "sl28, ethiopian heirlooms",
+    )
+    processing_method: str | None = Field(None, description=METHODS)
+    color: str | None = Field(
+        None, description="The green beans: green, blue-green, yellow-green, yellowish, brownish"
+    )
+    altitude_m: float | None = Field(None, ge=0, le=9000, description="Metres above sea level")
+    moisture_pct: float | None = Field(None, ge=0, le=100, description="Of the green beans, %")
+    category_one_defects: int = Field(0, ge=0, description="Primary (visual) defects")
+    category_two_defects: int = Field(0, ge=0, description="Secondary defects")
+    quakers: int | None = Field(None, ge=0, description="Unripe beans that fail to roast")
     graded_on: date | None = Field(None, description="Defaults to today (UTC).")
 
     _lowered = field_validator("variety", "processing_method", "color", mode="before")(_lower)
@@ -38,14 +50,21 @@ class Lot(BaseModel):
 class Offer(BaseModel):
     """A bag of roasted coffee as a shop would list it, to price it per kilogram."""
 
-    shop: str = Field(description="The roaster, as the catalogues name it, e.g. almanegra")
-    bag_grams: float = Field(gt=0, le=20_000)
-    country: str | None = Field(None, description="As PSD names it, e.g. Mexico")
-    state: str | None = Field(None, description="As SIAP names it, e.g. Oaxaca")
-    processing_method: str | None = Field(None, description="washed, natural, honey, ...")
-    variety: str | None = Field(None, description="As the CQI spells it, e.g. gesha")
-    producer: str | None = None
-    altitude_m: float | None = Field(None, ge=0, le=9000)
+    shop: str = Field(
+        description="The roaster, as the catalogues name it: almanegra, buna, cucurucho or "
+        "jiribilla (Café con Jiribilla)"
+    )
+    bag_grams: float = Field(gt=0, le=20_000, description="The bag's size, grams")
+    country: str | None = Field(None, description=COUNTRY)
+    state: str | None = Field(
+        None, description="For a Mexican coffee, the state as SIAP names it, e.g. Oaxaca, Chiapas"
+    )
+    processing_method: str | None = Field(None, description=METHODS)
+    variety: str | None = Field(
+        None, description="Lower case, as the CQI spells it, e.g. gesha, typica, bourbon"
+    )
+    producer: str | None = Field(None, description="The farm or producer, as the sheet names it")
+    altitude_m: float | None = Field(None, ge=0, le=9000, description="Metres above sea level")
     observed_on: date | None = Field(None, description="Defaults to today (UTC).")
 
     _lowered = field_validator("shop", "processing_method", "variety", mode="before")(_lower)

@@ -349,6 +349,7 @@ def toy_model(split: TemporalSplit | GroupSplit = GROUPED) -> ModelConfig:
     return ModelConfig(
         name="price",
         description="The price of a lot.",
+        example={"origin": "a", "size": 1.0},
         items=ItemsConfig(table="lots", id="item_id", time="observed_on", period="period"),
         spec=ModelSpec(target="price", categorical=["origin"], numeric=["size"], leakage=[]),
         training=TrainingConfig(

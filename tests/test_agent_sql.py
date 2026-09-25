@@ -115,6 +115,15 @@ def test_only_sections_about_a_view_that_exists_are_shown() -> None:
     assert "Raw layer" not in shown
 
 
+def test_a_models_inputs_are_not_offered_even_when_built() -> None:
+    """A feature can be a fact shifted on purpose (last year's market for this year's
+    lot): read as the fact, it answers the wrong year."""
+    shown = schema_context(DICTIONARY, {"clean.lots", "features.lot_features"})
+
+    assert "clean.lots" in shown
+    assert "lot_features" not in shown
+
+
 def test_the_domain_dictionary_describes_every_table_it_names() -> None:
     """The real one: each section is headed with a `layer.table` a view can have."""
     sections = table_sections(dictionary_path(domain_dir("coffee")).read_text(encoding="utf-8"))

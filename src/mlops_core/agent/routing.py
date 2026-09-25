@@ -8,7 +8,7 @@ one.
 
 from collections.abc import Collection
 
-from mlops_core.agent.dictionary import table_sections
+from mlops_core.agent.dictionary import offered
 from mlops_core.agent.prompts import ROUTER, Route, RouteReply
 from mlops_core.agent.text_to_sql import Generator
 from mlops_core.config import DomainConfig
@@ -20,8 +20,7 @@ def routing_context(
     """What the router prompt says about each tool, for this domain."""
     headings = [
         "  - " + section.splitlines()[0].removeprefix("## ").replace("`", "")
-        for view, section in table_sections(dictionary).items()
-        if view in views
+        for section in offered(dictionary, views).values()
     ]
     topics = config.corpus.topics if config.corpus else {}
     return {

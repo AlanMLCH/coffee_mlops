@@ -165,3 +165,15 @@ def test_with_two_domains_installed_a_command_must_say_which(
 
     with pytest.raises(ValueError, match="Name a domain"):
         load_adapter()
+
+
+def test_a_bags_shop_is_described_with_every_shop_the_config_reads() -> None:
+    """The agent's model picks the shop's word from this description: a shop added to the
+    config and missing here would be priced as a shop the model never saw."""
+    from domains.coffee.request import Offer
+
+    config = load_adapter("coffee").config
+    described = Offer.model_fields["shop"].description or ""
+
+    assert config.roasters is not None
+    assert all(shop.shop in described for shop in config.roasters.shops)

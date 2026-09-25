@@ -184,6 +184,46 @@ def test_a_model_without_its_context_is_not_reported_healthy(
         assert client.post(PREDICT, json=LOT).status_code == 503
 
 
+def test_a_model_that_cannot_predict_its_example_is_not_served(
+    coffee_adapter: CoffeeAdapter,
+    tmp_path: Path,
+    market_context: pl.DataFrame,
+    roaster_origins: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Champion and context both load, and the model still cannot answer - an image
+    built before the domain's code changed. /health must not say "ok"."""
+
+    class Stale:
+        def predict(self, x: pd.DataFrame) -> list[float]:
+            raise KeyError("variety_gesha")
+
+    def stale_offer(name: str, *_: object) -> ServedModel:
+        return ServedModel(Stale() if name == "coffee-price-per-kg" else RecordingModel(), "7", "r")
+
+    monkeypatch.setattr(api, "load_champion", stale_offer)
+    monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
+
+    with TestClient(api.create_app(coffee_adapter, Settings())) as client:
+        assert client.get("/health").json() == {
+            "status": "partial",
+            "models": {"review": "7", "offer": None},
+        }
+        failed = client.post("/reload").json()["failed"]
+        assert failed == {"offer": "cannot predict its example: 'variety_gesha'"}
+
+
+def test_every_models_example_is_a_request_it_accepts_and_documents(
+    client: TestClient, coffee_config: DomainConfig
+) -> None:
+    schema = client.get("/openapi.json").json()["paths"]
+
+    for model in coffee_config.models:
+        assert client.post(f"/models/{model.name}/predict", json=model.example).status_code == 200
+        body = schema[f"/models/{model.name}/predict"]["post"]["requestBody"]
+        assert body["content"]["application/json"]["schema"]["examples"] == [model.example]
+
+
 def test_a_model_the_domain_does_not_have_has_no_route(client: TestClient) -> None:
     assert client.post("/models/tasting/predict", json=LOT).status_code == 404
 

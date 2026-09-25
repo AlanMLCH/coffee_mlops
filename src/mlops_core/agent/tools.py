@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any
 
 import httpx
-from pydantic import create_model
+from pydantic import BaseModel, create_model
 
 from mlops_core.adapter import DomainAdapter
 from mlops_core.agent.prompts import CHOOSE_MODEL, DESCRIBE_ITEM
@@ -44,6 +44,24 @@ def cite(passage: dict[str, Any], documents: dict[str, dict[str, Any]]) -> str:
     return f'{document.get("publisher", "")}, "{title}"{year}, {where}'.lstrip(", ")
 
 
+def fields(body: type[BaseModel]) -> str:
+    """A request body's fields as the model is told them: name, type, whether required,
+    and the description. Ollama constrains the reply to the schema but never shows it to
+    the model, so a description that gives a field's vocabulary reaches it only here.
+    Measured: without it, 10 of 13 predictions arrived with a field as the question worded
+    it - a nationality for a country, a hyphen for an underscore, a place left out - which
+    the model takes for a category it never saw, or never gets."""
+    schema = body.model_json_schema()
+    required = set(schema.get("required", ()))
+    lines = []
+    for name, spec in schema["properties"].items():
+        kinds = [s.get("format", s.get("type")) for s in spec.get("anyOf", [spec])]
+        kind = "/".join(k for k in kinds if k and k != "null")
+        note = f": {spec['description']}" if "description" in spec else ""
+        lines.append(f"- {name} ({kind}{', required' if name in required else ''}){note}")
+    return "\n".join(lines)
+
+
 def predict(
     generator: Generator, adapter: DomainAdapter, api: httpx.Client, question: str
 ) -> PredictionAnswer:
@@ -51,14 +69,20 @@ def predict(
     config = adapter.config
     names = Enum("ModelName", {model.name: model.name for model in config.models})  # type: ignore[misc]
     choice = create_model("ModelChoice", model=(names, ...))
-    listing = "\n".join(f"- {model.name}: {model.description}" for model in config.models)
+    # A model's name need not say what it predicts: its target does. Measured: without
+    # it, a question about one model's target was sent to the other model.
+    listing = "\n".join(
+        f"- {model.name} (predicts {model.spec.target}): {model.description}"
+        for model in config.models
+    )
     chosen = generator.ask(CHOOSE_MODEL.format(models=listing, question=question), choice)
     name = str(chosen.model.value)  # type: ignore[attr-defined]
 
-    described = generator.ask(
-        DESCRIBE_ITEM.format(description=config.model_named(name).description, question=question),
-        adapter.request_model(name),
+    body = adapter.request_model(name)
+    prompt = DESCRIBE_ITEM.format(
+        description=config.model_named(name).description, fields=fields(body), question=question
     )
+    described = generator.ask(prompt, body)
     request = described.model_dump(mode="json", exclude_none=True)
     try:
         response = api.post(f"/models/{name}/predict", json=request)

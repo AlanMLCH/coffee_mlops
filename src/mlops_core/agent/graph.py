@@ -64,6 +64,7 @@ class Reply:
     sources: list[str]  # the cited passages, as a reader can find them
     sql: SqlAnswer | None
     prediction: PredictionAnswer | None
+    passages: list[dict[str, Any]]  # every passage the search returned, cited or not
     problems: list[str]  # what verification still found after the rewrite
 
     @property
@@ -249,6 +250,7 @@ class Agent:
             sources,
             state["sql"],
             state["prediction"],
+            state["passages"],
             state["best_problems"],
         )
 

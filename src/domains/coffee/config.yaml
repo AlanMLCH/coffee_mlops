@@ -551,6 +551,8 @@ models:
     description: >-
       The Total Cup Points (0-100) a lot of green arabica would score at a CQI cupping,
       from its origin country, variety, process, altitude, moisture and defects.
+    # What the API scores whenever it loads the model; it is also the docs' example.
+    example: {country: Ethiopia, variety: ethiopian heirlooms, processing_method: washed, altitude_m: 1900}
     # One item is one graded lot of green coffee.
     items:
       table: coffee_reviews
@@ -613,6 +615,9 @@ models:
       The price per kilogram, in Mexican pesos, of a roasted coffee on a Mexico City
       roaster's shelf, from the shop, the bag's size and what the coffee's sheet says:
       origin, process, variety and altitude.
+    example:
+      {shop: almanegra, bag_grams: 250, country: Mexico, state: Oaxaca, processing_method: washed,
+       variety: typica, altitude_m: 1600}
     # One item is one coffee in one size, as a shop lists it.
     items:
       table: roaster_offers
