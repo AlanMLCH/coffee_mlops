@@ -26,7 +26,8 @@ from domains.coffee.features import (
     add_coffee_origin,
     add_market_context,
 )
-from domains.coffee.request import Lot, Offer
+from domains.coffee.forecast import PRICES_TABLE, add_price_history
+from domains.coffee.request import Lot, Offer, PriceMonth
 from domains.coffee.schemas import RAW_SCHEMAS, clean_schemas
 from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
 
@@ -57,6 +58,12 @@ MODELS = {
         context_tables=(ORIGINS_TABLE,),
         enrich=lambda items, context: add_coffee_origin(items, context[ORIGINS_TABLE]),
         request=Offer,
+    ),
+    # A month's green coffee price, from the months before it: the history is its context.
+    "green_price": ModelHooks(
+        context_tables=(PRICES_TABLE,),
+        enrich=lambda items, context: add_price_history(items, context[PRICES_TABLE]),
+        request=PriceMonth,
     ),
 }
 

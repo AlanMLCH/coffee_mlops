@@ -134,7 +134,9 @@ def out_of_fold(
         predicted[held_out_rows] = pipeline.predict(x.iloc[held_out_rows])
         # The baseline is refitted per fold too, or it would be the only one that saw
         # the held-out groups.
-        baselines = baseline_predictions(fit, held_out, spec, cfg.baseline_group)
+        baselines = baseline_predictions(
+            fit, held_out, spec, cfg.baseline_group, cfg.baseline_constant
+        )
         from_baseline[held_out_rows] = min(
             baselines.values(), key=lambda p: float(np.abs(p - y[held_out_rows]).mean())
         )
@@ -190,15 +192,24 @@ def xy(df: pl.DataFrame, spec: ModelSpec) -> tuple[pd.DataFrame, np.ndarray]:
 
 
 def baseline_predictions(
-    train: pl.DataFrame, test: pl.DataFrame, spec: ModelSpec, group: str
+    train: pl.DataFrame,
+    test: pl.DataFrame,
+    spec: ModelSpec,
+    group: str,
+    constant: float | None = None,
 ) -> dict[str, np.ndarray]:
+    """What anyone could predict without a model: the training mean, the mean of the
+    item's group, and - when the model names one - a constant, such as "no change"."""
     overall = float(train[spec.target].mean())  # type: ignore[arg-type]
     group_means = train.group_by(group).agg(pl.col(spec.target).mean().alias("_pred"))
     by_group = test.join(group_means, on=group, how="left")["_pred"].fill_null(overall)
-    return {
+    baselines = {
         "global_mean": np.full(test.height, overall),
         f"{group}_mean": by_group.to_numpy(),
     }
+    if constant is not None:
+        baselines["constant"] = np.full(test.height, constant)
+    return baselines
 
 
 def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float]:
@@ -356,7 +367,9 @@ def train_model(
 
         baseline_errors = {
             name: absolute_errors(y_test, pred)
-            for name, pred in baseline_predictions(train, test, spec, cfg.baseline_group).items()
+            for name, pred in baseline_predictions(
+                train, test, spec, cfg.baseline_group, cfg.baseline_constant
+            ).items()
         }
         mlflow.log_metrics(
             {f"baseline_{name}_test_mae": float(e.mean()) for name, e in baseline_errors.items()}

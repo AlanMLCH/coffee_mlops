@@ -7,11 +7,12 @@ from types import SimpleNamespace
 
 import polars as pl
 import pytest
-from dagster import AssetSelection, materialize
+from dagster import AssetKey, AssetSelection, materialize
 
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.adapter import ApiExtraction
 from mlops_core.config import Settings
+from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import TrainResult
 from mlops_core.orchestration import definitions
 from mlops_core.orchestration.definitions import build_definitions
@@ -39,6 +40,9 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/offer_features",
         "tea/offer_model",
         "tea/offer_predictions",
+        "tea/green_price_features",
+        "tea/green_price_model",
+        "tea/green_price_predictions",
     ]
     assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
 
@@ -139,3 +143,18 @@ def test_every_asset_runs_its_own_pipeline_step(
     raw = result.asset_materializations_for_node("coffee__raw_sources")[0]
     assert raw.metadata["sources"].value == 3  # a file source, an API source, a document
     assert raw.metadata["skipped"].value == "denue_cafes (no token), sca_103_descriptive (x)"
+
+
+def test_a_model_no_version_has_passed_is_recorded_not_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_champion(*args: object) -> Path:
+        raise NoChampion("no champion and no cache")
+
+    monkeypatch.setattr(definitions, "batch_predict", no_champion)
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    predictions = defs.resolve_assets_def(AssetKey(["coffee", "green_price_predictions"]))
+
+    result = predictions()
+
+    assert result.metadata == {"skipped": "no version has passed the gate"}

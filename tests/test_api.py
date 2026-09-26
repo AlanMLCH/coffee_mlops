@@ -65,6 +65,21 @@ def roaster_origins(tmp_path: Path) -> None:
 
 
 @pytest.fixture
+def price_history(tmp_path: Path) -> None:
+    """The forecast's context: two months of both indicators, the last one August's."""
+    months = [date(2026, 7, 1), date(2026, 8, 1)]
+    prices = pl.DataFrame(
+        {
+            "period": months * 2,
+            "frequency": ["monthly"] * 4,
+            "indicator": ["other_milds"] * 2 + ["robustas"] * 2,
+            "usd_cents_per_lb": [358.79, 361.51, 184.61, 180.53],
+        }
+    )
+    write_table(prices, tmp_path / "coffee" / "clean" / "price_indicators", inputs={})
+
+
+@pytest.fixture
 def model() -> RecordingModel:
     return RecordingModel()
 
@@ -75,6 +90,7 @@ def client(
     tmp_path: Path,
     market_context: pl.DataFrame,
     roaster_origins: None,
+    price_history: None,
     model: RecordingModel,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
@@ -90,7 +106,7 @@ def client(
 def test_health_and_model_report_what_is_loaded(client: TestClient) -> None:
     assert client.get("/health").json() == {
         "status": "ok",
-        "models": {"review": "7", "offer": "7"},
+        "models": {"review": "7", "offer": "7", "green_price": "7"},
     }
     assert client.get("/models/review").json()["model_source"] == "registry"
 
@@ -146,7 +162,11 @@ def test_reload_picks_up_a_newly_promoted_champion(
     )
 
     assert client.post("/reload").json()["loaded"]["review"]["model_version"] == "8"
-    assert client.get("/health").json()["models"] == {"review": "8", "offer": "8"}
+    assert client.get("/health").json()["models"] == {
+        "review": "8",
+        "offer": "8",
+        "green_price": "8",
+    }
 
 
 def test_without_a_model_the_service_says_so_instead_of_crashing(
@@ -189,6 +209,7 @@ def test_a_model_that_cannot_predict_its_example_is_not_served(
     tmp_path: Path,
     market_context: pl.DataFrame,
     roaster_origins: None,
+    price_history: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Champion and context both load, and the model still cannot answer - an image
@@ -207,7 +228,7 @@ def test_a_model_that_cannot_predict_its_example_is_not_served(
     with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         assert client.get("/health").json() == {
             "status": "partial",
-            "models": {"review": "7", "offer": None},
+            "models": {"review": "7", "offer": None, "green_price": "7"},
         }
         failed = client.post("/reload").json()["failed"]
         assert failed == {"offer": "cannot predict its example: 'variety_gesha'"}
@@ -240,8 +261,11 @@ def test_a_reload_that_fails_says_which_model_and_why(
 
     body = client.post("/reload").json()
 
-    assert body == {"loaded": {}, "failed": {"review": "registry down", "offer": "registry down"}}
-    assert client.get("/health").json()["models"] == {"review": "7", "offer": "7"}
+    down = "registry down"
+    assert body == {"loaded": {}, "failed": dict.fromkeys(["review", "offer", "green_price"], down)}
+    assert client.get("/health").json()["models"] == dict.fromkeys(
+        ["review", "offer", "green_price"], "7"
+    )
 
 
 BAG = {
@@ -280,6 +304,7 @@ def test_one_model_missing_leaves_the_other_serving(
     tmp_path: Path,
     market_context: pl.DataFrame,
     roaster_origins: None,
+    price_history: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A price model the gate never promoted must not take the cup-score model down."""
@@ -295,7 +320,30 @@ def test_one_model_missing_leaves_the_other_serving(
     with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         assert client.get("/health").json() == {
             "status": "partial",
-            "models": {"review": "7", "offer": None},
+            "models": {"review": "7", "offer": None, "green_price": "7"},
         }
         assert client.post(PREDICT, json=LOT).status_code == 200
         assert client.post("/models/offer/predict", json=BAG).status_code == 503
+
+
+def test_a_month_is_forecast_from_the_months_before_it(
+    client: TestClient, model: RecordingModel, coffee_config: DomainConfig
+) -> None:
+    """September's change, asked on any day of it, from August's history: nothing about
+    September itself is known, and the response says what was looked up."""
+    response = client.post(
+        "/models/green_price/predict", json={"indicator": "robustas", "month": "2026-09-17"}
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["target"] == "change_pct"
+    assert body["context"]["price_last"] == 180.53
+    assert body["context"]["change_last"] == pytest.approx((180.53 / 184.61 - 1) * 100)
+    assert body["context"]["calendar_month"] == "09"
+    assert model.seen is not None
+    assert list(model.seen.columns) == coffee_config.model_named("green_price").spec.features
+    unknown = client.post(
+        "/models/green_price/predict", json={"indicator": "i_cip", "month": "2026-09-01"}
+    )
+    assert unknown.status_code == 422  # the World Bank averages two indicators, not the composite

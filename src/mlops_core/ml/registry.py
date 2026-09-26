@@ -28,6 +28,15 @@ CACHED_MODEL = "model"
 CACHED_METADATA = "cached.json"
 
 
+class NoChampion(FileNotFoundError):
+    """No version was ever promoted and none is cached: nothing to serve or score with.
+
+    Not a failure of the pipeline. A model the gate has not let through - a forecast that
+    cannot beat the random walk, say - is exactly as it should be, and whoever asks for
+    its champion says so and moves on.
+    """
+
+
 @dataclass(frozen=True)
 class ServedModel:
     model: Any
@@ -68,7 +77,7 @@ def _from_registry(registered_model: str, tracking_uri: str, cache_dir: Path) ->
 def _from_cache(cache_dir: Path) -> ServedModel:
     metadata_path = cache_dir / CACHED_METADATA
     if not metadata_path.is_file():
-        raise FileNotFoundError(
+        raise NoChampion(
             f"No champion in the registry and no cached model in {cache_dir}: train one, "
             "or read the `gate` tag of the last version to see why it was not promoted"
         )

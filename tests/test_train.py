@@ -113,6 +113,18 @@ def test_group_baseline_falls_back_to_global_mean_for_unseen_groups(
 
     assert baselines["global_mean"].tolist() == [82.0, 82.0]
     assert baselines["country_mean"].tolist() == [84.0, 82.0]
+    assert "constant" not in baselines
+
+
+def test_a_model_can_name_the_constant_anyone_would_forecast(fast_config: DomainConfig) -> None:
+    """For a change from the month before, "no change": the random walk."""
+    train = features_frame(["Mexico", "Kenya"], [80.0, 84.0])
+    test = features_frame(["Kenya", "Laos"], [85.0, 84.0])
+    spec = fast_config.model_named(REVIEW).spec
+
+    baselines = baseline_predictions(train, test, spec, "country", constant=0.0)
+
+    assert baselines["constant"].tolist() == [0.0, 0.0]
 
 
 def test_pipeline_serves_unseen_and_missing_categories(fast_config: DomainConfig) -> None:

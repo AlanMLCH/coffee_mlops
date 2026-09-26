@@ -7,7 +7,7 @@ import pytest
 from mlflow import MlflowClient
 from sklearn.dummy import DummyRegressor
 
-from mlops_core.ml.registry import CACHED_METADATA, load_champion
+from mlops_core.ml.registry import CACHED_METADATA, NoChampion, load_champion
 
 UNREACHABLE = "http://127.0.0.1:1"  # nothing listens here
 
@@ -50,7 +50,7 @@ def test_cache_serves_when_the_registry_is_unreachable(registry: str, tmp_path: 
 
 
 def test_no_registry_and_no_cache_fails_with_what_to_do(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="`gate` tag"):
+    with pytest.raises(NoChampion, match="`gate` tag"):
         load_champion("m", UNREACHABLE, tmp_path / "cache")
 
 

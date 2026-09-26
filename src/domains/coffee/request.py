@@ -1,7 +1,8 @@
-"""What the prediction API accepts for coffee: a lot before it is cupped, a bag on a shelf."""
+"""What the prediction API accepts for coffee: a lot before it is cupped, a bag on a
+shelf, and a month whose green coffee price is not out yet."""
 
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -73,4 +74,23 @@ class Offer(BaseModel):
         """The bag as a row of the offers table: `observed_on` is its time column."""
         return self.model_dump(exclude={"observed_on"}) | {
             "observed_on": self.observed_on or datetime.now(UTC).date()
+        }
+
+
+class PriceMonth(BaseModel):
+    """A month to forecast an international green coffee price for: its change from the
+    month before, which has to be published already."""
+
+    indicator: Literal["other_milds", "robustas"] = Field(
+        description="other_milds (other mild Arabicas) or robustas, as the World Bank averages them"
+    )
+    month: date = Field(description="Any day of the month to forecast")
+
+    def to_item(self) -> dict[str, Any]:
+        """The month as a row of the price table, its own price not known yet."""
+        return {
+            "period": self.month.replace(day=1),
+            "frequency": "monthly",
+            "indicator": self.indicator,
+            "usd_cents_per_lb": None,
         }

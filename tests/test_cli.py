@@ -19,7 +19,7 @@ from domains.coffee.adapter import CoffeeAdapter
 from domains.coffee.config import CoffeeConfig
 from mlops_core import cli
 from mlops_core.data.extract import http_client
-from mlops_core.ml.registry import ServedModel
+from mlops_core.ml.registry import NoChampion, ServedModel
 from mlops_core.ml.train import TrainResult
 from mlops_core.storage import write_table
 from tests.fakes import ConstantModel, RecordedServer, without_rate_limits
@@ -147,10 +147,13 @@ def test_ml_run_chains_features_and_training(
         "mlops_core.ml.train.train_model",
         lambda config, model, data, uri: TrainResult("run-1", "1", False, {"test_mae": 2.0}),
     )
-    monkeypatch.setattr(
-        "mlops_core.ml.predict.load_champion",
-        lambda *args, **kwargs: ServedModel(ConstantModel(), "1", "registry"),
-    )
+
+    def champion(name: str, *args: object) -> ServedModel:
+        if name == "coffee-green-price":  # the gate has never let one through
+            raise NoChampion("no champion and no cache")
+        return ServedModel(ConstantModel(), "1", "registry")
+
+    monkeypatch.setattr("mlops_core.ml.predict.load_champion", champion)
 
     result = CliRunner().invoke(cli.app, ["ml", "run"])
 
@@ -158,6 +161,9 @@ def test_ml_run_chains_features_and_training(
     assert (data_dir / "coffee" / "features" / "review_features").is_dir()
     assert (data_dir / "coffee" / "predictions" / "review_predictions").is_dir()
     assert "not promoted" in result.output
+    # A model the gate never promoted is said, not raised: the others are still scored.
+    assert "green_price: not scored - no version has passed the gate" in result.output
+    assert not (data_dir / "coffee" / "predictions" / "green_price_predictions").exists()
 
 
 def test_train_reports_version_and_gate_decision(

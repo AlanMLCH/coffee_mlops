@@ -181,6 +181,13 @@ def test_a_bags_shop_is_described_with_every_shop_the_config_reads() -> None:
     assert all(shop.shop in described for shop in config.roasters.shops)
 
 
+def test_a_models_example_is_a_request_body_as_json_carries_it() -> None:
+    """YAML reads 2026-09-01 as a date; a request body has no dates, only text."""
+    example = load_adapter("coffee").config.model_named("green_price").example
+
+    assert example == {"indicator": "other_milds", "month": "2026-09-01"}
+
+
 def test_a_workbook_names_its_sheet_and_a_link_is_a_pattern() -> None:
     from mlops_core.config import SourceConfig
 

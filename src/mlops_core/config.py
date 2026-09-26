@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+from pydantic_core import to_jsonable_python
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -298,6 +299,10 @@ class TrainingConfig(BaseModel):
     trials: int
     seed: int
     baseline_group: str
+    # What the target is when nothing happens - 0 for a change from the period before -
+    # offered as one more baseline. For a series it is the random walk: tomorrow is
+    # today, which is what any forecast of a price has to beat before it is worth anything.
+    baseline_constant: float | None = None
     bootstrap_resamples: int
     min_probability_better: float
     stratify_by: str
@@ -364,6 +369,12 @@ class ModelConfig(BaseModel):
     training: TrainingConfig
     # Error is reported by the target ranges the domain's readers use, not by deciles.
     target_bands: TargetBands
+
+    @field_validator("example", mode="after")
+    @classmethod
+    def _example_is_json(cls, example: dict[str, Any]) -> dict[str, Any]:
+        """As a request body travels: YAML reads 2026-09-01 as a date, JSON has none."""
+        return to_jsonable_python(example)  # type: ignore[no-any-return]
 
     @model_validator(mode="after")
     def _group_is_its_own_column(self) -> Self:

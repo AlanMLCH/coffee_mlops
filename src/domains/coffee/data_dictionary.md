@@ -219,6 +219,35 @@ states it. The listed `price_mxn` is dropped: the target is it divided by the si
 | `variety_bourbon`, `variety_caturra`, `variety_colombia`, `variety_garnica`, `variety_gesha`, `variety_heirloom`, `variety_jember`, `variety_marsellesa`, `variety_mundo_novo`, `variety_oro_azteca`, `variety_pluma_mejorado`, `variety_ruiru_11`, `variety_sarchimor`, `variety_sl28`, `variety_sl34`, `variety_typica` | Float? | 1 when the coffee's sheet lists that variety, 0 when it lists others, **null when it lists none** - "not stated" is not "not a Gesha". One column per variety that appears in at least four coffees, chosen by frequency and never by price |
 | `price_mxn_per_kg` | Float | Target |
 
+## `features.green_price_features` — price forecast input
+
+One indicator in one month, from `clean.price_indicators`' monthly rows (the World
+Bank's): everything it may know is the history up to the month before it, looked up by
+date. A month whose month before is missing is left out.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `month_id` | String | `<indicator>-<YYYY-MM>`, unique |
+| `month` | Date | The first day of the month |
+| `decade` | String | `1990s`, `2020s`: the period the studies compare |
+| `indicator`, `calendar_month` | String | `other_milds` or `robustas`; `01` to `12`, for the harvest seasons |
+| `price_last` | Float | US cents/lb, the month before |
+| `change_last`, `change_2_back`, `change_3_back` | Float? | The last three month-on-month changes, % |
+| `change_12m` | Float? | Over the twelve months to the month before, % |
+| `gap_to_mean_12m` | Float? | The last price against its twelve-month mean, %; null without twelve months |
+| `volatility_6m` | Float? | Standard deviation of the last six changes; null without six |
+| `arabica_robusta_ratio` | Float? | Other mild Arabicas over Robustas, the month before |
+| `change_pct` | Float | Target: the month's change from the month before, % |
+
+## `predictions.green_price_predictions` — batch price change forecasts
+
+| Column | Type | Meaning |
+|---|---|---|
+| `month_id`, `decade`, `month` | | Keys back to the feature table |
+| `prediction` | Float | Predicted `change_pct` |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
 ## `predictions.offer_predictions` — batch price estimates
 
 | Column | Type | Meaning |

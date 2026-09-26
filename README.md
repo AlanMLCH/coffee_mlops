@@ -125,6 +125,7 @@ flowchart TD
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
     offer_features["features/offer_features<br/>adapter.enrich: the coffee's origin<br/>split by coffee, not by bag"]
+    green_price_features["features/green_price_features<br/>adapter.enrich: the months before it<br/>target: the month's change, %"]
     train["mlops ml train<br/>the model's split: temporal or by group<br/>Optuna on folds of the same kind · LightGBM"]
     gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion<br/>whole groups resampled for a group split"}}
     mlflow[("MLflow<br/>runs + registry<br/>alias: champion")]
@@ -133,6 +134,7 @@ flowchart TD
         direction LR
         review_predictions[("predictions/review_predictions<br/>batch scores + model version")]
         offer_predictions[("predictions/offer_predictions<br/>price per kg, once a champion exists")]
+        green_price_predictions[("predictions/green_price_predictions<br/>once a version beats the baselines<br/>v1 did not")]
         api["FastAPI POST /models/{name}/predict<br/>each model's request body<br/>the same enrich"]
         analysis["mlops analysis run<br/>core studies + the domain's"]
         dashboard["Streamlit dashboard"]
@@ -161,10 +163,12 @@ flowchart TD
     CLEAN --- audits
     coffee_reviews & market_context --> review_features
     roaster_offers & roaster_origins --> offer_features
-    review_features & offer_features --> train --> gate
+    price_indicators --> green_price_features
+    review_features & offer_features & green_price_features --> train --> gate
     gate -- "promoted only if it wins" --> mlflow
     review_features & mlflow --> review_predictions
     offer_features & mlflow --> offer_predictions
+    green_price_features & mlflow -.-> green_price_predictions
     mlflow --> api
     market_context --> api
     review_predictions --> analysis --> dashboard
@@ -187,7 +191,8 @@ flowchart TD
     classDef store fill:#eeeeea,stroke:#898781,color:#111
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
     class extract_files,validate,train,gate,api,analysis,dashboard,documents,document_chunks core
-    class extract_apis,review_features,offer_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
+    class extract_apis,review_features,offer_features,green_price_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
+    class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices domain
@@ -961,6 +966,42 @@ indicator and day or month, in US cents per pound:
   page each time. The file's host also cut the connection twice in a row on the first
   real download: a dropped connection is now tried again, up to three times, while an
   HTTP error is still an answer.
+
+### Where the price goes next month
+
+`green_price` is the third model: the change, in percent, of the World Bank's monthly
+other mild Arabicas or Robustas price from one month to the next. One item is one
+indicator in one month; everything it may know is the history up to the month before -
+the last price, its last three changes, the change over twelve months, the distance from
+the twelve-month mean, the last six months' volatility, and Arabicas against Robustas -
+looked up by date, so a gap leaves a feature empty instead of making it about another
+month. The target is the change and not the price because a tree never predicts above
+the highest value it learned from, and 2025-2026 sit above nearly all of them.
+
+It is judged on January 2021 to August 2026 (68 months of two indicators, 136 items, the
+2024-2026 run-up included), against three baselines - the training mean change (+0.46% a month),
+each indicator's mean, and **no change at all**, the random walk; `baseline_constant` is
+the core's new way for a model to name one.
+
+| Test, 2021-2026 | MAE, percentage points |
+|---|---:|
+| No change (random walk) | 5.25 |
+| The training mean change | 5.18 |
+| **Model v1** | 5.08 [4.40, 5.78] |
+
+**The gate did not promote it**: 0.11 points better than the mean drift, but only 80%
+sure (−0.36 to +0.15). The tuner itself chose a model that barely leaves the mean - 56
+trees of four leaves. A market price's own history says little about its next month,
+which is what an efficient market would lead one to expect, and it is the answer, not a
+problem to tune away on the test months. So nothing is served for it: the API reports it
+unloaded, `make predict` says it was not scored, and the Dagster asset records why
+instead of failing. The pipeline retrains it as months arrive; the gate decides.
+
+The target's distribution by decade shows why sixty years is not one market: in the
+1960s, under the International Coffee Agreement's export quotas, half of all months
+moved less than 1% either way; since the 1970s the same band is about 4%. Training on
+the quota era teaches a calmer market than the one tested - a hypothesis for an
+experiment, to be settled on the training folds, not on the test.
 
 ## What a kilo costs (stage 3)
 

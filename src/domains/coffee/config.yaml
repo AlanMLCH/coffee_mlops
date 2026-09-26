@@ -711,6 +711,58 @@ models:
       edges: [800, 1200]
       labels: ["under $800/kg", "$800-1,200/kg", "over $1,200/kg"]
 
+  # Stage 4: where the international price of green coffee goes next month.
+  - name: green_price # -> green_price_features, green_price_predictions
+    description: >-
+      The change, in percent, of an international green coffee price - other mild
+      Arabicas or Robustas, the World Bank's monthly average - from one month to the next,
+      from what the months before it show.
+    example: {indicator: other_milds, month: 2026-09-01}
+    # One item is one indicator in one month. The target is the change, not the price:
+    # 2025 and 2026 sit above nearly every month there is to learn from, and a tree never
+    # predicts above the highest value it saw. What an item knows is domains/coffee/forecast.py.
+    items:
+      table: price_indicators
+      id: month_id # other_milds-2026-08
+      time: month
+      period: decade # residuals and drift by decade: the quota era, the 2011 spike, 2025
+    spec:
+      target: change_pct
+      categorical: [indicator, calendar_month]
+      numeric:
+        - price_last # US cents/lb, the month before
+        - change_last # its change from the month before it, %
+        - change_2_back
+        - change_3_back
+        - change_12m # over the twelve months to the month before, %
+        - gap_to_mean_12m # the last price against its twelve-month mean, %
+        - volatility_6m # standard deviation of the last six changes
+        - arabica_robusta_ratio
+      # The month's own price: the target is computed from it.
+      leakage: [usd_cents_per_lb]
+    training:
+      # Sixty years to learn from; the last five and a half - the 2024-2026 run-up
+      # included - to be judged on, month by month in order.
+      split:
+        kind: temporal
+        test_from: 2021-01-01
+        recalibration_window: 12
+      cv_folds: 5
+      trials: 40
+      seed: 42
+      baseline_group: indicator
+      # No change: next month is this month. The random walk a price forecast has to beat.
+      baseline_constant: 0
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      stratify_by: indicator
+      min_group_size: 20
+      registered_model: coffee-green-price
+    # Percent, month on month; half of all months moved less than 3.3% either way.
+    target_bands:
+      edges: [-5, 0, 5]
+      labels: ["fell over 5%", "fell up to 5%", "rose up to 5%", "rose over 5%"]
+
 # Mexico's own coffee, from SIAP: which crop to read and in what unit. A different
 # name or unit for the same id stops the run - it would change what the numbers mean.
 production:

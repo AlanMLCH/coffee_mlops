@@ -32,6 +32,7 @@ from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
+from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import train_model
 from mlops_core.storage import read_table
 
@@ -118,8 +119,12 @@ def model_assets(
 
     @asset(name=predictions_name, key_prefix=prefix, group_name=group, deps=[trained_model])
     def predictions() -> Materialized:
-        """Batch scores for every row of the feature table."""
-        path = batch_predict(config, model.name, data_dir, settings.mlflow_tracking_uri)
+        """Batch scores for every row of the feature table - once a version has passed
+        the gate; until then the run says so instead of failing."""
+        try:
+            path = batch_predict(config, model.name, data_dir, settings.mlflow_tracking_uri)
+        except NoChampion:
+            return MaterializeResult(metadata={"skipped": "no version has passed the gate"})
         return MaterializeResult(metadata={"path": str(path)})
 
     return [features, trained_model, predictions]

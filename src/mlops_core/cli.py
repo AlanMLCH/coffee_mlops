@@ -204,11 +204,16 @@ def predict(domain: Domain = None, model: ModelName = None) -> None:
     """Score each model's whole feature table with its champion and write the predictions."""
     with _needs_extra("ml"):
         from mlops_core.ml.predict import batch_predict
+        from mlops_core.ml.registry import NoChampion
 
     adapter = _adapter(domain)
     config = adapter.config
     for name in _models(config, model):
-        path = batch_predict(config, name, _data_dir(config), Settings().mlflow_tracking_uri)
+        try:
+            path = batch_predict(config, name, _data_dir(config), Settings().mlflow_tracking_uri)
+        except NoChampion:  # the gate never let one through: nothing to score with
+            typer.echo(f"{name}: not scored - no version has passed the gate")
+            continue
         typer.echo(f"{config.model_named(name).predictions_table}: {path}")
 
 

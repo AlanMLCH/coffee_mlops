@@ -154,9 +154,9 @@ def model_studies(
     categorical = categorical_profile(features, spec, items.period, items.time, analysis.min_rows)
     importance = champion_importance(config, model, data_dir, tracking_uri)
     tables = {
-        "target_distribution": target_distribution(
-            clean[items.table], spec.target, items.period, items.time
-        ),
+        # From the feature table, where every model has its target: one may derive it (a
+        # change from the month before) rather than find it in a clean table.
+        "target_distribution": target_distribution(features, spec.target, items.period, items.time),
         "numeric_profile": numeric,
         "categorical_profile": categorical,
         "feature_recommendation": feature_recommendation(numeric, categorical, importance),

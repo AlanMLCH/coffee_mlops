@@ -540,7 +540,13 @@ def test_the_mcp_server_offers_the_agents_tools_all_read_only(
     tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
     resource = asyncio.run(server.read_resource("dictionary://tables"))
 
-    assert set(tools) == {"query_tables", "predict_review", "predict_offer", "search_documents"}
+    assert set(tools) == {
+        "query_tables",
+        "predict_review",
+        "predict_offer",
+        "predict_green_price",
+        "search_documents",
+    }
     assert all(t.annotations is not None and t.annotations.read_only_hint for t in tools.values())
     # A prediction tool's input is the model's own request body, descriptions included.
     offer = json.dumps(tools["predict_offer"].input_schema)
@@ -620,5 +626,14 @@ def test_the_mcp_command_serves_on_stdio(
 
     assert result.exit_code == 0, result.output
     assert served == [
-        ("stdio", ["query_tables", "predict_review", "predict_offer", "search_documents"])
+        (
+            "stdio",
+            [
+                "query_tables",
+                "predict_review",
+                "predict_offer",
+                "predict_green_price",
+                "search_documents",
+            ],
+        )
     ]
