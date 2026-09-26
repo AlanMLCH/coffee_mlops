@@ -37,12 +37,15 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/review_features",
         "tea/review_model",
         "tea/review_predictions",
+        "tea/review_drift",
         "tea/offer_features",
         "tea/offer_model",
         "tea/offer_predictions",
+        "tea/offer_drift",
         "tea/green_price_features",
         "tea/green_price_model",
         "tea/green_price_predictions",
+        "tea/green_price_drift",
     ]
     assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
 
@@ -120,6 +123,7 @@ def test_every_asset_runs_its_own_pipeline_step(
         "build_features": Stub(Path("features.parquet")),
         "train_model": Stub(TrainResult("run-1", "3", True, {"test_mae": 1.5})),
         "batch_predict": Stub(Path("predictions.parquet")),
+        "monitor_model": Stub(None),
         "validate_raw": Stub({"cqi_2018": SimpleNamespace(frame=pl.DataFrame({"a": [1]}))}),
     }
     for name, stub in stubs.items():
@@ -132,7 +136,7 @@ def test_every_asset_runs_its_own_pipeline_step(
     assert result.success
     # The data steps run once; each model step once per model.
     models = len(coffee_adapter.config.models)
-    per_model = {"build_features", "train_model", "batch_predict"}
+    per_model = {"build_features", "train_model", "batch_predict", "monitor_model"}
     assert {name: stub.calls for name, stub in stubs.items()} == {
         name: models if name in per_model else 1 for name in stubs
     }
@@ -158,3 +162,23 @@ def test_a_model_no_version_has_passed_is_recorded_not_failed(
     result = predictions()
 
     assert result.metadata == {"skipped": "no version has passed the gate"}
+
+
+def test_the_drift_asset_records_the_monitors_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verdict = SimpleNamespace(
+        current="cqi_2023", drifted_share=1.0, retrain=True, reasons=["the target drifted"]
+    )
+    monkeypatch.setattr(definitions, "monitor_model", lambda *args: verdict)
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    drift = defs.resolve_assets_def(AssetKey(["coffee", "review_drift"]))
+
+    result = drift()
+
+    assert result.metadata == {
+        "current": "cqi_2023",
+        "drifted_share": 1.0,
+        "retrain": "True",
+        "reasons": "the target drifted",
+    }

@@ -774,6 +774,13 @@ production:
   country: Mexico
 
 # The studies every domain gets: profiles, drift, feature evidence, residuals.
+# Stage 4: each model's newest period against the earlier ones (mlops monitor). A drifted
+# target, or an error above the interval the champion was accepted with, calls for
+# retraining on its own; so does this share of drifted features - half, the share
+# Evidently itself calls a drifted dataset.
+monitoring:
+  drift_share: 0.5
+
 analysis:
   # Groups and levels smaller than this are not reported: the numbers would be noise.
   min_rows: 5

@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import polars as pl
@@ -372,3 +373,42 @@ def test_a_model_the_domain_does_not_declare_is_refused(data_dir: Path) -> None:
 
     assert result.exit_code != 0
     assert "No model 'tasting'" in str(result.exception)
+
+
+def test_monitor_says_what_drifted_and_retrains_only_what_calls_for_it(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On the fixtures, the reviews have two snapshots to compare; the offers and the
+    prices one period each."""
+    runner = CliRunner()
+    for group, step in (("data", "run"), ("ml", "features")):
+        assert runner.invoke(cli.app, [group, step]).exit_code == 0
+    retrained: list[str | None] = []
+    monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
+
+    result = runner.invoke(cli.app, ["monitor", "--retrain"])
+
+    assert result.exit_code == 0, result.output
+    assert "review: cqi_2023 against cqi_2018 - 56% of the features drifted" in result.output
+    assert "  due for retraining: the target, total_cup_points, drifted" in result.output
+    assert "offer: one period only, nothing to compare it with yet" in result.output
+    assert (data_dir / "coffee" / "monitoring" / "review_drift").is_dir()
+    assert retrained == ["review"]
+
+
+def test_a_model_that_did_not_drift_is_left_alone(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    steady = SimpleNamespace(
+        current="2026", reference=["2025"], drifted_share=0.1, reasons=[], retrain=False
+    )
+    monkeypatch.setattr("mlops_core.monitoring.drift.monitor_model", lambda *args: steady)
+    retrained: list[str | None] = []
+    monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
+
+    result = CliRunner().invoke(cli.app, ["monitor", "--model", "review", "--retrain"])
+
+    assert result.exit_code == 0, result.output
+    assert "review: 2026 against 2025 - 10% of the features drifted" in result.output
+    assert "  no reason to retrain" in result.output
+    assert retrained == []

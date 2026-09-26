@@ -128,6 +128,8 @@ flowchart TD
     green_price_features["features/green_price_features<br/>adapter.enrich: the months before it<br/>target: the month's change, %"]
     train["mlops ml train<br/>the model's split: temporal or by group<br/>Optuna on folds of the same kind · LightGBM"]
     gate{{"quality gate<br/>paired bootstrap, 95% sure<br/>vs baseline and vs champion<br/>whole groups resampled for a group split"}}
+    monitor{{"mlops monitor · Evidently<br/>each model's newest period vs the ones before<br/>features · target · predictions · error"}}
+    monitoring_tables[("monitoring/&lt;model&gt;_drift<br/>+ Evidently report · MLflow run")]
     mlflow[("MLflow<br/>runs + registry<br/>alias: champion")]
 
     subgraph USE["What reads the model and the layers"]
@@ -169,6 +171,8 @@ flowchart TD
     review_features & mlflow --> review_predictions
     offer_features & mlflow --> offer_predictions
     green_price_features & mlflow -.-> green_price_predictions
+    review_features & offer_features & green_price_features & review_predictions & offer_predictions --> monitor --> monitoring_tables
+    monitor -- "due: retrain, the gate decides" --> train
     mlflow --> api
     market_context --> api
     review_predictions --> analysis --> dashboard
@@ -201,6 +205,8 @@ flowchart TD
     class corpus_sources,questions domain
     class embed,ladder,agent_eval core
     class chunk_embeddings,qdrant,retrieval_runs,agent_answers store
+    class monitor core
+    class monitoring_tables store
 ```
 
 Two decoupled pipelines and a set of services. Nothing runs "all at once" unless you
@@ -1002,6 +1008,51 @@ The target's distribution by decade shows why sixty years is not one market: in 
 moved less than 1% either way; since the 1970s the same band is about 4%. Training on
 the quota era teaches a calmer market than the one tested - a hypothesis for an
 experiment, to be settled on the training folds, not on the test.
+
+## Drift and retraining (stage 4)
+
+`make monitor` (`mlops monitor`) compares each model's newest period with every one
+before it - the periods its config names: a CQI snapshot, a catalogue read, a decade -
+column by column: every feature, the target, and the champion's predictions, with
+Evidently's statistical tests (Wasserstein or K-S for numbers, Jensen-Shannon or
+chi-squared for categories, chosen by sample size, at Evidently's own thresholds). A
+model is **due for retraining** when half of its features drifted (`monitoring:
+drift_share` in the YAML - Evidently's own line for a drifted dataset), when its target
+drifted, or when its error on the newest period is above the interval the gate accepted
+its champion with. `make retrain` then rebuilds the models that are due - features,
+training, batch scores - and **the gate decides** whether the candidate is served: a
+monitor that promoted models on its own would be a gate that looks at no evidence.
+
+Each comparison lands in `monitoring.<model>_drift` (`make sql Q="SELECT * FROM
+monitoring.review_drift"`), with Evidently's HTML report beside it, and in an MLflow run
+(experiment `coffee-monitoring`); in Dagster, each model gets a `<model>_drift` asset.
+
+First run, on the real layers:
+
+| Model | Compared | Features drifted | Target | Verdict |
+|---|---|---:|---|---|
+| `review` | the 2023 CQI snapshot against 2018 | 100% | drifted | due |
+| `green_price` | the 2020s against 1960-2019 | 80% | drifted | due |
+| `offer` | one catalogue read so far | - | - | nothing to compare yet |
+
+- **The monitor finds the drift this README already describes by hand.** 2023's lots
+  were graded 1.5 points higher, from a different mix of countries; every feature and
+  the target moved. Retraining produced v5, identical to the champion on the same test
+  (MAE 1.648 both), and the gate kept v1: 0% sure it is better. Retraining on the same
+  data cannot learn a level shift; labels from the new period can - recalibrating on 30
+  lots of it cut the error by a fifth (1.710 to 1.359). The CQI is frozen, so that
+  data will not come.
+- **The price's 2020s are outside anything before them**: its level (Wasserstein 1.8)
+  and the Arabica/Robusta ratio (1.1) most of all. Retrained, `green_price` still does
+  not beat the mean drift, and still is not served.
+- **Known limit:** the monitor compares what is on disk, so a frozen source is flagged
+  on every run, and `make retrain` would retrain for nothing. Triggering retraining only
+  when new data arrives is the orchestration step that comes next.
+- `review`'s champion predates the test-MAE interval in training runs, so its error is
+  not checked - and the log says so rather than skipping it silently.
+- Evidently's UI and collector send usage events unless `DO_NOT_TRACK` is set; the
+  report path used here does not import them, and the monitor sets it anyway. Evidently
+  brings some twenty packages, so it is an extra of its own (`monitoring`).
 
 ## What a kilo costs (stage 3)
 

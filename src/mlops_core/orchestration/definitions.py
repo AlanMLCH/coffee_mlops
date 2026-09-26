@@ -34,6 +34,7 @@ from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
 from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import train_model
+from mlops_core.monitoring.drift import monitor_model
 from mlops_core.storage import read_table
 
 # Assets write their own Parquet, so they hand Dagster metadata, not a value.
@@ -50,7 +51,13 @@ def pipeline_assets(adapter: DomainAdapter) -> dict[str, list[str]]:
 
 
 def model_asset_names(model: ModelConfig) -> list[str]:
-    return [model.features_table, f"{model.name}_model", model.predictions_table]
+    """A model's assets, in order: features, model, batch scores, and their drift."""
+    return [
+        model.features_table,
+        f"{model.name}_model",
+        model.predictions_table,
+        f"{model.name}_drift",
+    ]
 
 
 def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefinition]:
@@ -100,7 +107,7 @@ def model_assets(
     config = adapter.config
     data_dir = settings.data_dir / config.name
     prefix, group = [config.name], config.name
-    features_name, model_name, predictions_name = model_asset_names(model)
+    features_name, model_name, predictions_name, drift_name = model_asset_names(model)
 
     @asset(name=features_name, key_prefix=prefix, group_name=group, deps=[clean_tables])
     def features() -> Materialized:
@@ -127,7 +134,22 @@ def model_assets(
             return MaterializeResult(metadata={"skipped": "no version has passed the gate"})
         return MaterializeResult(metadata={"path": str(path)})
 
-    return [features, trained_model, predictions]
+    @asset(name=drift_name, key_prefix=prefix, group_name=group, deps=[predictions])
+    def drift() -> Materialized:
+        """The newest period against the earlier ones, and whether to retrain."""
+        result = monitor_model(config, model.name, data_dir, settings.mlflow_tracking_uri)
+        if result is None:
+            return MaterializeResult(metadata={"skipped": "one period only"})
+        return MaterializeResult(
+            metadata={
+                "current": result.current,
+                "drifted_share": round(result.drifted_share, 4),
+                "retrain": str(result.retrain),
+                "reasons": "; ".join(result.reasons),
+            }
+        )
+
+    return [features, trained_model, predictions, drift]
 
 
 def domain_checks(

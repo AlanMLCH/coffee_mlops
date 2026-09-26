@@ -6,7 +6,7 @@ export DAGSTER_HOME := $(CURDIR)/.dagster
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard questions review index retrieval benchmark ask agent-eval mcp sql prune dagster services-up services-down
+.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard questions review index retrieval benchmark ask agent-eval monitor retrain mcp sql prune dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
@@ -36,6 +36,8 @@ help:
 	@echo "benchmark  measure the local models that could drive the agent (SQL, routing)"
 	@echo "ask        ask the agent, e.g. make ask Q=\"Why does altitude matter?\""
 	@echo "agent-eval ask the agent every routing question and check each answer end to end"
+	@echo "monitor    each model's newest period against the earlier ones: drift, and whether to retrain"
+	@echo "retrain    monitor, then retrain the models that call for it (the gate decides)"
 	@echo "mcp        serve the agent's tools over MCP on stdio (for an MCP client to launch)"
 	@echo "sql        query any layer, e.g. make sql Q=\"SELECT count(*) FROM clean.coffee_reviews\""
 
@@ -128,6 +130,12 @@ ask:
 
 agent-eval:
 	uv run mlops agent evaluate --domain $(DOMAIN)
+
+monitor:
+	uv run mlops monitor --domain $(DOMAIN)
+
+retrain:
+	uv run mlops monitor --retrain --domain $(DOMAIN)
 
 mcp:
 	uv run mlops mcp --domain $(DOMAIN)

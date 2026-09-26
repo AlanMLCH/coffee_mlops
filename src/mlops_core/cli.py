@@ -645,6 +645,50 @@ def evaluate_agent(domain: Domain = None) -> None:
         )
 
 
+@app.command()
+def monitor(
+    domain: Domain = None,
+    model: ModelName = None,
+    retrain: Annotated[
+        bool, typer.Option(help="Retrain the models that call for it; the gate decides")
+    ] = False,
+) -> None:
+    """Compare each model's newest period with the earlier ones, and say which should be
+    retrained: drifted features, a drifted target, or an error above the interval the
+    champion was accepted with.
+
+    Each model's comparison lands in `monitoring.<model>_drift`, with Evidently's report
+    beside it, and in an MLflow run (experiment `<domain>-monitoring`). With --retrain,
+    the models due are rebuilt - features, training, batch scores - and the gate decides
+    whether the candidate is served.
+    """
+    with _needs_extra("monitoring"):
+        from mlops_core.monitoring.drift import monitor_model
+
+    config = _adapter(domain).config
+    settings = Settings()
+    due = []
+    for name in _models(config, model):
+        result = monitor_model(config, name, _data_dir(config), settings.mlflow_tracking_uri)
+        if result is None:
+            typer.echo(f"{name}: one period only, nothing to compare it with yet")
+            continue
+        typer.echo(
+            f"{name}: {result.current} against {', '.join(result.reference)} - "
+            f"{result.drifted_share:.0%} of the features drifted"
+        )
+        for reason in result.reasons:
+            typer.echo(f"  due for retraining: {reason}")
+        if result.retrain:
+            due.append(name)
+        else:
+            typer.echo("  no reason to retrain")
+    if retrain:
+        for name in due:
+            typer.echo(f"retraining {name}")
+            ml_run(domain, name)
+
+
 @app.command("mcp")
 def mcp_server(domain: Domain = None) -> None:
     """Serve the agent's tools over MCP, on stdio: for Claude Desktop, Claude Code or an IDE.

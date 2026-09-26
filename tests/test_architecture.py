@@ -81,6 +81,12 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("ml", "mlops_core.agent"),
         ("rag", "mlops_core.agent"),
         ("serving", "mlops_core.agent"),
+        # The monitor reads the layers and the registry; retraining is the CLI's and the
+        # orchestrator's to start, so it never reaches into the pipelines itself.
+        ("monitoring", "mlops_core.data"),
+        ("monitoring", "mlops_core.ml"),
+        ("ml", "mlops_core.monitoring"),
+        ("serving", "mlops_core.monitoring"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:

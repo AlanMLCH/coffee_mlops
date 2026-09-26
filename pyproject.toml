@@ -72,9 +72,9 @@ rag = [
     "snowballstemmer>=3.0",
 ]
 
-# Dagster orchestrates both pipelines, so it needs both.
+# Dagster orchestrates the pipelines and the monitor, so it needs all three.
 orchestration = [
-    "coffee-mlops[data,ml]",
+    "coffee-mlops[data,ml,monitoring]",
     "dagster>=1.13.23",
     "dagster-webserver>=1.13.23",
 ]
@@ -88,6 +88,14 @@ agent = [
 mcp = [
     "coffee-mlops[rag]",
     "mcp>=2.2.0",
+]
+# Drift between periods, and whether a model's error left the interval it was accepted
+# with. Evidently's statistical tests (K-S, chi-squared, Wasserstein, ...) and its HTML
+# report; it brings some twenty packages, which is why it is an extra of its own. Every
+# report is also an MLflow run.
+monitoring = [
+    "coffee-mlops[ml]",
+    "evidently>=0.7.23",
 ]
 
 [project.urls]
@@ -130,7 +138,7 @@ mypy_path = "src"
 files = ["src/mlops_core", "src/domains", "experiments"]
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "scipy.*", "snowballstemmer"] # ship no type information
+module = ["sklearn.*", "scipy.*", "snowballstemmer", "evidently.*"] # ship no type information
 ignore_missing_imports = true
 
 [tool.coverage.run]

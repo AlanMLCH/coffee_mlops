@@ -416,6 +416,18 @@ class AnalysisConfig(BaseModel):
     published_figures: list[str]
 
 
+class MonitoringConfig(BaseModel):
+    """When a model's newest period calls for retraining. The gate still decides whether
+    what retraining produces is served."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # The share of a model's features whose distribution moved - by Evidently's test for
+    # each - from which it is retrained. A drifted target or an error outside the interval
+    # the champion was accepted with calls for it on their own.
+    drift_share: float = Field(gt=0, le=1)
+
+
 class DomainConfig(BaseModel):
     """The sections the core runs. A domain subclasses this to add its own."""
 
@@ -427,6 +439,7 @@ class DomainConfig(BaseModel):
     corpus: CorpusConfig | None = None  # required once there are documents
     models: list[ModelConfig] = Field(min_length=1)
     analysis: AnalysisConfig
+    monitoring: MonitoringConfig
 
     @model_validator(mode="after")
     def _documents_are_named_once(self) -> Self:

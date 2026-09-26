@@ -20,6 +20,7 @@ from mlops_core.config import (
     ItemsConfig,
     ModelConfig,
     ModelSpec,
+    MonitoringConfig,
     TargetBands,
     TemporalSplit,
     TrainingConfig,
@@ -400,6 +401,7 @@ def test_a_group_split_model_trains_end_to_end_without_a_next_period(
         sources={},
         models=[model],
         analysis=AnalysisConfig(min_rows=1, permutation_repeats=2, published_figures=[]),
+        monitoring=MonitoringConfig(drift_share=0.5),
     )
     write_table(lot_features(), tmp_path / "features" / model.features_table, {})
     tracking_uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
