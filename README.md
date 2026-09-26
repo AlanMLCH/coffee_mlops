@@ -13,8 +13,8 @@ Everything runs locally. No cloud, no recurring costs.
 
 ## Status
 
-**Stage 3 — scraping, RAG and the agent: complete.** Stages 1, 2 and 3 are done; stage 4
-(time series, drift, retraining) is next.
+**Stage 4 — time series, drift and retraining: in progress.** Stages 1, 2 and 3 are
+done; the international price of green coffee is in, day by day and month by month.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -36,6 +36,8 @@ Everything runs locally. No cloud, no recurring costs.
 | [SIAP cierre agrícola](https://nube.agricultura.gob.mx/datosAbiertos/Agricola.php) (stage 2) | Every crop in every Mexican municipality, 2025; coffee cherry in 489 of them | 35,902 | Direct download, Latin-1 |
 | Roasters' shops (stage 3): Almanegra, Buna, Café con Jiribilla, Cucurucho | Every coffee they sell, as their own shops list it: 168 coffees in 528 offers (a product in one size) | 528 | Shopify / Squarespace catalog JSON, product pages where needed, robots.txt first |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
+| [World Bank Pink Sheet](https://www.worldbank.org/en/research/commodity-markets) (stage 4) | Monthly price of other mild Arabicas and Robustas (the ICO's group indicators), 1960 to last month, $/kg | 800 months | Workbook found by its link on the page, which changes with each release |
+| [ICO indicator prices](https://ico.org/documents/I-CIP.pdf) (stage 4) | Daily I-CIP and its four group indicators, US cents/lb, **the current month only** | 18 days so far | A one-page PDF table, read and checked against its own averages; every download kept |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
@@ -89,6 +91,11 @@ flowchart TD
             direction TB
             roaster_catalogs["roaster_catalogs<br/>4 roasters · Shopify + Squarespace<br/>robots.txt first · product pages"]
         end
+        subgraph PRICES["Prices over time (stage 4)"]
+            direction TB
+            world_bank_prices["world_bank_prices<br/>World Bank · workbook, monthly since 1960<br/>found by its link on the page"]
+            ico_prices["ico_prices<br/>ICO · one-page PDF, this month only<br/>every download kept: accumulate"]
+        end
         subgraph CORPUS["Documents: text, never figures"]
             direction TB
             corpus_sources["17 documents<br/>WCR · FAO · SCA · ICO · papers<br/>fetched, or handed over at a 403"]
@@ -98,7 +105,7 @@ flowchart TD
     extract_files["mlops data extract<br/>files and documents<br/>stream, de-duplicate by sha256"]
     extract_apis["adapter.extract<br/>ApiClient: rate limit, retries, expiring cache<br/>RobotsPolicy for shops"]
     raw[("raw/<br/>untouched bytes + manifest<br/>one partition per ingestion")]
-    validate[["validate<br/>one Pandera contract per source<br/>CSV · map layer · API JSON · document text"]]
+    validate[["validate<br/>one Pandera contract per source<br/>CSV · workbook · map layer · API JSON · document text<br/>the domain's PDF table · every download of a window"]]
 
     subgraph CLEAN["clean/ : adapter.clean, held to strict contracts by the core"]
         direction LR
@@ -110,10 +117,11 @@ flowchart TD
         roaster_coffees["roaster_coffees<br/>the shops' coffees: 2026 items"]
         roaster_origins["roaster_origins<br/>one row per origin · blends split<br/>PSD · SIAP · CQI vocabularies"]
         roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
+        price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
         documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
         document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
     end
-    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE"]
+    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE<br/>World Bank months against ICO days"]
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
     offer_features["features/offer_features<br/>adapter.enrich: the coffee's origin<br/>split by coffee, not by bag"]
@@ -145,7 +153,7 @@ flowchart TD
         agent_answers[("evaluations/agent_answers<br/>per question · one MLflow run, a trace each")]
     end
 
-    FILES & CORPUS --> extract_files
+    FILES & PRICES & CORPUS --> extract_files
     APIS --> extract_apis
     SHOPS --> extract_apis
     extract_files & extract_apis --> raw
@@ -180,8 +188,9 @@ flowchart TD
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
     class extract_files,validate,train,gate,api,analysis,dashboard,documents,document_chunks core
     class extract_apis,review_features,offer_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
-    class roaster_coffees,roaster_origins,roaster_offers domain
+    class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
+    class world_bank_prices,ico_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp core
     class corpus_sources,questions domain
@@ -917,6 +926,41 @@ a project's `.mcp.json`):
 - **Checked as a client sees it**: driven over stdio with the SDK's own client - list the
   tools, read the dictionary, run a query, have a `COPY` refused, price a bag, score a
   lot, search the documents - and tested in process against the same server.
+
+## The price of green coffee (stage 4)
+
+`clean.price_indicators` holds the international price of green coffee, one row per
+indicator and day or month, in US cents per pound:
+
+| Indicator | Daily, ICO | Monthly, World Bank |
+|---|---|---|
+| `i_cip` - the ICO composite | this month so far | - |
+| `colombian_milds`, `brazilian_naturals` | this month so far | - |
+| `other_milds` | this month so far | 1960 to last month |
+| `robustas` | this month so far | 1960 to last month |
+
+- **Two publishers of one series.** The World Bank's "Coffee, Arabica" is the ICO's
+  other mild Arabicas indicator and its "Coffee, Robusta" the Robustas one, averaged by
+  month and republished in dollars per kilogram; they are converted to the ICO's unit
+  (1 $/kg = 45.36 cents/lb, so its two published decimals are worth ±0.23 cents/lb).
+  Where a month is in both, every build compares them and says how far apart they are,
+  as it does the PSD file against the FAS API.
+- **The ICO publishes only the current month**, as a one-page PDF (the page that used to
+  hold its history answers 500 since the site moved). So its history is every download,
+  kept: the source is declared `accumulate`, and the clean layer reads every ingestion,
+  each against its contract, with the time it was read. A day read twice keeps its
+  latest reading, since a correction can only come later. This is the stage's first
+  capability: a source whose each read is a window builds its own history.
+- **A PDF table is the one kind of figure this project refuses elsewhere** (the corpus
+  answers how and why, never how much). This one is admitted because it checks itself:
+  the page prints its own Average, High and Low, and a reading whose days do not average,
+  top and bottom out to them is refused rather than stored - as is a page whose columns
+  are not the five the reader knows, in that order.
+- **The World Bank's file moves.** Its address carries an id per release, so the source
+  names the page and a pattern for the link (`link:`), and the file is found on the
+  page each time. The file's host also cut the connection twice in a row on the first
+  real download: a dropped connection is now tried again, up to three times, while an
+  HTTP error is still an answer.
 
 ## What a kilo costs (stage 3)
 

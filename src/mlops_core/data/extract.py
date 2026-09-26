@@ -8,10 +8,16 @@ Layout per source::
 Files are never transformed here. The manifest is written last, so a partition
 without one is an interrupted download and is ignored. A download whose sha256
 matches the latest ingestion is not stored again.
+
+A connection the server cuts is tried again, up to three times: one host this project
+reads resets connections now and then - twice in a row on its first real run - and
+answers a later request. An HTTP error is not retried: a 404 is an answer.
 """
 
 import hashlib
 import logging
+import re
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -19,6 +25,7 @@ from datetime import UTC, datetime
 from functools import cache
 from importlib.metadata import distributions
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from pydantic import BaseModel
@@ -29,10 +36,14 @@ from mlops_core.storage import MANIFEST_NAME, latest_partition, new_partition
 
 logger = logging.getLogger(__name__)
 
+DOWNLOAD_ATTEMPTS = 4
+_HREF = re.compile(r"""href=["']([^"']+)["']""")
+
 
 class Manifest(BaseModel):
     source: str
-    # The configured URL, never the final one: redirects may land on signed URLs.
+    # The configured URL, never the final one: redirects may land on signed URLs. A file
+    # found by a link on a page records the link, which names the release.
     url: str
     filename: str
     sha256: str
@@ -86,8 +97,14 @@ def latest_ingestion(raw_dir: Path, source: str) -> RawArtifact | None:
     partition = latest_partition(raw_dir / source)
     if partition is None:
         return None
-    manifest = Manifest.model_validate_json((partition / MANIFEST_NAME).read_text())
-    return RawArtifact(partition, manifest)
+    return _artifact(partition)
+
+
+def ingestions(raw_dir: Path, source: str) -> list[RawArtifact]:
+    """Every complete ingestion of a source, oldest first: the history of a source
+    whose each download is a window."""
+    complete = sorted(p for p in (raw_dir / source).glob("*=*") if (p / MANIFEST_NAME).is_file())
+    return [_artifact(partition) for partition in complete]
 
 
 def ingest(
@@ -97,7 +114,20 @@ def ingest(
     client: httpx.Client,
     now: datetime | None = None,
 ) -> RawArtifact:
-    return ingest_file(name, str(source.url), source.filename, raw_dir, client, now)
+    url = (
+        str(source.url) if source.link is None else find_link(client, str(source.url), source.link)
+    )
+    return ingest_file(name, url, source.filename, raw_dir, client, now)
+
+
+def find_link(client: httpx.Client, page: str, pattern: str) -> str:
+    """The first link on `page` that `pattern` matches, as an absolute URL."""
+    response = client.get(page)
+    response.raise_for_status()
+    for href in _HREF.findall(response.text):
+        if re.search(pattern, href):
+            return urljoin(page, str(href))
+    raise LookupError(f"No link on {page} matches {pattern!r}: look at the page and update `link`")
 
 
 def ingest_file(
@@ -180,7 +210,20 @@ def extract_all(
 
 
 def _download(client: httpx.Client, url: str, target: Path) -> tuple[str, int, str | None]:
-    """Stream `url` into `target`; return (sha256, size, Last-Modified header)."""
+    """Stream `url` into `target`; return (sha256, size, Last-Modified header). A dropped
+    connection is tried again, waiting 1, 2 and then 4 s."""
+    for attempt in range(DOWNLOAD_ATTEMPTS):
+        try:
+            return _download_once(client, url, target)
+        except httpx.TransportError as dropped:
+            if attempt == DOWNLOAD_ATTEMPTS - 1:
+                raise
+            logger.warning("%s: %s; trying again", url, dropped)
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")  # pragma: no cover - the loop returns or raises
+
+
+def _download_once(client: httpx.Client, url: str, target: Path) -> tuple[str, int, str | None]:
     digest = hashlib.sha256()
     size = 0
     try:
@@ -198,3 +241,9 @@ def _download(client: httpx.Client, url: str, target: Path) -> tuple[str, int, s
         target.unlink(missing_ok=True)
         raise
     return digest.hexdigest(), size, last_modified
+
+
+def _artifact(partition: Path) -> RawArtifact:
+    return RawArtifact(
+        partition, Manifest.model_validate_json((partition / MANIFEST_NAME).read_text())
+    )

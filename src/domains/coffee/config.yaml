@@ -55,6 +55,27 @@ sources:
     # Latin-1, and nothing in the file says so. Read as UTF-8 it fails on "Otoño".
     encoding: latin-1
 
+  # Stage 4: the international price of green coffee. The World Bank's Pink Sheet, monthly
+  # since 1960 in $/kg; "Coffee, Arabica" and "Coffee, Robusta" are the ICO's other mild
+  # Arabicas and Robustas group indicators. Verified 2026-09-25: the file's address
+  # carries an id per release, so it is found on the page each time; the page's
+  # robots.txt allows it; the file host cuts a connection now and then (retried).
+  world_bank_prices:
+    url: https://www.worldbank.org/en/research/commodity-markets
+    link: CMO-Historical-Data-Monthly\.xlsx$
+    filename: CMO-Historical-Data-Monthly.xlsx
+    sheet: Monthly Prices
+    header_row: 4 # four rows of title and notes above it
+    skip_rows: 1 # the row of units under it
+
+  # The ICO's daily indicator prices, in US cents/lb: the current month only, one PDF
+  # page (the old coffee_prices.asp answers 500 since the site moved). Each download is
+  # a window, so the history is every download. Verified 2026-09-25.
+  ico_prices:
+    url: https://ico.org/documents/I-CIP.pdf
+    filename: I-CIP.pdf
+    accumulate: true
+
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
 denue:

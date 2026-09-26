@@ -28,7 +28,7 @@ from domains.coffee.features import (
 )
 from domains.coffee.request import Lot, Offer
 from domains.coffee.schemas import RAW_SCHEMAS, clean_schemas
-from mlops_core.adapter import ApiExtraction, CleanTable, JsonReader
+from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
 
 if TYPE_CHECKING:
     import httpx
@@ -109,6 +109,11 @@ class CoffeeAdapter:
         if config.roasters is not None:
             readers[config.roasters.name] = roasters.to_frame
         return readers
+
+    def file_readers(self) -> Mapping[str, FileReader]:
+        from domains.coffee.sources.ico import read_indicator_prices
+
+        return {"ico_prices": read_indicator_prices}
 
     def clean(
         self, raw: Mapping[str, pl.DataFrame], read_at: Mapping[str, datetime]

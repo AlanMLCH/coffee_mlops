@@ -44,6 +44,8 @@ def test_recorded_sources_pass_and_come_out_typed(
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
         "siap_agricola": 13,
         "roaster_catalogs": 33,  # offers: a product in one size
+        "world_bank_prices": 3,  # months, read from a workbook's sheet
+        "ico_prices": 3,  # days, read from a PDF page by the domain
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()
@@ -53,6 +55,12 @@ def test_recorded_sources_pass_and_come_out_typed(
     assert frames["cqi_2018"]["Total.Cup.Points"].dtype == pl.Float64
     assert frames["cqi_2023"]["Quakers"].dtype == pl.Int64
     assert frames["psd_coffee"]["Market_Year"].dtype == pl.Int64
+    # The workbook's unnamed first column is named by its position; units are not data.
+    assert frames["world_bank_prices"]["column_1"].to_list() == ["2026M07", "2026M08", "2026M09"]
+    assert frames["world_bank_prices"]["Coffee, Arabica"].dtype == pl.Float64
+    # An accumulated source's rows carry the download they came from.
+    assert frames["ico_prices"]["ingested_at"].dtype == pl.Datetime("us", "UTC")
+    assert validated["ico_prices"].lineage.startswith("ingested_at=")
 
 
 def test_r_style_na_is_read_as_null(coffee_config: DomainConfig, raw_dir: Path) -> None:
@@ -173,3 +181,32 @@ def test_the_documents_are_held_to_the_same_kind_of_contract(
     assert parts.height > 0
     # The ones a person hands over are absent here, and that is not a failure.
     assert not any(d.name in validated for d in coffee_adapter.config.documents if d.inbox)
+
+
+def test_a_workbook_is_read_from_its_header_row_with_its_units_left_out(tmp_path: Path) -> None:
+    from mlops_core.config import SourceConfig
+    from mlops_core.data.validate import read_sheet
+    from tests.files import xlsx
+
+    path = tmp_path / "prices.xlsx"
+    rows = [["A title"], [None, "Tea "], [None, "($/kg)"], ["2026M08", 3.1]]
+    path.write_bytes(xlsx("Prices", rows))
+    source = SourceConfig(
+        url="https://bank.test/p.xlsx", filename="p.xlsx", sheet="Prices", header_row=1, skip_rows=1
+    )
+
+    frame = read_sheet(path, source)
+
+    assert frame.columns == ["column_1", "Tea"]  # named by position where the sheet has none
+    assert frame.rows() == [("2026M08", "3.1")]  # text: the contract does the typing
+
+
+def test_a_reader_for_a_file_the_config_does_not_download_is_refused(
+    coffee_adapter: CoffeeAdapter, raw_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        CoffeeAdapter, "file_readers", lambda self: {"tea_prices": lambda path: pl.DataFrame()}
+    )
+
+    with pytest.raises(ValueError, match=r"Readers for files the config does not download"):
+        validate_raw(coffee_adapter, raw_dir)

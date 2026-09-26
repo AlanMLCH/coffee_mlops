@@ -27,7 +27,7 @@ def build_clean(
     """Validate the latest raw data, clean it, check the clean contracts, write Parquet."""
     sources = validate_raw(adapter, data_dir / "raw")
     frames = {name: source.frame for name, source in sources.items()}
-    lineage = {name: source.artifact.partition.name for name, source in sources.items()}
+    lineage = {name: source.lineage for name, source in sources.items()}
 
     read_at = {name: source.artifact.manifest.ingested_at for name, source in sources.items()}
     tables = dict(adapter.clean(frames, read_at))

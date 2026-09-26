@@ -61,6 +61,8 @@ def test_extract_writes_raw_layer_under_the_domain(
         "siap_agricola",
         "osm_places",
         "roaster_catalogs",  # the shops need no credential either, only robots.txt's leave
+        "world_bank_prices",
+        "ico_prices",
         *served,
     }
 
@@ -101,6 +103,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        "price_indicators",
         "documents",
         "document_chunks",
     }
@@ -130,6 +133,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        "price_indicators",
         "documents",
         "document_chunks",
     }

@@ -16,6 +16,7 @@ import pandera.polars as pa
 import polars as pl
 
 from domains.coffee.config import UNCLASSIFIED, CleaningConfig
+from domains.coffee.sources.ico import INDICATORS as ICO_INDICATORS
 
 SENSORY_SCORES = [
     "Aroma",
@@ -242,6 +243,35 @@ ROASTER_CATALOGS = pa.DataFrameSchema(
     },
 )
 
+
+def _price() -> pa.Column:
+    return pa.Column(pl.Float64, pa.Check.gt(0))
+
+
+# The Pink Sheet's monthly prices: only the months and the two coffee columns are
+# depended on; its other seventy commodities pass through unread.
+WORLD_BANK_PRICES = pa.DataFrameSchema(
+    name="world_bank_prices",
+    coerce=True,
+    unique=["column_1"],
+    columns={
+        "column_1": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}M(0[1-9]|1[0-2])$")),
+        "Coffee, Arabica": _price(),  # $/kg
+        "Coffee, Robusta": _price(),
+    },
+)
+
+# One download of the ICO's page: the days of one month, each once.
+ICO_PRICES = pa.DataFrameSchema(
+    name="ico_prices",
+    coerce=True,
+    unique=["date"],
+    columns={
+        "date": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}-\d{2}-\d{2}$")),
+        **{indicator: _price() for indicator in ICO_INDICATORS},  # US cents/lb
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -253,6 +283,8 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "fas_psd_coffee": PSD_COFFEE,
     "siap_agricola": SIAP_AGRICOLA,
     "roaster_catalogs": ROASTER_CATALOGS,
+    "world_bank_prices": WORLD_BANK_PRICES,
+    "ico_prices": ICO_PRICES,
 }
 
 
@@ -377,6 +409,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "roaster_coffees": ROASTER_COFFEES,
         "roaster_origins": roaster_origins_schema(rules),
         "roaster_offers": ROASTER_OFFERS,
+        "price_indicators": PRICE_INDICATORS,
     }
 
 
@@ -459,6 +492,22 @@ ROASTER_OFFERS = pa.DataFrameSchema(
         "price_outlier": pa.Column(pl.Boolean, nullable=True),
         "observed_on": pa.Column(pl.Date),  # when the catalogue was read
         "snapshot": pa.Column(pl.String),
+    },
+)
+
+
+PRICE_INDICATORS = pa.DataFrameSchema(
+    name="price_indicators",
+    strict=True,
+    unique=["period", "frequency", "indicator"],
+    columns={
+        # The day, or the first day of the month a monthly average is for.
+        "period": pa.Column(pl.Date),
+        "frequency": pa.Column(pl.String, pa.Check.isin(["daily", "monthly"])),
+        "indicator": pa.Column(pl.String, pa.Check.isin(list(ICO_INDICATORS))),
+        "usd_cents_per_lb": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "source": pa.Column(pl.String, pa.Check.isin(["ico", "world_bank"])),
+        "read_at": pa.Column(pl.Datetime("us", "UTC")),  # the download the value came from
     },
 )
 

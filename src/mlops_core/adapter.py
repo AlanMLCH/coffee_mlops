@@ -41,6 +41,9 @@ DOMAINS_PACKAGE = "domains"
 
 # An API source's stored JSON -> one frame, reshaped and not edited.
 JsonReader = Callable[[Any], pl.DataFrame]
+# A downloaded file only the domain can read (a PDF laid out as a table) -> one frame of
+# text columns, as the core reads a CSV: the contract does the typing.
+FileReader = Callable[[Path], pl.DataFrame]
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,11 @@ class DomainAdapter(Protocol):
 
     def json_readers(self) -> Mapping[str, JsonReader]:
         """How each API source's stored JSON becomes a frame for its contract."""
+        ...
+
+    def file_readers(self) -> Mapping[str, FileReader]:
+        """How each file source the core cannot read becomes a frame for its contract;
+        empty when every file is a table or a map layer."""
         ...
 
     def clean(

@@ -8,6 +8,7 @@ domain, which extends `DomainConfig` with them; pydantic still refuses any key t
 nobody declared.
 """
 
+import re
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self
@@ -65,11 +66,16 @@ class SpatialConfig(BaseModel):
 
 
 class SourceConfig(BaseModel):
-    """A file the domain downloads as it is: a table, or a map layer inside an archive."""
+    """A file the domain downloads as it is: a table (CSV, or a workbook's sheet), a map
+    layer inside an archive, or a file only the domain can read."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: HttpUrl
+    # When set, `url` is the page that publishes the file, and the file is the first link
+    # on it this pattern matches: a release whose address carries an id per edition, on
+    # a page whose address does not.
+    link: str | None = None
     filename: str
     # The file inside the archive, when the download is a ZIP: a CSV, or the layer of
     # a geospatial dataset when `spatial` is set.
@@ -81,11 +87,31 @@ class SourceConfig(BaseModel):
     encoding: str = "utf-8"
     # Set when the member is a map layer rather than a table.
     spatial: SpatialConfig | None = None
+    # A workbook's sheet, the row holding its column names (counted from 0), and the rows
+    # right under it that are not data - a row of units, say.
+    sheet: str | None = None
+    header_row: int = Field(0, ge=0)
+    skip_rows: int = Field(0, ge=0)
+    # Each download is a window - the current month, say - so the history is every
+    # ingestion, not the latest: the frame is all of them, each row with the
+    # `ingested_at` of its download, and the domain decides which reading of a row wins.
+    accumulate: bool = False
 
     @model_validator(mode="after")
     def _zip_needs_member(self) -> Self:
         if self.filename.endswith(".zip") and self.member is None:
             raise ValueError(f"'{self.filename}' is a ZIP: set `member` to the file inside it")
+        return self
+
+    @model_validator(mode="after")
+    def _a_workbook_names_its_sheet(self) -> Self:
+        if self.filename.endswith(".xlsx") != (self.sheet is not None):
+            raise ValueError(f"'{self.filename}': a workbook names its `sheet`, and only one does")
+        if self.link is not None:
+            try:
+                re.compile(self.link)  # a broken pattern fails when the config loads
+            except re.error as broken:
+                raise ValueError(f"`link` is not a pattern: {broken}") from broken
         return self
 
 

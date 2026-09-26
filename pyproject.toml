@@ -21,7 +21,15 @@ dependencies = [
 [project.optional-dependencies]
 # duckdb is the SQL window onto the layers: the pipelines and the analysis need it,
 # the prediction API does not (and it is 58 MB in that image).
-data = ["duckdb>=1.5.5", "httpx>=0.28.1"]
+data = [
+    "duckdb>=1.5.5",
+    # The engine polars reads workbooks with (Rust, no pandas): the World Bank publishes
+    # its price history as .xlsx.
+    "fastexcel>=0.21.0",
+    "httpx>=0.28.1",
+    # The ICO publishes its daily prices as a one-page PDF table; the corpus is PDFs too.
+    "pypdf>=6.19.0",
+]
 ml = [
     "duckdb>=1.5.5",
     "lightgbm>=4.7.0",
@@ -58,7 +66,6 @@ rag = [
     "defusedxml>=0.7.1",
     # Every retrieval evaluation is a run, like every model.
     "mlflow>=3.16.1",
-    "pypdf>=6.6.1",
     # The same minor version as the server in docker-compose.yml.
     "qdrant-client>=1.19.1",
     # BM25's stemmer: the Snowball English one Lucene and Elasticsearch ship. Pure Python.

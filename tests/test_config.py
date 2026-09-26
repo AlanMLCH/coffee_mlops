@@ -19,6 +19,8 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "psd_coffee",
         "cdmx_boroughs",
         "siap_agricola",
+        "world_bank_prices",
+        "ico_prices",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -177,3 +179,15 @@ def test_a_bags_shop_is_described_with_every_shop_the_config_reads() -> None:
 
     assert config.roasters is not None
     assert all(shop.shop in described for shop in config.roasters.shops)
+
+
+def test_a_workbook_names_its_sheet_and_a_link_is_a_pattern() -> None:
+    from mlops_core.config import SourceConfig
+
+    SourceConfig(url="https://b.test/p.xlsx", filename="p.xlsx", sheet="Prices")
+    with pytest.raises(ValidationError, match="a workbook names its `sheet`"):
+        SourceConfig(url="https://b.test/p.xlsx", filename="p.xlsx")
+    with pytest.raises(ValidationError, match="a workbook names its `sheet`"):
+        SourceConfig(url="https://b.test/p.csv", filename="p.csv", sheet="Prices")
+    with pytest.raises(ValidationError, match="unterminated"):
+        SourceConfig(url="https://b.test/", filename="p.csv", link=r"prices-(\d+")

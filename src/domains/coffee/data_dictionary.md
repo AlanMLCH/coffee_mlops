@@ -157,6 +157,24 @@ states as SIAP does, processing methods and varieties as the CQI spells them.
 | `observed_on` | Date | When the catalogue was read: the first ingestion of this exact content, from the raw manifest (an unchanged catalogue read again keeps its date) |
 | `snapshot` | String | That read, as the period the offer model's studies compare; stage 4's re-reads add more |
 
+## `clean.price_indicators` — one indicator, one day or month
+
+The international price of green coffee (stage 4). The ICO's daily indicator prices
+(its page shows the current month only, so every download is kept and stacked) and the
+World Bank's monthly averages of two of them since 1960, converted from $/kg.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `period` | Date | The day, or the first day of the month a monthly average is for |
+| `frequency` | String | `daily` (the ICO's) or `monthly` (the World Bank's) |
+| `indicator` | String | `i_cip` (the ICO composite), `colombian_milds`, `other_milds`, `brazilian_naturals`, `robustas`. The World Bank publishes `other_milds` and `robustas` only |
+| `usd_cents_per_lb` | Float | US cents per pound, ex-dock. Monthly values were $/kg with two decimals: ±0.23 cents/lb |
+| `source` | String | `ico` or `world_bank` |
+| `read_at` | Datetime (UTC) | The download the value came from; a day read twice keeps its latest reading |
+
+A month's average is not the mean of its daily rows until the month is over: the ICO's
+rows cover the days published so far.
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**

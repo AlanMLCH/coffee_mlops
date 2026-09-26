@@ -24,6 +24,7 @@ import polars as pl
 from polars.expr.whenthen import ChainedThen, Then
 
 from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ProductionConfig, ShopKindRule
+from domains.coffee.prices import clean_price_indicators
 from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
     PSD_ATTRIBUTES,
@@ -458,4 +459,10 @@ def clean_tables(
             clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)
         ),
         **{name: CleanTable(table, ("roaster_catalogs",)) for name, table in roasters.items()},
+        "price_indicators": CleanTable(
+            clean_price_indicators(
+                frames["ico_prices"], frames["world_bank_prices"], read_at["world_bank_prices"]
+            ),
+            ("ico_prices", "world_bank_prices"),
+        ),
     }
