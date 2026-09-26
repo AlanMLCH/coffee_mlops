@@ -8,8 +8,10 @@ Without these tests, both boundaries erode one convenient import at a time.
 """
 
 import ast
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -142,3 +144,31 @@ def test_every_source_file_is_actually_in_the_repository() -> None:
     on_disk = {path.resolve() for path in SRC.rglob("*.py")}
 
     assert on_disk - committed == set()
+
+
+# What the API image leaves out: every package of the other extras. The `serving-isolated`
+# CI job cannot catch an import of these - its test tools bring httpx for TestClient - and
+# it did not: from one commit to the next the image failed to start on `import httpx`,
+# pulled in by a contract that imported a constant from the package of API clients.
+NOT_IN_THE_API_IMAGE = (
+    "httpx", "duckdb", "matplotlib", "pypdf", "fastexcel", "optuna", "dagster", "streamlit",
+    "qdrant_client", "langgraph", "mcp",
+)  # fmt: skip
+
+
+def test_the_prediction_api_imports_without_the_other_pipelines_packages(tmp_path: Path) -> None:
+    """Import the API module - which loads every installed domain's adapter, contracts and
+    request bodies - in a fresh interpreter where those packages cannot be imported."""
+    code = (
+        "import sys\n"
+        f"for name in {NOT_IN_THE_API_IMAGE!r}:\n"
+        "    sys.modules[name] = None\n"
+        "import mlops_core.serving.api\n"
+    )
+    env = {**os.environ, "MLOPS_DATA_DIR": str(tmp_path)}
+
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=False
+    )
+
+    assert result.returncode == 0, result.stderr.splitlines()[-1]

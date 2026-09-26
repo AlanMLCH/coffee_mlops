@@ -18,7 +18,7 @@ from datetime import datetime
 
 import polars as pl
 
-from domains.coffee.sources.ico import INDICATORS
+from domains.coffee.schemas import ICO_INDICATORS as INDICATORS
 
 logger = logging.getLogger(__name__)
 

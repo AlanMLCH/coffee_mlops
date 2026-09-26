@@ -16,7 +16,6 @@ import pandera.polars as pa
 import polars as pl
 
 from domains.coffee.config import UNCLASSIFIED, CleaningConfig
-from domains.coffee.sources.ico import INDICATORS as ICO_INDICATORS
 
 SENSORY_SCORES = [
     "Aroma",
@@ -36,6 +35,10 @@ SENSORY_COLUMNS = [c.lower().replace(" ", "_") for c in SENSORY_SCORES]
 SENSORY_SCORES_2018 = [
     {"Clean Cup": "Clean.Cup", "Overall": "Cupper.Points"}.get(c, c) for c in SENSORY_SCORES
 ]
+
+# The ICO's indicator prices, in the order its page prints them. Here, not beside the
+# reader: the prediction API imports these contracts, and the sources package needs httpx.
+ICO_INDICATORS = ("i_cip", "colombian_milds", "other_milds", "brazilian_naturals", "robustas")
 
 # Upstream attribute -> column in the clean `market_context` table.
 PSD_ATTRIBUTES = {

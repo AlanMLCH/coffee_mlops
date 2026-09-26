@@ -18,9 +18,10 @@ from pathlib import Path
 
 import polars as pl
 
-# The columns, in the page's order, and how the page heads them (its header wraps over
-# three lines; the words, in order, are what is checked).
-INDICATORS = ("i_cip", "colombian_milds", "other_milds", "brazilian_naturals", "robustas")
+from domains.coffee.schemas import ICO_INDICATORS as INDICATORS
+
+# How the page heads its columns (the header wraps over three lines; the words, in
+# order, are what is checked).
 HEADER = "I-CIP Colombian Milds Other Milds Brazilian Naturals Robustas"
 COLUMNS = ("date", *INDICATORS)
 

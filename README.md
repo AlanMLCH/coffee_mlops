@@ -1106,7 +1106,11 @@ The evaluation is built to survive a small test set:
   while the full package ships the tracking server (1.48 GB instead of 2.26 GB).
 - The image has no httpx, DuckDB or matplotlib, so a domain's adapter imports what its
   data pipeline needs inside the methods that use it. CI runs the API's tests in exactly
-  that environment; it caught `validate.py` pulling DuckDB in at import time.
+  that environment; it caught `validate.py` pulling DuckDB in at import time. It could not
+  catch httpx, which the test tools bring along for FastAPI's test client - and a contract
+  that imported a constant from the package of API clients broke the image for one commit
+  while CI stayed green. So a test also imports the API in a fresh interpreter with every
+  other extra's packages blocked.
 - `POST /models/<name>/predict` answers `{"target", "prediction", "context",
   "model_version", ...}`: the response names what it predicted instead of assuming it,
   and `context` holds every feature the domain looked up for the request. Each model has
