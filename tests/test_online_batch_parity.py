@@ -126,7 +126,7 @@ def offers_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
     raw = check_contract(RAW_SCHEMAS["roaster_catalogs"], to_frame(document))
     tables = clean_roasters(raw, coffee_adapter.config.cleaning, artifact.manifest.ingested_at)
     clean_dir = raw_dir.parent / "clean"
-    for name in ("roaster_offers", "roaster_origins"):
+    for name in ("roaster_offer_history", "roaster_origin_history"):  # the model reads these
         write_table(tables[name], clean_dir / name, {})
     build_features(coffee_adapter, "offer", raw_dir.parent)
     return raw_dir.parent
@@ -152,7 +152,8 @@ def test_the_api_prices_a_bag_as_the_batch_path_does(
 
     assert response.status_code == 200, response.text
     assert model.seen is not None
-    expected = features.filter(pl.col("offer_id") == offer["offer_id"]).select(spec.features)
+    expected = features.filter(pl.col("observation_id") == offer["observation_id"])
+    expected = expected.select(spec.features)
     pd.testing.assert_frame_equal(
         model.seen.reset_index(drop=True), expected.to_pandas().reset_index(drop=True)
     )

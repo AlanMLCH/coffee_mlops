@@ -117,6 +117,8 @@ flowchart TD
         roaster_coffees["roaster_coffees<br/>the shops' coffees: 2026 items"]
         roaster_origins["roaster_origins<br/>one row per origin · blends split<br/>PSD · SIAP · CQI vocabularies"]
         roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
+        roaster_offer_history["roaster_offer_history<br/>every read of the shops: offer × read"]
+        roaster_origin_history["roaster_origin_history<br/>every read's sheets"]
         price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
         documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
         document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
@@ -164,7 +166,7 @@ flowchart TD
     raw --> validate --> CLEAN
     CLEAN --- audits
     coffee_reviews & market_context --> review_features
-    roaster_offers & roaster_origins --> offer_features
+    roaster_offer_history & roaster_origin_history --> offer_features
     price_indicators --> green_price_features
     review_features & offer_features & green_price_features --> train --> gate
     gate -- "promoted only if it wins" --> mlflow
@@ -201,6 +203,7 @@ flowchart TD
     class extract_apis,review_features,offer_features,green_price_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
     class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
+    class roaster_offer_history,roaster_origin_history domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
@@ -745,8 +748,9 @@ judgments add graded labels.
   the vectors to `embeddings.chunk_embeddings`, loads them into a new collection with
   their BM25 weights and payload, and moves the alias searches use onto it in one
   request - nobody ever searches half an index - then drops the builds before it. The
-  collection records the chunks it was built from, and an evaluation refuses an index
-  built from other chunks rather than misread it.
+  collection records the chunks it was built from - a digest of their ids and text, so a
+  clean build that rewrites identical chunks does not orphan it - and an evaluation
+  refuses an index built from other chunks rather than misread it.
 - **A ranking has to repeat to be compared.** Fusing ranks produces exact ties, and
   Qdrant orders tied points as it likes: 17 of 108 hybrid rankings changed between two
   identical calls. Searches ask for ten more than they need, order them by score and then
@@ -1085,8 +1089,35 @@ First run, on the real layers:
   it. The API sources already had their cache.
 - **The first real check found work to do:** the roasters changed their catalogues
   between 22 and 26 September, so the offer model's data is newer than its features -
-  and the sensor would rebuild them. Its drift report still has nothing to compare: the
-  clean layer keeps only the newest catalogue, which is the next step.
+  and the sensor would rebuild them.
+
+### The roasters' catalogues, read after read
+
+`roaster_catalogs` now keeps every read (`accumulate:` in the YAML - one list for file and
+API sources alike - and never pruned). The clean layer builds the catalogue **as it is
+now** - `roaster_coffees`, `roaster_origins`, `roaster_offers`, unchanged for the agent and
+the analysis - and **as it was at each read**: `roaster_offer_history` and
+`roaster_origin_history`, one row per offer (or origin) per read; a day read twice is its
+later read. The offer model learns from the history: an item is one offer in one read
+(`observation_id`), the same offer across reads is its `entity` (`offer_id`), and a price
+is explained by the sheet of its own read, because a sheet can change.
+
+The monitor now has periods to compare for this model, and something more honest to
+measure: the error only on the offers a read brings new (`items.entity`), since the
+ones read again are ones the model may have learned.
+
+| Reads so far | Offers | New | Withdrawn | Re-priced |
+|---|---:|---:|---:|---:|
+| 22 September | 527 | | | |
+| 26 September | 529 | 4 | 2 | 0 |
+
+- Drift between the two reads: 4% of the features, the target not at all; the error on
+  the four new offers is 390 pesos/kg, inside the 398 its champion was accepted with. No
+  reason to retrain - and none was forced.
+- Retrained on both reads, the candidate (v6) was 94% sure against the shop-average
+  baseline, just short of the line; the gate kept v5. The two reads are nearly the same
+  rows twice; the bootstrap resamples whole coffees, so the repetition does not inflate
+  the evidence.
 - **`make prune` never touches a source whose history is its downloads.** It kept the
   newest three partitions of every table, `raw/` included; for the ICO's page that would
   have deleted days that can never be fetched again.

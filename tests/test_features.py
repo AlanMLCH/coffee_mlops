@@ -215,3 +215,28 @@ def test_a_request_that_names_no_variety_claims_nothing_about_them() -> None:
     row = add_coffee_origin(request, ORIGINS).row(0, named=True)
 
     assert row["varieties_n"] is None and row["variety_gesha"] is None
+
+
+def test_an_offer_takes_its_coffees_sheet_as_its_own_read_described_it() -> None:
+    """The shop rewrote the sheet between reads: each read's price is explained by the
+    sheet of that read, not by today's."""
+    history = pl.DataFrame(
+        [
+            origin_row("single", state="Oaxaca") | {"snapshot": "2026-09-22"},
+            origin_row("single", state="Chiapas") | {"snapshot": "2026-09-26"},
+        ],
+        schema_overrides={"varieties": pl.List(pl.String)},
+    )
+    offers = pl.DataFrame(
+        {
+            "observation_id": ["a@2026-09-22", "a@2026-09-26"],
+            "coffee_id": ["single", "single"],
+            "snapshot": ["2026-09-22", "2026-09-26"],
+            "price_mxn_per_kg": [1100.0, 1150.0],
+            "price_outlier": [False, False],
+        }
+    )
+
+    enriched = add_coffee_origin(offers, history).sort("observation_id")
+
+    assert enriched["state"].to_list() == ["Oaxaca", "Chiapas"]

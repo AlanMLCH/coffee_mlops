@@ -360,6 +360,7 @@ def index(domain: Domain = None) -> None:
             EMBEDDINGS,
             EMBEDDINGS_TABLE,
             build_index,
+            chunks_digest,
             embedding_table,
         )
 
@@ -382,7 +383,11 @@ def index(domain: Domain = None) -> None:
         config.name,
         chunks,
         table,
-        {"chunks_partition": source, "embedding_model": model},
+        {
+            "chunks_partition": source,
+            "chunks_digest": chunks_digest(chunks),
+            "embedding_model": model,
+        },
         built_at.strftime("%Y%m%dT%H%M%SZ"),
     )
     typer.echo(f"{EMBEDDINGS_TABLE}: {path} ({table.height:,} chunks, {model})")
@@ -413,7 +418,7 @@ def evaluate(domain: Domain = None) -> None:
     data_dir = _data_dir(config)
     chunks, _ = _corpus_tables(config)
     settings = Settings()
-    client, built = _current_index(config, settings)
+    client, built = _current_index(config, settings, chunks)
 
     keyword: dict[str, str | float] = {
         "k1": K1,
@@ -728,7 +733,7 @@ def mcp_server(domain: Domain = None) -> None:
     dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
     chunks, documents = _corpus_tables(config)
     titles = {row["document_id"]: row for row in documents.iter_rows(named=True)}
-    client, _ = _current_index(config, settings)
+    client, _ = _current_index(config, settings, chunks)
     with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
         embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
         search = IndexSearch(
@@ -764,7 +769,7 @@ def _agent(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent"
     con = read_only(_data_dir(config))
     dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
     chunks, documents = _corpus_tables(config)
-    client, _ = _current_index(config, settings)
+    client, _ = _current_index(config, settings, chunks)
     prompts = register_prompts(settings.mlflow_tracking_uri)
     with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
         generator = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
@@ -790,14 +795,15 @@ def _agent(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent"
 
 
 def _current_index(
-    config: DomainConfig, settings: Settings
+    config: DomainConfig, settings: Settings, chunks: pl.DataFrame
 ) -> tuple["QdrantClient", dict[str, Any]]:
-    """The index, if it was built from the chunks on disk; a plain word if not."""
-    from mlops_core.rag.vectors import index_metadata
+    """The index, if it was built from the chunks on disk - the same ids and text, whatever
+    partition they sit in now; a plain word if not."""
+    from mlops_core.rag.vectors import chunks_digest, index_metadata
 
     client = _qdrant(settings.qdrant_url)
     built = index_metadata(client, config.name)
-    if built.get("chunks_partition") != _chunks_partition(settings.data_dir / config.name):
+    if built.get("chunks_digest") != chunks_digest(chunks):
         typer.echo("The index was built from other chunks: rebuild it with `make index`", err=True)
         raise typer.Exit(code=1)
     return client, built
@@ -930,7 +936,7 @@ def prune(
     adapter = _adapter(domain)
     config = adapter.config
     settings = Settings()
-    history = [f"raw/{name}" for name, source in config.sources.items() if source.accumulate]
+    history = [f"raw/{name}" for name in config.accumulate]
     pruned = prune_layers(
         _data_dir(config), keep if keep is not None else settings.keep_partitions, keep_all=history
     )

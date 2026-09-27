@@ -13,6 +13,7 @@ Three searches, each a step the gate has to let through:
   scale, and RRF never has to pretend they are.
 """
 
+import hashlib
 import uuid
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -125,6 +126,14 @@ def build_index(
         if old.name.startswith(f"{alias}-") and old.name != collection:
             client.delete_collection(old.name)
     return collection
+
+
+def chunks_digest(chunks: pl.DataFrame) -> str:
+    """Twelve characters that change when, and only when, the chunks do - their ids or
+    their text. A clean build writes a new partition of identical chunks; a new cut of the
+    same documents changes them without changing the raw data. Either way, this says."""
+    content = chunks.select("chunk_id", "text").sort("chunk_id").write_csv()
+    return hashlib.sha256(content.encode()).hexdigest()[:12]
 
 
 def index_metadata(client: QdrantClient, domain: str) -> dict[str, Any]:

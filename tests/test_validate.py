@@ -1,5 +1,6 @@
 import shutil
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandera.errors
@@ -210,3 +211,31 @@ def test_a_reader_for_a_file_the_config_does_not_download_is_refused(
 
     with pytest.raises(ValueError, match=r"Readers for files the config does not download"):
         validate_raw(coffee_adapter, raw_dir)
+
+
+def test_an_api_source_named_in_accumulate_keeps_every_read(
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
+) -> None:
+    """The roasters' catalogue, read twice: both reads are checked and stacked."""
+    first = latest_ingestion(raw_dir, "roaster_catalogs")
+    assert first is not None
+    again = raw_dir / "roaster_catalogs" / "ingested_at=20991231T000000000000Z"
+    shutil.copytree(first.partition, again)
+    later = first.manifest.model_copy(update={"ingested_at": datetime(2099, 12, 31, tzinfo=UTC)})
+    (again / "manifest.json").write_text(later.model_dump_json(), encoding="utf-8")
+
+    validated = validate_raw(coffee_adapter, raw_dir)["roaster_catalogs"]
+
+    assert validated.reads == 2 and validated.frame["ingested_at"].n_unique() == 2
+    assert validated.lineage == f"{again.name} and 1 earlier"
+
+
+def test_accumulate_must_name_a_source_that_exists(
+    coffee_adapter: CoffeeAdapter, raw_dir: Path
+) -> None:
+    config = coffee_adapter.config.model_copy(update={"accumulate": ["ico_prices", "tea_leaves"]})
+
+    with pytest.raises(
+        ValueError, match=r"`accumulate` names sources that do not exist: \['tea_leaves'\]"
+    ):
+        validate_raw(CoffeeAdapter(config), raw_dir)

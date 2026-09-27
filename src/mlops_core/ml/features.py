@@ -24,6 +24,7 @@ def features_schema(model: ModelConfig) -> pa.DataFrameSchema:
     cannot ride along."""
     items, spec, split = model.items, model.spec, model.training.split
     group = {split.column: pa.Column(pl.String)} if isinstance(split, GroupSplit) else {}
+    entity = {items.entity: pa.Column(pl.String)} if items.entity else {}
     return pa.DataFrameSchema(
         name=model.features_table,
         strict=True,
@@ -32,6 +33,7 @@ def features_schema(model: ModelConfig) -> pa.DataFrameSchema:
             items.id: pa.Column(pl.String),
             items.period: pa.Column(pl.String),
             items.time: pa.Column(pl.Date),
+            **entity,
             **group,
             **{c: pa.Column(pl.String, nullable=True) for c in spec.categorical},
             **{c: pa.Column(pl.Float64, nullable=True) for c in spec.numeric},

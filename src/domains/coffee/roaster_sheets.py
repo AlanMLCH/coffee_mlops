@@ -88,6 +88,10 @@ OFFERS = pl.Schema(
     }
 )
 
+# The history: every read's offers, each named by the offer and the read.
+HISTORY_OFFERS = ["observation_id", *OFFERS, "price_outlier"]
+READ_AT = "ingested_at"  # the column each read's rows carry, from the raw layer
+
 _TRIM = " .,;:-"
 _PARENS = re.compile(r"\([^)]*\)")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
@@ -173,17 +177,56 @@ def bag_grams(variant_title: str | None, title: str) -> float | None:
 def clean_roasters(
     offers: pl.DataFrame | None, rules: CleaningConfig, read_at: datetime | None = None
 ) -> dict[str, pl.DataFrame]:
-    """The raw offers, read at `read_at` -> `roaster_coffees`, `roaster_origins` and
-    `roaster_offers`.
+    """The raw offers -> the catalogue as it is now (`roaster_coffees`, `roaster_origins`,
+    `roaster_offers`) and as it was at every read (`roaster_offer_history`,
+    `roaster_origin_history`).
 
-    `offers` is None when the shops were never read: the tables are then empty, with
-    their columns, and everything else still builds.
+    The source keeps every read of the shops, each with its `ingested_at`; the newest is
+    the catalogue now, read at `read_at`. A day read twice is its later read. `offers` is
+    None when the shops were never read: the tables are then empty, with their columns,
+    and everything else still builds.
     """
+    reads: list[tuple[datetime | None, pl.DataFrame]]
     if offers is None:
         logger.info("roaster_catalogs was never ingested: its clean tables are empty")
-        offers = pl.DataFrame()
+        reads = [(None, pl.DataFrame())]
     elif read_at is None:
         raise ValueError("Offers need the time their catalogue was read")
+    else:
+        reads = _reads(offers, read_at)
+    tables = [(at, _catalogue(frame, rules, at, log=at == reads[-1][0])) for at, frame in reads]
+    now = tables[-1][1]
+    snapshot = pl.col("snapshot")
+    return now | {
+        "roaster_offer_history": pl.concat([read["roaster_offers"] for _, read in tables])
+        .with_columns(observation_id=pl.concat_str("offer_id", snapshot, separator="@"))
+        .select(HISTORY_OFFERS),
+        "roaster_origin_history": pl.concat(
+            [
+                read["roaster_origins"].with_columns(
+                    pl.lit(at.date().isoformat() if at else None, pl.String).alias("snapshot")
+                )
+                for at, read in tables
+            ]
+        ),
+    }
+
+
+def _reads(offers: pl.DataFrame, read_at: datetime) -> list[tuple[datetime | None, pl.DataFrame]]:
+    """Each day's latest read, oldest first: one catalogue per day."""
+    if READ_AT not in offers.columns:  # one read, handed over as it is
+        return [(read_at, offers)]
+    by_day: dict[object, datetime] = {}
+    for at in sorted(offers[READ_AT].unique().to_list()):
+        by_day[at.date()] = at  # a later read of the day replaces an earlier one
+    return [(at, offers.filter(pl.col(READ_AT) == at).drop(READ_AT)) for at in by_day.values()]
+
+
+def _catalogue(
+    offers: pl.DataFrame, rules: CleaningConfig, read_at: datetime | None, log: bool
+) -> dict[str, pl.DataFrame]:
+    """One read's coffees, origins and offers. Only the newest read logs what it found,
+    or every earlier read would say it again."""
     sheets = rules.roaster_sheets
     coffees, origins = [], []
     unmapped: set[str] = set()
@@ -213,7 +256,7 @@ def clean_roasters(
                 "origins": len(described),
             }
         )
-    if unmapped:
+    if unmapped and log:
         logger.warning(
             "Countries no rule maps, left empty: %s. Add them to cleaning.roaster_sheets.countries",
             sorted(unmapped),
@@ -223,7 +266,7 @@ def clean_roasters(
         "roaster_origins": pl.DataFrame(origins, schema=ORIGINS).sort(
             "shop", "product_id", "origin"
         ),
-        "roaster_offers": _priced(offers, sheets, read_at),
+        "roaster_offers": _priced(offers, sheets, read_at, log),
     }
 
 
@@ -266,7 +309,7 @@ def _origin(record: Mapping[str, str], rules: CleaningConfig) -> dict[str, Any]:
 
 
 def _priced(
-    offers: pl.DataFrame, sheets: RoasterSheetRules, read_at: datetime | None
+    offers: pl.DataFrame, sheets: RoasterSheetRules, read_at: datetime | None, log: bool = True
 ) -> pl.DataFrame:
     """Each offer with the grams its titles state, the price per kilogram, and whether
     that price is so far from the product's other offers that it was entered wrong.
@@ -296,7 +339,7 @@ def _priced(
                 "snapshot": read_at.date().isoformat() if read_at else None,
             }
         )
-    if contradicted:
+    if contradicted and log:
         # Packaging accounts for some (12 bags of 340 g ship as 4.4 kg); a wrong entry
         # for the rest. Either way the title is what the buyer is sold.
         logger.info("The platform's weight differs from the titles in %d offers", contradicted)
@@ -309,7 +352,7 @@ def _priced(
         .with_columns(price_outlier=(ratio > limit) | (ratio < 1 / limit))
         .sort("shop", "product_id", "variant_id")
     )
-    if outliers := priced["price_outlier"].sum():
+    if (outliers := priced["price_outlier"].sum()) and log:
         logger.warning("%d offers priced far off their product's other offers", outliers)
     return priced
 

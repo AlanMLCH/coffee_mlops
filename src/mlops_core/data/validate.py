@@ -10,21 +10,23 @@ module that knows that service's shape). A source that has never been ingested b
 its credential is missing is reported and skipped, not raised: the rest of the pipeline
 still has work to do.
 
-A source whose each download is a window (`accumulate`) is read whole: every ingestion,
-each checked against the contract on its own, stacked with the time of its download.
+A source whose history is its downloads (named in the config's `accumulate`, file or API
+alike) is read whole: every ingestion, each checked against the contract on its own,
+stacked with the time of its download.
 """
 
 import json
 import logging
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pandera.polars as pa
 import polars as pl
 
-from mlops_core.adapter import DomainAdapter, FileReader
+from mlops_core.adapter import DomainAdapter, FileReader, JsonReader
 from mlops_core.config import SourceConfig
 from mlops_core.contracts import check_contract
 from mlops_core.data.documents import DOCUMENT_PARTS, read_document
@@ -89,39 +91,34 @@ def read_layer(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
 
 def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSource]:
     """Return each source validated and typed, or raise `SchemaErrors` listing every failure."""
+    config = adapter.config
     contracts = adapter.raw_contracts()
     readers = adapter.file_readers()
-    unknown = sorted(set(readers) - set(adapter.config.sources))
+    json_readers = adapter.json_readers()
+    unknown = sorted(set(readers) - set(config.sources))
     if unknown:
         raise ValueError(f"Readers for files the config does not download: {unknown}")
+    nameless = sorted(set(config.accumulate) - set(config.sources) - set(json_readers))
+    if nameless:
+        raise ValueError(f"`accumulate` names sources that do not exist: {nameless}")
+    history = set(config.accumulate)
     validated = {}
-    for name, source in adapter.config.sources.items():
-        downloads = ingestions(raw_dir, name) if source.accumulate else []
-        latest = downloads[-1] if downloads else latest_ingestion(raw_dir, name)
-        if latest is None:
+    for name, source in config.sources.items():
+        if latest_ingestion(raw_dir, name) is None:
             raise FileNotFoundError(
                 f"No raw ingestion for '{name}' in {raw_dir}; run extract first"
             )
-        if not source.accumulate:
-            validated[name] = _checked(contracts[name], latest, _read(latest, source, readers))
-            continue
-        frames = [
-            _checked(
-                contracts[name], artifact, _read(artifact, source, readers)
-            ).frame.with_columns(pl.lit(artifact.manifest.ingested_at).alias(INGESTED_AT))
-            for artifact in downloads
-        ]
-        validated[name] = ValidatedSource(latest, pl.concat(frames), len(downloads))
+        read = partial(_read, source=source, readers=readers)
+        validated[name] = _validated(name, raw_dir, contracts[name], name in history, read)
 
-    for name, read_json in adapter.json_readers().items():
-        artifact = latest_ingestion(raw_dir, name)
-        if artifact is None:
+    for name, read_json in json_readers.items():
+        if latest_ingestion(raw_dir, name) is None:
             # Not an error: a source whose credential is missing is skipped at extract,
             # and everything that does not depend on it still builds.
             logger.info("%s has never been ingested; skipping its contract", name)
             continue
-        payload = json.loads(artifact.path.read_text(encoding="utf-8"))
-        validated[name] = _checked(contracts[name], artifact, read_json(payload))
+        read = partial(_read_json, reader=read_json)
+        validated[name] = _validated(name, raw_dir, contracts[name], name in history, read)
 
     for document in adapter.config.documents:
         artifact = latest_ingestion(raw_dir, document.name)
@@ -133,6 +130,31 @@ def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSo
             DOCUMENT_PARTS, artifact, read_document(artifact, document)
         )
     return validated
+
+
+def _validated(
+    name: str,
+    raw_dir: Path,
+    contract: pa.DataFrameSchema,
+    accumulate: bool,
+    read: Callable[[RawArtifact], pl.DataFrame],
+) -> ValidatedSource:
+    """The latest download, checked; or, for a source whose history is its downloads,
+    every one of them checked on its own and stacked with the time it was read."""
+    downloads = ingestions(raw_dir, name)
+    if not accumulate:
+        return _checked(contract, downloads[-1], read(downloads[-1]))
+    frames = [
+        _checked(contract, artifact, read(artifact)).frame.with_columns(
+            pl.lit(artifact.manifest.ingested_at).alias(INGESTED_AT)
+        )
+        for artifact in downloads
+    ]
+    return ValidatedSource(downloads[-1], pl.concat(frames), len(downloads))
+
+
+def _read_json(artifact: RawArtifact, reader: JsonReader) -> pl.DataFrame:
+    return reader(json.loads(artifact.path.read_text(encoding="utf-8")))
 
 
 def _read(

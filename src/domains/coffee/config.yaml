@@ -80,7 +80,11 @@ sources:
   ico_prices:
     url: https://ico.org/documents/I-CIP.pdf
     filename: I-CIP.pdf
-    accumulate: true
+
+# Raw sources whose history is every download, not the latest (stage 4): the ICO's page
+# shows only the current month, and each read of the roasters' catalogues is an
+# observation of what they sold then. Every download is kept, never pruned.
+accumulate: [ico_prices, roaster_catalogs]
 
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
@@ -648,12 +652,15 @@ models:
     example:
       {shop: almanegra, bag_grams: 250, country: Mexico, state: Oaxaca, processing_method: washed,
        variety: typica, altitude_m: 1600}
-    # One item is one coffee in one size, as a shop lists it.
+    # One item is one coffee in one size as one read of the catalogues found it: the same
+    # offer read again is another observation of it. Drift and the model's error are
+    # measured read against read, the error only on offers a read brings new.
     items:
-      table: roaster_offers
-      id: offer_id
+      table: roaster_offer_history
+      id: observation_id # almanegra-4432@2026-09-26
+      entity: offer_id # the same offer across reads
       time: observed_on # when the catalogue was read
-      period: snapshot # which read: drift across reads is stage 4
+      period: snapshot # which read
     spec:
       target: price_mxn_per_kg
       categorical: [shop, country, state, processing_method, variety, producer]

@@ -201,3 +201,44 @@ def test_offers_without_the_time_they_were_read_are_refused() -> None:
 
     with pytest.raises(ValueError, match="read"):
         clean_roasters(raw, RULES)
+
+
+def test_every_read_is_kept_and_the_newest_is_the_catalogue_now(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Three reads, two on one day: the day is its later read. The catalogue now is the
+    newest read; the history holds one row per offer per day read."""
+    monday, monday_later = (
+        datetime(2026, 9, 21, 9, tzinfo=UTC),
+        datetime(2026, 9, 21, 18, tzinfo=UTC),
+    )
+    friday = datetime(2026, 9, 25, 9, tzinfo=UTC)
+    sheet = "<p>Proceso: Lavado</p>"  # every coffee has an origin to keep
+    korgua = offer("p", "v", "Korgua", "5/16 kg", 349.0, body_html=sheet)
+    reads = {
+        monday: [offer("p", "v", "Korgua", "5/16 kg", 300.0, body_html=sheet)],
+        monday_later: [korgua],
+        friday: [korgua, offer("q", "w", "Corahe", "250 g", 400.0, body_html=sheet)],
+    }
+    raw = pl.concat(
+        pl.DataFrame(rows).with_columns(pl.lit(at).alias("ingested_at"))
+        for at, rows in reads.items()
+    )
+
+    with caplog.at_level(logging.INFO):
+        tables = clean_roasters(raw, RULES, friday)
+
+    contracts = clean_schemas(RULES)
+    history = check_contract(contracts["roaster_offer_history"], tables["roaster_offer_history"])
+    assert history.select("observation_id", "price_mxn").rows() == [
+        ("shop-v@2026-09-21", 349.0),  # the day's later read
+        ("shop-v@2026-09-25", 349.0),
+        ("shop-w@2026-09-25", 400.0),
+    ]
+    origins = check_contract(contracts["roaster_origin_history"], tables["roaster_origin_history"])
+    assert origins.select("coffee_id", "snapshot").rows() == [
+        ("shop-p", "2026-09-21"), ("shop-p", "2026-09-25"), ("shop-q", "2026-09-25")
+    ]  # fmt: skip
+    assert tables["roaster_offers"]["offer_id"].to_list() == ["shop-v", "shop-w"]  # Friday's
+    assert set(tables["roaster_offers"]["snapshot"]) == {"2026-09-25"}
+    assert caplog.text.count("differs from the titles") <= 1  # only the newest read speaks

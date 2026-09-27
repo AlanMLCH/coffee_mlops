@@ -125,7 +125,15 @@ def detect_drift(
     feature_rows = columns.filter(pl.col("role") == "feature")
     drifted_share = float(feature_rows["drifted"].mean() or 0.0)  # type: ignore[arg-type]
     target_drifted = bool(columns.filter(pl.col("role") == "target")["drifted"].any())
-    current_mae = _mae(current, spec.target) if predictions is not None else None
+    # An entity seen in an earlier period is one the model may have learned: only the
+    # new ones say how it does on what it has not seen.
+    fresh = (
+        current.filter(~pl.col(items.entity).is_in(reference[items.entity].implode()))
+        if items.entity
+        else current
+    )
+    current_mae = _mae(fresh, spec.target) if predictions is not None else None
+    scope = f"the {fresh.height} new items of {periods[-1]}" if items.entity else periods[-1]
 
     reasons = []
     if drifted_share >= drift_share:
@@ -136,7 +144,7 @@ def detect_drift(
         reasons.append(f"the target, {spec.target}, drifted")
     if current_mae is not None and accepted_mae is not None and current_mae > accepted_mae:
         reasons.append(
-            f"the error on {periods[-1]} is {current_mae:.3f}, above the {accepted_mae:.3f} "
+            f"the error on {scope} is {current_mae:.3f}, above the {accepted_mae:.3f} "
             "the champion was accepted with"
         )
     return DriftResult(

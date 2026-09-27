@@ -175,6 +175,25 @@ World Bank's monthly averages of two of them since 1960, converted from $/kg.
 A month's average is not the mean of its daily rows until the month is over: the ICO's
 rows cover the days published so far.
 
+## `clean.roaster_offer_history` — one offer as one read of the catalogues found it
+
+Every read of the shops is kept (stage 4): the tables above are the catalogue as it is
+now, this one is what it was at each read - the same columns as `clean.roaster_offers`,
+one row per offer per read. A day read twice is its later read. **For today's
+catalogue, use `clean.roaster_offers`**; this table counts each offer once per read.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `observation_id` | String | `<offer_id>@<snapshot>`, unique: one offer in one read |
+| `offer_id`, `coffee_id`, `shop`, `product_id`, `variant_id`, `variant_title` | String | As in `clean.roaster_offers`; `offer_id` repeats across reads |
+| `price_mxn`, `bag_grams`, `price_mxn_per_kg`, `price_outlier` | | As that read listed them |
+| `observed_on`, `snapshot` | | The read: its date, and the same as text |
+
+## `clean.roaster_origin_history` — one origin as one read described it
+
+`clean.roaster_origins` for every read, with its `snapshot`: a coffee's sheet can
+change between reads, and a price is explained by the sheet of its own read.
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**
@@ -203,15 +222,17 @@ sensory scores are dropped here, so no downstream consumer can pick them up.
 
 ## `features.offer_features` — price model input
 
-`clean.roaster_offers` with a usable price (a size to divide by, no `price_outlier`),
-each joined to what its coffee's sheet says. A blend's origins are summarised per
+`clean.roaster_offer_history` with a usable price (a size to divide by, no
+`price_outlier`), each joined to what its coffee's sheet said in the same read: one row
+per offer per read. A blend's origins are summarised per
 attribute: the value they agree on, `multiple` where they differ, null where no origin
 states it. The listed `price_mxn` is dropped: the target is it divided by the size.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `offer_id`, `snapshot`, `observed_on` | | Keys, carried for joins and studies |
-| `coffee_id` | String | The group of the split: every size of one coffee is on one side |
+| `observation_id` | String | One offer in one read: `<offer_id>@<snapshot>` |
+| `offer_id`, `snapshot`, `observed_on` | | The offer across reads, and the read |
+| `coffee_id` | String | The group of the split: every size and every read of one coffee is on one side |
 | `shop`, `country`, `state`, `processing_method`, `variety`, `producer` | String? | Categorical features; the origin ones summarised as above |
 | `altitude_m` | Float? | Mean of the midpoints of the coffee's origin altitude ranges |
 | `bag_grams` | Float? | The size, for the discount a bigger bag gets |
@@ -252,7 +273,7 @@ date. A month whose month before is missing is left out.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys back to `clean.roaster_offers`: join on `offer_id` for the shop, size or listed price |
+| `observation_id`, `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys: one row per offer per read. Join `clean.roaster_offer_history` on `observation_id` for the shop, size or price listed in that read |
 | `prediction` | Float | Predicted `price_mxn_per_kg` |
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |

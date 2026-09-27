@@ -93,10 +93,6 @@ class SourceConfig(BaseModel):
     sheet: str | None = None
     header_row: int = Field(0, ge=0)
     skip_rows: int = Field(0, ge=0)
-    # Each download is a window - the current month, say - so the history is every
-    # ingestion, not the latest: the frame is all of them, each row with the
-    # `ingested_at` of its download, and the domain decides which reading of a row wins.
-    accumulate: bool = False
     # How long a download stays fresh: a run within this many hours of the last check
     # does not download again. Unset, every run downloads (and stores only a change). A
     # scheduled daily run would otherwise fetch an 83 MB boundary file that last
@@ -225,6 +221,10 @@ class ItemsConfig(BaseModel):
     # an item may see: nothing published after it.
     time: str
     period: str  # the column that separates periods, for drift and residuals
+    # What stays the same thing across periods when an item is observed again - an offer
+    # read week after week - where `id` names one observation. The monitor measures the
+    # error only on the entities new in the newest period: the others the model has seen.
+    entity: str | None = None
 
 
 class ModelSpec(BaseModel):
@@ -408,7 +408,8 @@ class ModelConfig(BaseModel):
         """Carried through every model table, for joins and for splitting."""
         items, split = self.items, self.training.split
         grouped = [split.column] if isinstance(split, GroupSplit) else []
-        return [items.id, items.period, items.time, *grouped]
+        entity = [items.entity] if items.entity else []
+        return list(dict.fromkeys([items.id, items.period, items.time, *entity, *grouped]))
 
 
 class AnalysisConfig(BaseModel):
@@ -456,6 +457,12 @@ class DomainConfig(BaseModel):
     documents: list[DocumentConfig] = []  # the corpus; empty until a domain has one
     corpus: CorpusConfig | None = None  # required once there are documents
     models: list[ModelConfig] = Field(min_length=1)
+    # Raw sources whose history is every download, not the latest: a page that shows only
+    # the current month, a catalogue read week after week. Each download is checked on its
+    # own and the frame is all of them, each row with its `ingested_at`; the domain decides
+    # which reading of a row wins, and `prune` never touches them. File and API sources
+    # alike, by name.
+    accumulate: list[str] = []
     analysis: AnalysisConfig
     monitoring: MonitoringConfig
     schedule: ScheduleConfig | None = None  # unset, nothing runs until someone asks

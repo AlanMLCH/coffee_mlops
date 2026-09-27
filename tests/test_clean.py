@@ -206,6 +206,8 @@ def test_build_clean_writes_every_table_with_lineage(
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
+        "roaster_offer_history",
+        "roaster_origin_history",
         "price_indicators",
         # The corpus', built by the core from the documents the domain lists.
         "documents",

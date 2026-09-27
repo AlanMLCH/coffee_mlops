@@ -15,6 +15,7 @@ from domains.coffee.schemas import (
     MEXICO_PRODUCTION,
     PRICE_INDICATORS,
     ROASTER_COFFEES,
+    ROASTER_OFFER_HISTORY,
     ROASTER_OFFERS,
     coffee_reviews_schema,
     coffee_shops_schema,
@@ -43,6 +44,7 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "roaster_origins": list(roaster_origins_schema(coffee_config.cleaning).columns),
         "roaster_offers": list(ROASTER_OFFERS.columns),
         "price_indicators": list(PRICE_INDICATORS.columns),
+        "roaster_offer_history": list(ROASTER_OFFER_HISTORY.columns),
         **{
             model.features_table: list(features_schema(model).columns)
             for model in coffee_config.models
@@ -77,6 +79,8 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "roaster_origins",
         "roaster_offers",
         "price_indicators",
+        "roaster_offer_history",
+        "roaster_origin_history",
         "review_features",
         "offer_features",
         "green_price_features",

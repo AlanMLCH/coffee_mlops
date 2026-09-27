@@ -40,7 +40,7 @@ from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE
 from mlops_core.data.corpus import CHUNKS_COLUMNS
 from mlops_core.rag import llm
 from mlops_core.rag.llm import ollama_client
-from mlops_core.rag.vectors import build_index, embedding_table
+from mlops_core.rag.vectors import build_index, chunks_digest, embedding_table
 from mlops_core.storage import latest_partition, write_table
 
 OLLAMA = Path(__file__).parent / "fixtures" / "ollama"
@@ -297,6 +297,7 @@ def test_every_answer_is_one_trace_that_names_its_prompts(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}")
+    mlflow.set_experiment("agent")  # not whichever an earlier test left active
     generator = Scripted(
         RouteReply=lambda p: {"route": "knowledge"},
         AnswerReply=lambda p: {"text": "Acidity develops [c1].", "citations": ["c1"]},
@@ -354,7 +355,8 @@ def stood_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[Scrip
     assert partition is not None
     vectors = np.ones((1, 4), dtype=np.float32) / 2
     build_index(client, "coffee", chunks, embedding_table(chunks, vectors),
-                {"chunks_partition": partition.name, "embedding_model": "e@1"}, "s")  # fmt: skip
+                {"chunks_partition": partition.name, "chunks_digest": chunks_digest(chunks),
+                 "embedding_model": "e@1"}, "s")  # fmt: skip
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(cli, "_qdrant", lambda url: client)
     monkeypatch.setattr(

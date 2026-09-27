@@ -15,7 +15,9 @@ A test holds them to it.
 import polars as pl
 
 CONTEXT_TABLE = "market_context"
-ORIGINS_TABLE = "roaster_origins"
+# The offer model learns from every read of the catalogues, and an offer takes its coffee's
+# sheet as that same read described it: a sheet can change between reads.
+ORIGINS_TABLE = "roaster_origin_history"
 # A blend whose origins disagree on an attribute: not unknown, and not any one of them.
 MULTIPLE = "multiple"
 # What an offer's coffee says about where it grew, summarised to one value per coffee.
@@ -92,22 +94,21 @@ def coffee_origins(origins: pl.DataFrame) -> pl.DataFrame:
     origins and varieties it names, and the altitude as the mean of their ranges'
     midpoints."""
     midpoint = (pl.col("altitude_min_m") + pl.col("altitude_max_m")) / 2
-    attributes = origins.group_by("coffee_id").agg(
+    keys = _read_keys(origins)
+    attributes = origins.group_by(keys).agg(
         *[_agreed(column) for column in ORIGIN_ATTRIBUTES],
         midpoint.mean().alias("altitude_m"),
         pl.len().alias("origins_n"),  # more than one is a blend
     )
     listed = (
-        origins.select("coffee_id", "varieties")
-        .explode("varieties")
-        .rename({"varieties": "variety"})
+        origins.select(*keys, "varieties").explode("varieties").rename({"varieties": "variety"})
     )
     # A sheet that lists no variety knows nothing about varieties: its counters and flags
     # are null, not zero. Zero would say "this coffee is not a Gesha", which is a claim
     # the sheet never made.
     stated = pl.col("variety").drop_nulls()
     names_one = stated.len() > 0
-    varieties = listed.group_by("coffee_id").agg(
+    varieties = listed.group_by(keys).agg(
         _agreed("variety"),
         pl.when(names_one).then(stated.n_unique()).cast(pl.Float64).alias("varieties_n"),
         *[
@@ -118,7 +119,12 @@ def coffee_origins(origins: pl.DataFrame) -> pl.DataFrame:
             for variety in VARIETY_FEATURES
         ],
     )
-    return attributes.join(varieties, on="coffee_id", how="left")
+    return attributes.join(varieties, on=keys, how="left")
+
+
+def _read_keys(origins: pl.DataFrame) -> list[str]:
+    """A coffee, or a coffee as one read of the catalogues described it."""
+    return ["coffee_id", "snapshot"] if "snapshot" in origins.columns else ["coffee_id"]
 
 
 def _as_stated() -> list[pl.Expr]:
@@ -153,4 +159,4 @@ def add_coffee_origin(items: pl.DataFrame, context: pl.DataFrame) -> pl.DataFram
     priced = items.filter(
         pl.col("price_mxn_per_kg").is_not_null() & ~pl.col("price_outlier").fill_null(False)
     )
-    return priced.join(coffee_origins(context), on="coffee_id", how="left")
+    return priced.join(coffee_origins(context), on=_read_keys(context), how="left")

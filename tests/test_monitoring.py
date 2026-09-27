@@ -207,3 +207,28 @@ def test_a_model_with_one_period_leaves_no_record(
     assert latest_verdict(data_dir, "price") is None
     write_table(pl.DataFrame({"v": [1]}), data_dir / MONITORING / "price_drift", {})
     assert latest_verdict(data_dir, "price") is None  # a table from before verdicts were kept
+
+
+def test_the_error_counts_only_what_a_period_brings_new() -> None:
+    """An item read again is one the model may have learned; with `entity` set, only the
+    ones new in the newest period measure its error."""
+    followed = model().model_copy(
+        update={"items": model().items.model_copy(update={"entity": "thing"})}
+    )
+    # Every period has things 0-199; 2026's from 150 on are new ones, never seen before.
+    index = pl.col("item_id").str.split("-").list.get(1)
+    new = pl.col("item_id").str.starts_with("2026") & (index.cast(pl.Int64) >= 150)
+    table = features().with_columns(
+        pl.when(new).then(pl.lit("new-") + index).otherwise(pl.lit("thing-") + index).alias("thing")
+    )
+    scored = table.select(
+        "item_id", (pl.col("price") + pl.when(new).then(3.0).otherwise(0.0)).alias("prediction")
+    )
+
+    result = detect_drift(followed, table, scored, 0.5, accepted_mae=2.0)
+
+    assert result is not None and result.current_mae == pytest.approx(3.0)
+    assert result.reasons == [
+        "the error on the 50 new items of 2026 is 3.000, above the 2.000 the champion was "
+        "accepted with"
+    ]

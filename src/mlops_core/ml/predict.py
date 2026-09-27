@@ -24,6 +24,7 @@ def predictions_schema(model: ModelConfig) -> pa.DataFrameSchema:
     """One row per scored item, carrying the item's keys."""
     items, split = model.items, model.training.split
     group = {split.column: pa.Column(pl.String)} if isinstance(split, GroupSplit) else {}
+    entity = {items.entity: pa.Column(pl.String)} if items.entity else {}
     return pa.DataFrameSchema(
         name=model.predictions_table,
         strict=True,
@@ -32,6 +33,7 @@ def predictions_schema(model: ModelConfig) -> pa.DataFrameSchema:
             items.id: pa.Column(pl.String),
             items.period: pa.Column(pl.String),
             items.time: pa.Column(pl.Date),
+            **entity,
             **group,
             "prediction": pa.Column(pl.Float64),
             # Which model produced the row: the join key for monitoring in stage 4.

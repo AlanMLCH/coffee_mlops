@@ -60,8 +60,9 @@ def market_context(tmp_path: Path) -> pl.DataFrame:
 @pytest.fixture
 def roaster_origins(tmp_path: Path) -> None:
     """The offer model's context: no coffee has to be listed for a request to be priced."""
-    empty = clean_roasters(None, domains.coffee.adapter().config.cleaning)["roaster_origins"]
-    write_table(empty, tmp_path / "coffee" / "clean" / "roaster_origins", inputs={})
+    tables = clean_roasters(None, domains.coffee.adapter().config.cleaning)
+    history = tables["roaster_origin_history"]
+    write_table(history, tmp_path / "coffee" / "clean" / "roaster_origin_history", inputs={})
 
 
 @pytest.fixture

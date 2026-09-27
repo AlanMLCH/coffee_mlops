@@ -412,6 +412,8 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "roaster_coffees": ROASTER_COFFEES,
         "roaster_origins": roaster_origins_schema(rules),
         "roaster_offers": ROASTER_OFFERS,
+        "roaster_offer_history": ROASTER_OFFER_HISTORY,
+        "roaster_origin_history": roaster_origin_history_schema(rules),
         "price_indicators": PRICE_INDICATORS,
     }
 
@@ -497,6 +499,32 @@ ROASTER_OFFERS = pa.DataFrameSchema(
         "snapshot": pa.Column(pl.String),
     },
 )
+
+
+# Every read of the catalogues, one row per offer per read: the latest read of a day
+# stands for the day. The tables above are the catalogue as it is now.
+ROASTER_OFFER_HISTORY = pa.DataFrameSchema(
+    name="roaster_offer_history",
+    strict=True,
+    unique=["offer_id", "snapshot"],
+    columns={
+        "observation_id": pa.Column(pl.String, unique=True),  # "<offer id>@<snapshot>"
+        **{name: column for name, column in ROASTER_OFFERS.columns.items() if name != "offer_id"},
+        "offer_id": pa.Column(pl.String),  # the same offer, read again: not unique here
+    },
+)
+
+
+def roaster_origin_history_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """`roaster_origins` for every read: a sheet can change between reads."""
+    current = roaster_origins_schema(rules)
+    return pa.DataFrameSchema(
+        name="roaster_origin_history",
+        strict=True,
+        unique=["coffee_id", "origin", "snapshot"],
+        columns={**current.columns, "snapshot": pa.Column(pl.String)},
+        checks=current.checks,
+    )
 
 
 PRICE_INDICATORS = pa.DataFrameSchema(
