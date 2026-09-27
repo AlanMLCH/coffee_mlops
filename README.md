@@ -864,7 +864,9 @@ route: prediction | trace: tr-4fbb2d0ed644b5d2fcc8d8c0a1204b13
   request bodies now lower-case the closed vocabularies.
 - The embedding model runs with a 512-token context for questions: at its default it
   did not fit in VRAM beside the generator, and Ollama would have swapped models on
-  every question.
+  every question. The setting only reached Ollama from 2026-09-27: the embedding
+  requests never sent their options, so the model always loaded at 4,096 (2.37 GB, not
+  1.01) - found when the pair no longer fit on a busier card.
 
 ### The agent, end to end
 

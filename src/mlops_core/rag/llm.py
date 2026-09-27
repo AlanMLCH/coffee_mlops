@@ -58,7 +58,12 @@ class LocalModel:
         vectors = []
         for start in range(0, len(texts), batch):
             chunk = list(texts[start : start + batch])
-            response = self._client.post("/api/embed", json={"model": self.model, "input": chunk})
+            body: dict[str, object] = {"model": self.model, "input": chunk}
+            if self._options:
+                # The context the model is loaded with: without it Ollama loads the
+                # default, and a query-sized model is the one that fits beside another.
+                body["options"] = self._options
+            response = self._client.post("/api/embed", json=body)
             response.raise_for_status()
             vectors.extend(response.json()["embeddings"])
         return np.array(vectors, dtype=np.float32)

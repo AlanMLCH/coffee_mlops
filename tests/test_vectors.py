@@ -35,6 +35,7 @@ from mlops_core.rag.questions import (
     save_questions,
 )
 from mlops_core.rag.vectors import (
+    QUERY_OPTIONS,
     IndexSearch,
     build_index,
     embedding_table,
@@ -168,8 +169,19 @@ def test_texts_are_embedded_in_batches_as_unit_vectors() -> None:
 
     assert len(seen) == 2
     assert json.loads(seen[0].content)["input"] == ["a", "b"]
+    assert "options" not in json.loads(seen[0].content)  # the model's own context
     assert vectors.shape == (4, 1024)
     assert np.allclose(np.linalg.norm(vectors, axis=1), 1, atol=1e-3)
+
+
+def test_a_query_embedder_asks_for_its_small_context() -> None:
+    """Sent with every request, or Ollama loads the model at its default of 4,096 - 2.37 GB
+    instead of 1.01 - and the agent's two models no longer fit on the card together."""
+    seen: list[httpx.Request] = []
+    with ollama_client("http://ollama.test", recorded_embeddings(seen)) as client:
+        LocalModel(client, "qwen3-embedding:0.6b", QUERY_OPTIONS).embed(["a question"])
+
+    assert json.loads(seen[0].content)["options"] == {"num_ctx": 512}
 
 
 # --- The commands ----------------------------------------------------------------------------
