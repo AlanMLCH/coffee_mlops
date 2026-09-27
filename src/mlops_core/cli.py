@@ -136,7 +136,12 @@ def extract(domain: Domain = None) -> None:
     with http_client() as client:
         artifacts = extract_all(config, data_dir / "raw", client)
         api = adapter.extract(data_dir, client)
-        corpus, absent = fetch_documents(config.documents, data_dir, client)
+        corpus, absent = fetch_documents(
+            config.documents,
+            data_dir,
+            client,
+            refresh_hours=config.corpus.refresh_hours if config.corpus else None,
+        )
     for name, reason in (api.skipped | absent).items():
         typer.echo(f"{name}: skipped, {reason}", err=True)
     for name, artifact in (artifacts | api.artifacts | corpus).items():
@@ -667,7 +672,7 @@ def monitor(
 
     config = _adapter(domain).config
     settings = Settings()
-    due = []
+    due: list[tuple[str, str]] = []
     for name in _models(config, model):
         result = monitor_model(config, name, _data_dir(config), settings.mlflow_tracking_uri)
         if result is None:
@@ -680,13 +685,22 @@ def monitor(
         for reason in result.reasons:
             typer.echo(f"  due for retraining: {reason}")
         if result.retrain:
-            due.append(name)
+            due.append((name, result.data_version))
         else:
             typer.echo("  no reason to retrain")
-    if retrain:
-        for name in due:
-            typer.echo(f"retraining {name}")
-            ml_run(domain, name)
+    if not retrain:
+        return
+    from mlops_core.ml.train import trained_on
+
+    for name, version in due:
+        # A source that stopped changing keeps its drift: retraining on the same data
+        # again would give the same candidate, and the gate the same answer.
+        run = trained_on(config, name, version) if version else None
+        if run is not None:
+            typer.echo(f"{name}: already trained on this data (run {run}), not again")
+            continue
+        typer.echo(f"retraining {name}")
+        ml_run(domain, name)
 
 
 @app.command("mcp")
@@ -911,11 +925,15 @@ def prune(
     domain: Domain = None,
     keep: Annotated[int | None, typer.Option(help="Complete partitions to keep per table")] = None,
 ) -> None:
-    """Delete old partitions of every layer, keeping the newest ones."""
+    """Delete old partitions of every layer, keeping the newest ones - and every download
+    of a source whose history is its downloads."""
     adapter = _adapter(domain)
     config = adapter.config
     settings = Settings()
-    pruned = prune_layers(_data_dir(config), keep if keep is not None else settings.keep_partitions)
+    history = [f"raw/{name}" for name, source in config.sources.items() if source.accumulate]
+    pruned = prune_layers(
+        _data_dir(config), keep if keep is not None else settings.keep_partitions, keep_all=history
+    )
     for table, count in pruned.items():
         typer.echo(f"{table}: {count} partitions removed")
     if not pruned:

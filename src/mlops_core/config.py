@@ -97,6 +97,11 @@ class SourceConfig(BaseModel):
     # ingestion, not the latest: the frame is all of them, each row with the
     # `ingested_at` of its download, and the domain decides which reading of a row wins.
     accumulate: bool = False
+    # How long a download stays fresh: a run within this many hours of the last check
+    # does not download again. Unset, every run downloads (and stores only a change). A
+    # scheduled daily run would otherwise fetch an 83 MB boundary file that last
+    # changed in 2020, every day.
+    refresh_hours: float | None = Field(None, gt=0)
 
     @model_validator(mode="after")
     def _zip_needs_member(self) -> Self:
@@ -195,6 +200,9 @@ class CorpusConfig(BaseModel):
 
     topics: dict[str, TopicConfig] = Field(min_length=1)
     chunking: ChunkingConfig
+    # How long a fetched document stays fresh (see `SourceConfig.refresh_hours`): papers
+    # and catalogues are revised rarely, and the corpus weighs tens of megabytes.
+    refresh_hours: float | None = Field(None, gt=0)
 
 
 # The clean tables the core builds from a corpus, next to the domain's own.
@@ -428,6 +436,16 @@ class MonitoringConfig(BaseModel):
     drift_share: float = Field(gt=0, le=1)
 
 
+class ScheduleConfig(BaseModel):
+    """When the orchestrator runs the data pipeline on its own. The model pipeline needs
+    no clock: it runs when the data it reads changes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    data: str = Field(pattern=r"^\S+ \S+ \S+ \S+ \S+$")  # cron: minute hour day month weekday
+    timezone: str  # IANA, e.g. Europe/Madrid: the cron is read in it
+
+
 class DomainConfig(BaseModel):
     """The sections the core runs. A domain subclasses this to add its own."""
 
@@ -440,6 +458,7 @@ class DomainConfig(BaseModel):
     models: list[ModelConfig] = Field(min_length=1)
     analysis: AnalysisConfig
     monitoring: MonitoringConfig
+    schedule: ScheduleConfig | None = None  # unset, nothing runs until someone asks
 
     @model_validator(mode="after")
     def _documents_are_named_once(self) -> Self:

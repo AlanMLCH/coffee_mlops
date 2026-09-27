@@ -140,7 +140,7 @@ def test_the_same_inventory_in_another_order_is_not_new_data(tmp_path: Path) -> 
     backwards.handler = _reversing(backwards.handler)  # type: ignore[method-assign]
     second = ingest_establishments(build_client(backwards, tmp_path / "b"), CONFIG, TOKEN, raw)
 
-    assert len(list((raw / "denue_cafes").iterdir())) == 1  # one partition, not two
+    assert len(list((raw / "denue_cafes").glob("*=*"))) == 1  # one partition, not two
     assert json.loads(second.path.read_text(encoding="utf-8"))[0]["Id"] == "1"
 
 

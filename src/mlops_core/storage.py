@@ -7,9 +7,11 @@ a partition without one is incomplete and ignored. Readers always take the newes
 complete partition: a writer never blocks or corrupts a reader.
 """
 
+import hashlib
+import json
 import logging
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -65,6 +67,50 @@ def write_table(
     return path
 
 
+def data_version(data_dir: Path, clean: Mapping[str, str]) -> str:
+    """Twelve characters that change when, and only when, the raw data behind some clean
+    tables does.
+
+    `clean` maps each table to the partition read. A clean build writes new partitions
+    even when nothing changed, so their names say nothing; what each was built from does.
+    Raw partitions are content-addressed - a download identical to the last one stores
+    nothing - so the raw partitions behind a table name its data. A clean partition whose
+    manifest is gone (pruned) stands for itself.
+    """
+    raw: dict[str, str] = {}
+    for table, partition in sorted(clean.items()):
+        manifest = data_dir / "clean" / table / partition / MANIFEST_NAME
+        if not manifest.is_file():
+            raw[table] = partition
+            continue
+        # Keyed by table as well: two tables may name the same source from different
+        # downloads, and one must not hide the other.
+        for source, lineage in TableManifest.model_validate_json(
+            manifest.read_text()
+        ).inputs.items():
+            raw[f"{table}/{source}"] = lineage
+    digest = hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()
+    return digest[:12]
+
+
+def latest_data_version(data_dir: Path, tables: Sequence[str]) -> str | None:
+    """The data version of the newest partitions of `tables`; None until all exist."""
+    partitions = {table: latest_partition(data_dir / "clean" / table) for table in tables}
+    if any(partition is None for partition in partitions.values()):
+        return None
+    return data_version(data_dir, {t: p.name for t, p in partitions.items() if p is not None})
+
+
+def built_from(data_dir: Path, table_dir: Path) -> str | None:
+    """The data version a derived table's newest partition was built from (the clean
+    partitions its manifest lists); None if it has none."""
+    partition = latest_partition(table_dir)
+    if partition is None:
+        return None
+    manifest = TableManifest.model_validate_json((partition / MANIFEST_NAME).read_text())
+    return data_version(data_dir, manifest.inputs)
+
+
 def read_table(table_dir: Path) -> pl.DataFrame:
     partition = latest_partition(table_dir)
     if partition is None:
@@ -97,11 +143,18 @@ def prune_partitions(
     return deleted
 
 
-def prune_layers(data_dir: Path, keep: int, now: datetime | None = None) -> dict[str, int]:
-    """Prune every table of every layer under a domain's data dir."""
+def prune_layers(
+    data_dir: Path, keep: int, now: datetime | None = None, keep_all: Sequence[str] = ()
+) -> dict[str, int]:
+    """Prune every table of every layer under a domain's data dir, except those in
+    `keep_all` (`<layer>/<table>`): a source whose history is every download - the
+    current month's page, read day after day - would lose what can never be fetched
+    again."""
     pruned = {}
     for layer in sorted(p for p in data_dir.iterdir() if p.is_dir()):
         for table_dir in sorted(p for p in layer.iterdir() if p.is_dir()):
+            if f"{layer.name}/{table_dir.name}" in keep_all:
+                continue
             removed = prune_partitions(table_dir, keep, now)
             if removed:
                 pruned[f"{layer.name}/{table_dir.name}"] = len(removed)

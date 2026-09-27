@@ -41,10 +41,11 @@ from mlops_core.ml.train import (
     split_items,
     temporal_split,
     train_model,
+    trained_on,
     xy,
 )
 from mlops_core.stats import Comparison
-from mlops_core.storage import write_table
+from mlops_core.storage import built_from, write_table
 from tests.fakes import with_training
 
 REVIEW = "review"
@@ -200,12 +201,18 @@ def test_training_is_tracked_registered_and_servable(
         run.data.metrics
     )
     assert run.data.tags["features_partition"].startswith("built_at=")
+    # What it learned from, so the same data is never trained on twice for nothing.
+    review = fast_config.model_named(REVIEW)
+    version = built_from(data_dir, data_dir / "features" / review.features_table)
+    assert version is not None and run.data.tags["data_version"] == version
+    assert trained_on(fast_config, REVIEW, version) == result.run_id
+    assert trained_on(fast_config, REVIEW, "another-data") is None
+    assert trained_on(fast_config, "offer", version) is None  # never trained at all
     trials = client.search_runs(
         run.info.experiment_id, f"tags.mlflow.parentRunId = '{result.run_id}'"
     )
     assert len(trials) == 2
 
-    review = fast_config.model_named(REVIEW)
     name = review.training.registered_model
     model = mlflow.sklearn.load_model(f"models:/{name}/{result.model_version}")
     features = pl.read_parquet(next(data_dir.rglob("review_features.parquet")))

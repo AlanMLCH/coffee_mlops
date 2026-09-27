@@ -173,6 +173,9 @@ flowchart TD
     green_price_features & mlflow -.-> green_price_predictions
     review_features & offer_features & green_price_features & review_predictions & offer_predictions --> monitor --> monitoring_tables
     monitor -- "due: retrain, the gate decides" --> train
+    schedule{{"Dagster: coffee_daily_data (cron in the YAML)<br/>sensors: coffee_new_data · coffee_retrain<br/>keyed by data version: one change, one run"}}
+    schedule -.-> extract_files & extract_apis
+    schedule -.-> monitor
     mlflow --> api
     market_context --> api
     review_predictions --> analysis --> dashboard
@@ -205,7 +208,7 @@ flowchart TD
     class corpus_sources,questions domain
     class embed,ladder,agent_eval core
     class chunk_embeddings,qdrant,retrieval_runs,agent_answers store
-    class monitor core
+    class monitor,schedule core
     class monitoring_tables store
 ```
 
@@ -231,7 +234,9 @@ newest complete partition, so a writer never blocks the readers.
 **Orchestration** (Dagster) is a thin layer over the same functions: every layer is an
 asset, the Pandera contracts run as asset checks, and each installed domain generates
 its own graph and its own `<domain>_data` / `<domain>_ml` jobs. Nothing needs it — the
-CLI runs every step on its own.
+CLI runs every step on its own. What it adds is running without anyone: the data
+pipeline on the domain's `schedule`, and the model pipeline when the data changes (see
+[Running on its own](#running-on-its-own-stage-4)).
 
 ### The core and the domains
 
@@ -1045,14 +1050,46 @@ First run, on the real layers:
 - **The price's 2020s are outside anything before them**: its level (Wasserstein 1.8)
   and the Arabica/Robusta ratio (1.1) most of all. Retrained, `green_price` still does
   not beat the mean drift, and still is not served.
-- **Known limit:** the monitor compares what is on disk, so a frozen source is flagged
-  on every run, and `make retrain` would retrain for nothing. Triggering retraining only
-  when new data arrives is the orchestration step that comes next.
+- **A frozen source keeps its drift**, so the monitor flags it on every run. A retraining
+  is keyed to the data it learns from (see below): the first `make retrain` retrained
+  both models, the second said "already trained on this data" and did not.
 - `review`'s champion predates the test-MAE interval in training runs, so its error is
   not checked - and the log says so rather than skipping it silently.
 - Evidently's UI and collector send usage events unless `DO_NOT_TRACK` is set; the
   report path used here does not import them, and the monitor sets it anyway. Evidently
   brings some twenty packages, so it is an extra of its own (`monitoring`).
+
+### Running on its own (stage 4)
+
+`make dagster` starts Dagster with one schedule and two sensors per domain, all on:
+
+| | When | What runs |
+|---|---|---|
+| `coffee_daily_data` | every day at 07:00, Mexico City (the YAML's `schedule:`) | extract and clean: the ICO's page is read each day, so its month builds up |
+| `coffee_new_data` | a model's clean inputs come from new data | its features, its champion's scores, and the drift report |
+| `coffee_retrain` | the drift report calls for retraining, on data no training run has used | training - the gate decides - then scores and drift again |
+
+- **New data means new raw data, not a new build.** Every clean build writes new
+  partitions, identical or not, so "a partition appeared" says nothing. A model's **data
+  version** is a hash of the raw partitions behind its tables - and raw partitions are
+  content-addressed: a download identical to the last one stores nothing. Training runs
+  record the version they learned from (`data_version` tag), drift reports the version
+  they compared, and the sensors key their runs by it: one change, one run.
+- **Retraining happens once per data version.** A frozen source keeps drifting in the
+  monitor's eyes; retraining it again on the same data would give the same candidate and
+  the same verdict from the gate. `make retrain` follows the same rule.
+- **Sources have a pace.** A daily run should not fetch the 83 MB boundary file that
+  last changed in 2020, nor the 62 MB corpus: `refresh_hours` on a source (and on the
+  corpus) skips it until due. When a source was last *checked* is kept beside its
+  partitions (`checked_at`), because an unchanged download leaves no partition to date
+  it. The API sources already had their cache.
+- **The first real check found work to do:** the roasters changed their catalogues
+  between 22 and 26 September, so the offer model's data is newer than its features -
+  and the sensor would rebuild them. Its drift report still has nothing to compare: the
+  clean layer keeps only the newest catalogue, which is the next step.
+- **`make prune` never touches a source whose history is its downloads.** It kept the
+  newest three partitions of every table, `raw/` included; for the ICO's page that would
+  have deleted days that can never be fetched again.
 
 ## What a kilo costs (stage 3)
 

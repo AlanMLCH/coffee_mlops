@@ -54,12 +54,14 @@ def fetch_documents(
     data_dir: Path,
     client: httpx.Client,
     now: datetime | None = None,
+    refresh_hours: float | None = None,
 ) -> tuple[dict[str, RawArtifact], dict[str, str]]:
-    """Every document into `raw/`, and the ones nobody handed over yet, with what to do."""
+    """Every document into `raw/`, and the ones nobody handed over yet, with what to do.
+    A fetched one is not fetched again within `refresh_hours`."""
     artifacts, missing = {}, {}
     for document in documents:
         try:
-            artifacts[document.name] = _fetch(document, data_dir, client, now)
+            artifacts[document.name] = _fetch(document, data_dir, client, now, refresh_hours)
         except FileNotFoundError as absent:
             missing[document.name] = str(absent)
     return artifacts, missing
@@ -96,12 +98,18 @@ DOCUMENT_PARTS_SCHEMA = pl.Schema(
 
 
 def _fetch(
-    document: DocumentConfig, data_dir: Path, client: httpx.Client, now: datetime | None
+    document: DocumentConfig,
+    data_dir: Path,
+    client: httpx.Client,
+    now: datetime | None,
+    refresh_hours: float | None,
 ) -> RawArtifact:
     raw_dir = data_dir / "raw"
     filename = f"{document.name}.{'xml' if document.format == 'jats' else 'pdf'}"
     if document.inbox is None:
-        return ingest_file(document.name, str(document.url), filename, raw_dir, client, now)
+        return ingest_file(
+            document.name, str(document.url), filename, raw_dir, client, now, refresh_hours
+        )
     handed_over = inbox_dir(data_dir) / document.inbox
     if not handed_over.is_file():
         raise FileNotFoundError(

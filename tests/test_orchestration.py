@@ -4,10 +4,11 @@ checks must fail loudly when the data breaks its contract."""
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import polars as pl
 import pytest
-from dagster import AssetKey, AssetSelection, materialize
+from dagster import AssetKey, AssetSelection, build_sensor_context, materialize
 
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.adapter import ApiExtraction
@@ -182,3 +183,56 @@ def test_the_drift_asset_records_the_monitors_verdict(
         "retrain": "True",
         "reasons": "the target drifted",
     }
+
+
+def test_the_data_pipeline_runs_on_the_domains_schedule(tmp_path: Path) -> None:
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+
+    (schedule,) = defs.schedules
+    assert (schedule.name, schedule.job_name) == ("coffee_daily_data", "coffee_data")
+    assert (schedule.cron_schedule, schedule.execution_timezone) == (
+        "0 7 * * *",
+        "America/Mexico_City",
+    )
+
+
+def sensor_named(tmp_path: Path, name: str) -> Any:
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    return next(s for s in defs.sensors if s.name == name)
+
+
+def test_new_data_for_a_model_scores_and_monitors_it_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    on_new_data = sensor_named(tmp_path, "coffee_new_data")
+    monkeypatch.setattr(definitions, "new_data", lambda adapter, data_dir: {"offer": "d4"})
+
+    (request,) = on_new_data.evaluate_tick(build_sensor_context()).run_requests
+
+    assert request.run_key == "offer:d4:score"  # one change, one run
+    assert [key.to_user_string() for key in request.asset_selection] == [
+        "coffee/offer_features",
+        "coffee/offer_predictions",
+        "coffee/offer_drift",
+    ]
+    monkeypatch.setattr(definitions, "new_data", lambda adapter, data_dir: {})
+    skipped = on_new_data.evaluate_tick(build_sensor_context())
+    assert skipped.run_requests == [] and "newest data" in skipped.skip_message
+
+
+def test_a_due_retraining_trains_and_lets_the_gate_decide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    on_drift = sensor_named(tmp_path, "coffee_retrain")
+    monkeypatch.setattr(definitions, "retraining_due", lambda config, data_dir: {"review": "d7"})
+
+    (request,) = on_drift.evaluate_tick(build_sensor_context()).run_requests
+
+    assert request.run_key == "review:d7:retrain"
+    assert [key.to_user_string() for key in request.asset_selection] == [
+        "coffee/review_model",
+        "coffee/review_predictions",
+        "coffee/review_drift",
+    ]
+    monkeypatch.setattr(definitions, "retraining_due", lambda config, data_dir: {})
+    assert on_drift.evaluate_tick(build_sensor_context()).run_requests == []

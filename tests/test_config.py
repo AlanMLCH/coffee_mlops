@@ -198,3 +198,12 @@ def test_a_workbook_names_its_sheet_and_a_link_is_a_pattern() -> None:
         SourceConfig(url="https://b.test/p.csv", filename="p.csv", sheet="Prices")
     with pytest.raises(ValidationError, match="unterminated"):
         SourceConfig(url="https://b.test/", filename="p.csv", link=r"prices-(\d+")
+
+
+def test_a_schedule_is_a_cron_in_a_timezone() -> None:
+    from mlops_core.config import ScheduleConfig
+
+    schedule = load_adapter("coffee").config.schedule
+    assert schedule == ScheduleConfig(data="0 7 * * *", timezone="America/Mexico_City")
+    with pytest.raises(ValidationError, match="should match pattern"):
+        ScheduleConfig(data="every morning", timezone="UTC")

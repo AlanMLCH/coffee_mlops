@@ -12,6 +12,10 @@ matches the latest ingestion is not stored again.
 A connection the server cuts is tried again, up to three times: one host this project
 reads resets connections now and then - twice in a row on its first real run - and
 answers a later request. An HTTP error is not retried: a 404 is an answer.
+
+A source with `refresh_hours` is not downloaded again until it is due. When it was last
+*checked* is kept beside its partitions (`checked_at`): the latest partition says when
+it last *changed*, and an unchanged download stores nothing.
 """
 
 import hashlib
@@ -21,7 +25,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import cache
 from importlib.metadata import distributions
 from pathlib import Path
@@ -37,6 +41,7 @@ from mlops_core.storage import MANIFEST_NAME, latest_partition, new_partition
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_ATTEMPTS = 4
+CHECKED_AT = "checked_at"  # beside a source's partitions: when it was last downloaded
 _HREF = re.compile(r"""href=["']([^"']+)["']""")
 
 
@@ -114,6 +119,9 @@ def ingest(
     client: httpx.Client,
     now: datetime | None = None,
 ) -> RawArtifact:
+    fresh = _fresh(raw_dir, name, source.refresh_hours, now)
+    if fresh is not None:  # before the page is read too: that is a request as well
+        return fresh
     url = (
         str(source.url) if source.link is None else find_link(client, str(source.url), source.link)
     )
@@ -137,8 +145,13 @@ def ingest_file(
     raw_dir: Path,
     client: httpx.Client,
     now: datetime | None = None,
+    refresh_hours: float | None = None,
 ) -> RawArtifact:
-    """Stream a file into a raw partition: a table, a map layer, a document, any bytes."""
+    """Stream a file into a raw partition: a table, a map layer, a document, any bytes -
+    unless it was checked within `refresh_hours`."""
+    fresh = _fresh(raw_dir, name, refresh_hours, now)
+    if fresh is not None:
+        return fresh
     source_dir = raw_dir / name
     source_dir.mkdir(parents=True, exist_ok=True)
     part_file = source_dir / f".{filename}.part"
@@ -180,13 +193,14 @@ def _store(
     now: datetime | None,
 ) -> RawArtifact:
     """The one place a raw partition is created, whatever produced the bytes."""
+    ingested_at = now or datetime.now(UTC)
+    (raw_dir / name / CHECKED_AT).write_text(ingested_at.isoformat(), encoding="utf-8")
     previous = latest_ingestion(raw_dir, name)
     if previous is not None and previous.manifest.sha256 == sha256:
         part_file.unlink()
         logger.info("%s unchanged since %s", name, previous.manifest.ingested_at)
         return previous
 
-    ingested_at = now or datetime.now(UTC)
     partition = new_partition(raw_dir / name, "ingested_at", ingested_at)
     part_file.replace(partition / filename)
     manifest = Manifest(
@@ -241,6 +255,33 @@ def _download_once(client: httpx.Client, url: str, target: Path) -> tuple[str, i
         target.unlink(missing_ok=True)
         raise
     return digest.hexdigest(), size, last_modified
+
+
+def last_checked(raw_dir: Path, source: str) -> datetime | None:
+    """When the source was last downloaded, changed or not; for a source ingested before
+    this was recorded, when it last changed."""
+    marker = raw_dir / source / CHECKED_AT
+    if marker.is_file():
+        return datetime.fromisoformat(marker.read_text(encoding="utf-8"))
+    latest = latest_ingestion(raw_dir, source)
+    return latest.manifest.ingested_at if latest else None
+
+
+def _fresh(
+    raw_dir: Path, name: str, refresh_hours: float | None, now: datetime | None
+) -> RawArtifact | None:
+    """The latest ingestion, if the source was checked within `refresh_hours`."""
+    if refresh_hours is None:
+        return None
+    checked = last_checked(raw_dir, name)
+    latest = latest_ingestion(raw_dir, name)
+    if checked is None or latest is None:
+        return None
+    age = (now or datetime.now(UTC)) - checked
+    if age >= timedelta(hours=refresh_hours):
+        return None
+    logger.info("%s checked %s ago: not due until %sh", name, age, refresh_hours)
+    return latest
 
 
 def _artifact(partition: Path) -> RawArtifact:

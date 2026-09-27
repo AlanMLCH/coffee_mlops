@@ -136,7 +136,7 @@ def test_the_same_places_in_another_order_are_not_new_data(tmp_path: Path) -> No
     shuffled["osm3s"]["timestamp_osm_base"] = "2026-09-21T09:00:00Z"
     second = ingest_places(build_client(FakeOverpass(shuffled), tmp_path / "b"), CONFIG, raw)
 
-    assert len(list((raw / "osm_places").iterdir())) == 1  # one partition, not two
+    assert len(list((raw / "osm_places").glob("*=*"))) == 1  # one partition, not two
     assert json.loads(second.path.read_text(encoding="utf-8"))["elements"][0]["type"] == "node"
 
 

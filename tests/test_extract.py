@@ -1,6 +1,6 @@
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -12,7 +12,9 @@ from mlops_core.data.extract import (
     extract_all,
     find_link,
     ingest,
+    ingest_file,
     ingestions,
+    last_checked,
     latest_ingestion,
     user_agent,
 )
@@ -59,7 +61,7 @@ def test_unchanged_upstream_is_not_stored_again(
     second = ingest("psd_coffee", source, tmp_path, client, now=T1)
 
     assert second == first
-    assert len(list((tmp_path / "psd_coffee").iterdir())) == 1
+    assert len(list((tmp_path / "psd_coffee").glob("*=*"))) == 1
 
 
 def test_changed_upstream_creates_a_new_partition(
@@ -171,3 +173,48 @@ def test_every_ingestion_of_a_source_is_its_history(
 
     assert ingestions(tmp_path, "psd_coffee") == [first, second]
     assert ingestions(tmp_path, "never_ingested") == []
+
+
+def test_a_source_is_not_downloaded_again_until_it_is_due(
+    tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client, server: RecordedServer
+) -> None:
+    """Checked, not changed: an unchanged download stores nothing, and still counts."""
+    source = coffee_config.sources["psd_coffee"].model_copy(update={"refresh_hours": 24})
+    first = ingest("psd_coffee", source, tmp_path, client, now=T0)
+    server.payloads[str(source.url)] = b"next circular"
+
+    soon = ingest("psd_coffee", source, tmp_path, client, now=T0 + timedelta(hours=23))
+    due = ingest("psd_coffee", source, tmp_path, client, now=T0 + timedelta(hours=25))
+
+    assert soon == first  # not due: the new circular is not even asked for
+    assert due.path.read_bytes() == b"next circular"
+    assert last_checked(tmp_path, "psd_coffee") == T0 + timedelta(hours=25)
+
+
+def test_the_check_is_recorded_when_nothing_changed(
+    tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client
+) -> None:
+    source = coffee_config.sources["psd_coffee"].model_copy(update={"refresh_hours": 24})
+    first = ingest("psd_coffee", source, tmp_path, client, now=T0)
+    again = ingest("psd_coffee", source, tmp_path, client, now=T0 + timedelta(hours=30))
+
+    assert again == first  # unchanged: no new partition...
+    assert last_checked(tmp_path, "psd_coffee") == T0 + timedelta(hours=30)  # ...but checked
+    (tmp_path / "psd_coffee" / "checked_at").unlink()  # ingested before checks were kept
+    assert last_checked(tmp_path, "psd_coffee") == T0
+    assert last_checked(tmp_path, "never_ingested") is None
+
+
+def test_a_document_is_not_fetched_again_until_it_is_due(
+    tmp_path: Path, client: httpx.Client, server: RecordedServer
+) -> None:
+    """The corpus goes through `ingest_file`, with the corpus's own `refresh_hours`."""
+    url = "https://publisher.test/paper.pdf"
+    server.payloads[url] = b"%PDF first edition"
+    first = ingest_file("paper", url, "paper.pdf", tmp_path, client, T0, refresh_hours=720)
+    server.payloads[url] = b"%PDF revised"
+
+    ten_days = T0 + timedelta(days=10)
+    soon = ingest_file("paper", url, "paper.pdf", tmp_path, client, ten_days, refresh_hours=720)
+
+    assert soon == first and soon.path.read_bytes() == b"%PDF first edition"

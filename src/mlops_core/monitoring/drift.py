@@ -24,7 +24,7 @@ report beside it, and logs both to MLflow (experiment `<domain>-monitoring`).
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,10 +32,11 @@ import mlflow
 import pandas as pd
 import polars as pl
 from mlflow import MlflowClient
+from pydantic import BaseModel
 
 from mlops_core.config import DomainConfig, ModelConfig
 from mlops_core.provenance import code_version
-from mlops_core.storage import read_table, write_table
+from mlops_core.storage import built_from, latest_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ MONITORING = "monitoring"
 CHAMPION = "champion"
 PREDICTION = "prediction"
 REPORT_FILE = "report.html"
+VERDICT_FILE = "verdict.json"  # beside the table: what an orchestrator acts on
 COLUMNS: dict[str, pl.DataType] = {
     "column": pl.String(),
     "role": pl.String(),  # feature, target or prediction
@@ -51,6 +53,17 @@ COLUMNS: dict[str, pl.DataType] = {
     "threshold": pl.Float64(),
     "drifted": pl.Boolean(),
 }
+
+
+class Verdict(BaseModel):
+    """What the monitor decided for a model, and on which data: what a scheduler reads to
+    know whether a retraining is due and has not happened yet."""
+
+    model: str
+    current: str
+    retrain: bool
+    reasons: list[str]
+    data_version: str
 
 
 @dataclass(frozen=True)
@@ -67,6 +80,7 @@ class DriftResult:
     accepted_mae: float | None  # the upper end of the interval the gate accepted it with
     reasons: list[str]  # why it should be retrained; empty when it should not
     report_html: str
+    data_version: str = ""  # the raw data behind the features compared
 
     @property
     def retrain(self) -> bool:
@@ -228,6 +242,8 @@ def monitor_model(
     if result is None:
         logger.info("%s has one period only: nothing to compare yet", model_name)
         return None
+    features_dir = data_dir / "features" / model.features_table
+    result = replace(result, data_version=built_from(data_dir, features_dir) or "")
 
     table = write_table(
         result.columns,
@@ -237,6 +253,14 @@ def monitor_model(
     )
     report = table.parent / REPORT_FILE
     report.write_text(result.report_html, encoding="utf-8")
+    verdict = Verdict(
+        model=model_name,
+        current=result.current,
+        retrain=result.retrain,
+        reasons=result.reasons,
+        data_version=result.data_version,
+    )
+    (table.parent / VERDICT_FILE).write_text(verdict.model_dump_json(indent=2), encoding="utf-8")
 
     mlflow.set_experiment(f"{config.name}-{MONITORING}")
     with mlflow.start_run(run_name=model_name):
@@ -246,6 +270,7 @@ def monitor_model(
                 "model": model_name,
                 "retrain": str(result.retrain),
                 "reasons": "; ".join(result.reasons),
+                "data_version": result.data_version,
             }
             | (version.as_tags() if version else {})
         )
@@ -268,6 +293,14 @@ def monitor_model(
         mlflow.log_artifact(str(table))
         mlflow.log_artifact(str(report))
     return result
+
+
+def latest_verdict(data_dir: Path, model_name: str) -> Verdict | None:
+    """The newest monitoring verdict for a model, or None if it was never compared."""
+    partition = latest_partition(data_dir / MONITORING / f"{model_name}_drift")
+    if partition is None or not (partition / VERDICT_FILE).is_file():
+        return None
+    return Verdict.model_validate_json((partition / VERDICT_FILE).read_text(encoding="utf-8"))
 
 
 def _mae(scored: pl.DataFrame, target: str) -> float | None:

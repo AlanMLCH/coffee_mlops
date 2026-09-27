@@ -56,11 +56,12 @@ from mlops_core.ml.evaluation import (
 )
 from mlops_core.provenance import code_version
 from mlops_core.stats import Comparison, compare
-from mlops_core.storage import latest_partition, read_table
+from mlops_core.storage import built_from, latest_partition, read_table
 
 logger = logging.getLogger(__name__)
 
 CHAMPION = "champion"
+DATA_VERSION = "data_version"  # the run tag: which raw data the model learned from
 # MLflow stores sklearn models with skops, which refuses to load types it was not told
 # to trust (unlike pickle, which runs arbitrary code on load). These are the LightGBM
 # internals the pipeline contains.
@@ -324,6 +325,19 @@ def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.nda
     return absolute_errors(y_test, champion.predict(test.select(columns).to_pandas()))
 
 
+def trained_on(config: DomainConfig, model_name: str, version: str) -> str | None:
+    """The id of a training run of this model on this data version, if there is one."""
+    experiment = mlflow.get_experiment_by_name(
+        experiment_name(config, config.model_named(model_name))
+    )
+    if experiment is None:
+        return None
+    runs = MlflowClient().search_runs(
+        [experiment.experiment_id], f"tags.{DATA_VERSION} = '{version}'", max_results=1
+    )
+    return runs[0].info.run_id if runs else None
+
+
 def experiment_name(config: DomainConfig, model: ModelConfig) -> str:
     """One MLflow experiment per model: runs of different targets are not comparable."""
     return f"{config.name}-{model.name}"
@@ -348,7 +362,11 @@ def train_model(
         # made from a dirty tree cannot be reproduced.
         version_tags = code_version()
         mlflow.set_tags(
-            {"features_partition": partition.name if partition else ""}
+            {
+                "features_partition": partition.name if partition else "",
+                # What it learned from: retraining on the same data again is pointless.
+                DATA_VERSION: built_from(data_dir, table_dir) or "",
+            }
             | (version_tags.as_tags() if version_tags else {})
         )
         mlflow.log_params(

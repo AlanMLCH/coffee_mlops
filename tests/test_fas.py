@@ -128,7 +128,7 @@ def test_the_same_answer_in_another_order_is_not_new_data(tmp_path: Path) -> Non
 
     ingest_balance(build_client(FakeFas(shuffled), tmp_path / "b"), CONFIG, KEY, raw, NOW)
 
-    assert len(list((raw / "fas_psd_coffee").iterdir())) == 1  # one partition, not two
+    assert len(list((raw / "fas_psd_coffee").glob("*=*"))) == 1  # one partition, not two
 
 
 def documented() -> dict[str, Any]:

@@ -6,6 +6,9 @@ import pytest
 
 from mlops_core.storage import (
     TIMESTAMP_FORMAT,
+    built_from,
+    data_version,
+    latest_data_version,
     latest_partition,
     prune_layers,
     prune_partitions,
@@ -104,3 +107,37 @@ def test_pruning_walks_every_layer_and_table(tmp_path: Path) -> None:
     pruned = prune_layers(tmp_path, keep=1)
 
     assert pruned == {"clean/coffee_reviews": 1, "features/review_features": 1}
+
+
+# --- The data version -------------------------------------------------------------------
+
+
+def clean_build(data_dir: Path, raw: dict[str, str], at: datetime) -> str:
+    """A clean table built from `raw` partitions; its partition's name."""
+    path = write_table(pl.DataFrame({"v": [1]}), data_dir / "clean" / "lots", raw, at=at)
+    return path.parent.name
+
+
+def test_the_data_version_follows_the_raw_data_not_the_rebuilds(tmp_path: Path) -> None:
+    """A clean build writes a new partition whatever happened; the version changes only
+    when the raw partitions behind it do."""
+    first = clean_build(tmp_path, {"cqi": "ingested_at=A"}, T0)
+    rebuilt = clean_build(tmp_path, {"cqi": "ingested_at=A"}, T1)
+    changed = clean_build(tmp_path, {"cqi": "ingested_at=B"}, T1 + timedelta(hours=1))
+
+    same = data_version(tmp_path, {"lots": first})
+    assert data_version(tmp_path, {"lots": rebuilt}) == same
+    assert data_version(tmp_path, {"lots": changed}) != same
+    assert latest_data_version(tmp_path, ["lots"]) == data_version(tmp_path, {"lots": changed})
+    assert latest_data_version(tmp_path, ["lots", "never_built"]) is None
+    # A clean partition since pruned stands for itself.
+    assert data_version(tmp_path, {"lots": "built_at=pruned"}) != same
+
+
+def test_a_derived_table_knows_the_data_it_was_built_from(tmp_path: Path) -> None:
+    clean = clean_build(tmp_path, {"cqi": "ingested_at=A"}, T0)
+    features = tmp_path / "features" / "lot_features"
+    write_table(pl.DataFrame({"v": [1]}), features, {"lots": clean}, at=T0)
+
+    assert built_from(tmp_path, features) == data_version(tmp_path, {"lots": clean})
+    assert built_from(tmp_path, tmp_path / "features" / "never_built") is None

@@ -21,9 +21,10 @@ from mlops_core.monitoring.drift import (
     REPORT_FILE,
     accepted_error,
     detect_drift,
+    latest_verdict,
     monitor_model,
 )
-from mlops_core.storage import read_table, write_table
+from mlops_core.storage import built_from, read_table, write_table
 
 ROWS = 200  # per period: enough for a shift of one standard deviation to be found
 
@@ -180,8 +181,13 @@ def test_the_monitor_writes_its_table_and_report_and_logs_a_run(
     assert written.equals(result.columns)
     partition = next((data_dir / MONITORING / "price_drift").glob("built_at=*"))
     assert "<!doctype html>" in (partition / REPORT_FILE).read_text(encoding="utf-8").lower()
+    verdict = latest_verdict(data_dir, "price")
+    assert verdict is not None and verdict.retrain and verdict.current == "2026"
+    assert verdict.data_version == result.data_version
+    assert result.data_version == built_from(data_dir, data_dir / "features" / "price_features")
     (run,) = mlflow.search_runs(experiment_names=["coffee-monitoring"], output_format="list")
     assert run.data.tags["retrain"] == "True"
+    assert run.data.tags["data_version"] == result.data_version
     assert run.data.params["current_period"] == "2026"
     assert run.data.metrics["current_mae"] == pytest.approx(3.0)
     assert run.data.metrics["accepted_mae"] == 2.0
@@ -198,3 +204,6 @@ def test_a_model_with_one_period_leaves_no_record(
 
     assert monitor_model(config, "price", data_dir, f"sqlite:///{tmp_path.as_posix()}/m.db") is None
     assert not (data_dir / MONITORING).exists()
+    assert latest_verdict(data_dir, "price") is None
+    write_table(pl.DataFrame({"v": [1]}), data_dir / MONITORING / "price_drift", {})
+    assert latest_verdict(data_dir, "price") is None  # a table from before verdicts were kept

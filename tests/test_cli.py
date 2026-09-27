@@ -271,14 +271,18 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
 def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     table = tmp_path / "coffee" / "clean" / "coffee_reviews"
+    history = tmp_path / "coffee" / "raw" / "ico_prices"  # every download is its history
     for day in (1, 2, 3):
         frame = pl.DataFrame({"v": [day]})
         write_table(frame, table, inputs={}, at=datetime(2026, 9, day, tzinfo=UTC))
+        write_table(frame, history, inputs={}, at=datetime(2026, 9, day, tzinfo=UTC))
 
     result = CliRunner().invoke(cli.app, ["prune", "--keep", "1"])
 
     assert result.exit_code == 0, result.output
     assert "clean/coffee_reviews: 2 partitions removed" in result.output
+    assert "ico_prices" not in result.output
+    assert len(list(history.glob("*=*"))) == 3
 
 
 def test_prune_says_so_when_there_is_nothing_to_drop(
@@ -407,8 +411,30 @@ def test_a_model_that_did_not_drift_is_left_alone(
     monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
 
     result = CliRunner().invoke(cli.app, ["monitor", "--model", "review", "--retrain"])
+    looked = CliRunner().invoke(cli.app, ["monitor", "--model", "review"])  # only looks
 
     assert result.exit_code == 0, result.output
     assert "review: 2026 against 2025 - 10% of the features drifted" in result.output
     assert "  no reason to retrain" in result.output
+    assert looked.exit_code == 0 and "no reason to retrain" in looked.output
+    assert retrained == []
+
+
+def test_a_model_already_trained_on_the_data_is_not_retrained(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A frozen source keeps its drift; retraining on the same data again is pointless."""
+    drifted = SimpleNamespace(
+        current="cqi_2023", reference=["cqi_2018"], drifted_share=1.0,
+        reasons=["the target drifted"], retrain=True, data_version="d1",
+    )  # fmt: skip
+    monkeypatch.setattr("mlops_core.monitoring.drift.monitor_model", lambda *args: drifted)
+    monkeypatch.setattr("mlops_core.ml.train.trained_on", lambda *args: "run-9")
+    retrained: list[str | None] = []
+    monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
+
+    result = CliRunner().invoke(cli.app, ["monitor", "--model", "review", "--retrain"])
+
+    assert result.exit_code == 0, result.output
+    assert "review: already trained on this data (run run-9), not again" in result.output
     assert retrained == []

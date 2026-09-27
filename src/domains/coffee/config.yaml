@@ -11,6 +11,7 @@ sources:
     url: https://raw.githubusercontent.com/jldbc/coffee-quality-database/e3b22b2b1e597887188b97c2ada7f745e1914ec7/data/arabica_data_cleaned.csv
     filename: arabica_data_cleaned.csv
     null_values: ["NA"] # written by R
+    refresh_hours: 8760 # a pinned commit: checked once a year, and it will not have changed
 
   # CQI snapshot re-scraped in May 2023 (207 arabica reviews, graded 2022-2023).
   # Public Kaggle download: no token needed, 302 to a signed GCS URL.
@@ -18,6 +19,7 @@ sources:
     url: https://www.kaggle.com/api/v1/datasets/download/fatihb/coffee-quality-data-cqi
     filename: coffee-quality-data-cqi.zip
     member: df_arabica_clean.csv
+    refresh_hours: 8760 # frozen since May 2023
 
   # USDA PSD coffee: production, trade and stocks by country and market year.
   # Republished with each circular (June and December).
@@ -25,6 +27,7 @@ sources:
     url: https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip
     filename: psd_coffee_csv.zip
     member: psd_coffee.csv
+    refresh_hours: 24 # 2 MB; a circular can come out any day of its month
 
   # INEGI's 2020 geostatistical framework for Mexico City: the official borough
   # polygons, and the only way to place a coordinate in an alcaldia. Verified
@@ -43,6 +46,7 @@ sources:
       id_column: CVEGEO # entity + municipality, e.g. 09015 is Cuauhtemoc
       name_column: NOMGEO
       expected_features: 16 # the 16 alcaldias
+    refresh_hours: 8760 # 83 MB, and the 2020 framework does not change
 
   # SIAP's closing agricultural statistics for 2025: every crop in every municipality,
   # the definitive figures (not the monthly advance). Verified 2026-09-21: 35,902 rows,
@@ -54,6 +58,7 @@ sources:
     filename: Cierre_agricola_mun_2025.csv
     # Latin-1, and nothing in the file says so. Read as UTF-8 it fails on "Otoño".
     encoding: latin-1
+    refresh_hours: 720 # the closing statistics of a year come out once
 
   # Stage 4: the international price of green coffee. The World Bank's Pink Sheet, monthly
   # since 1960 in $/kg; "Coffee, Arabica" and "Coffee, Robusta" are the ICO's other mild
@@ -67,6 +72,7 @@ sources:
     sheet: Monthly Prices
     header_row: 4 # four rows of title and notes above it
     skip_rows: 1 # the row of units under it
+    refresh_hours: 20 # released monthly; checked on each daily run, early or late
 
   # The ICO's daily indicator prices, in US cents/lb: the current month only, one PDF
   # page (the old coffee_prices.asp answers 500 since the site moved). Each download is
@@ -349,6 +355,9 @@ corpus:
   chunking:
     max_chars: 1200
     overlap_chars: 200
+  # Papers and catalogues are revised rarely, and the corpus weighs 62 MB: a scheduled
+  # daily run fetches it again once a month.
+  refresh_hours: 720
   topics:
     cultivation:
       description: "Growing coffee: altitude, shade, soil, pruning, pests and the harvest."
@@ -774,6 +783,14 @@ production:
   country: Mexico
 
 # The studies every domain gets: profiles, drift, feature evidence, residuals.
+# Stage 4: the data pipeline runs every morning in Dagster (make dagster). The ICO's page
+# holds only the current month, so it has to be read every day to build its history; the
+# other sources are not downloaded again before their `refresh_hours`. The model pipeline
+# has no clock: it runs when the data a model reads changes.
+schedule:
+  data: "0 7 * * *"
+  timezone: America/Mexico_City
+
 # Stage 4: each model's newest period against the earlier ones (mlops monitor). A drifted
 # target, or an error above the interval the champion was accepted with, calls for
 # retraining on its own; so does this share of drifted features - half, the share

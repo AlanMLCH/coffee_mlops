@@ -136,7 +136,7 @@ def test_the_same_catalog_in_another_order_is_not_new_data(
     ingest(Shops(), roasters, tmp_path, cache="first")
     ingest(Shops(reverse=True), roasters, tmp_path, cache="second")  # asked afresh, backwards
 
-    assert len(list((tmp_path / "raw" / "roaster_catalogs").iterdir())) == 1
+    assert len(list((tmp_path / "raw" / "roaster_catalogs").glob("*=*"))) == 1
 
 
 @pytest.fixture

@@ -4,6 +4,11 @@ The orchestrator is a thin layer: every asset calls the same function the CLI ca
 so nothing here is required to run the pipelines. Installing a package under `domains/`
 adds a whole graph, which is how the framework proves it is domain-parameterized.
 
+What runs on its own: the data pipeline on the domain's `schedule`; each model's
+features, scores and drift when the data it reads changes (sensor `<domain>_new_data`);
+and its training when the monitor calls for it on data it was not trained on (sensor
+`<domain>_retrain`). The questions the sensors ask are `triggers`' pure functions.
+
 Assets manage their own storage (immutable Parquet partitions), so they return
 `MaterializeResult` metadata instead of handing values to an IO manager. Each of the
 domain's models gets its own three assets, named after it.
@@ -12,16 +17,26 @@ domain's models gets its own three assets, named after it.
 from collections.abc import Sequence
 from pathlib import Path
 
+import mlflow
 from dagster import (
     AssetCheckResult,
     AssetChecksDefinition,
+    AssetKey,
     AssetsDefinition,
     AssetSelection,
+    DefaultScheduleStatus,
+    DefaultSensorStatus,
     Definitions,
     MaterializeResult,
+    RunRequest,
+    ScheduleDefinition,
+    SensorDefinition,
+    SensorEvaluationContext,
+    SkipReason,
     asset,
     asset_check,
     define_asset_job,
+    sensor,
 )
 
 from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
@@ -35,10 +50,13 @@ from mlops_core.ml.predict import batch_predict
 from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import train_model
 from mlops_core.monitoring.drift import monitor_model
+from mlops_core.orchestration.triggers import new_data, retraining_due
 from mlops_core.storage import read_table
 
 # Assets write their own Parquet, so they hand Dagster metadata, not a value.
 Materialized = MaterializeResult[None]
+# How often the sensors look: the data changes once a day at most.
+SENSOR_SECONDS = 600
 
 
 def pipeline_assets(adapter: DomainAdapter) -> dict[str, list[str]]:
@@ -76,7 +94,12 @@ def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefi
         with http_client() as client:
             artifacts = extract_all(config, data_dir / "raw", client)
             api = adapter.extract(data_dir, client)
-            corpus, absent = fetch_documents(config.documents, data_dir, client)
+            corpus, absent = fetch_documents(
+                config.documents,
+                data_dir,
+                client,
+                refresh_hours=config.corpus.refresh_hours if config.corpus else None,
+            )
         artifacts |= api.artifacts | corpus
         skipped = api.skipped | absent
         return MaterializeResult(
@@ -208,7 +231,76 @@ def build_definitions(
         for adapter in adapters
         for pipeline, names in pipeline_assets(adapter).items()
     ]
-    return Definitions(assets=assets, asset_checks=checks, jobs=jobs)
+    schedules = [
+        ScheduleDefinition(
+            name=f"{adapter.config.name}_daily_data",
+            job_name=f"{adapter.config.name}_data",
+            cron_schedule=adapter.config.schedule.data,
+            execution_timezone=adapter.config.schedule.timezone,
+            default_status=DefaultScheduleStatus.RUNNING,
+        )
+        for adapter in adapters
+        if adapter.config.schedule is not None
+    ]
+    sensors = [sensor for adapter in adapters for sensor in model_sensors(adapter, settings)]
+    return Definitions(
+        assets=assets, asset_checks=checks, jobs=jobs, schedules=schedules, sensors=sensors
+    )
+
+
+def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefinition]:
+    """Score and monitor a model when its data changes; retrain it when the monitor calls
+    for it on data it has not learned from. Each request is keyed by the data version, so
+    one change starts one run."""
+    config = adapter.config
+    data_dir = settings.data_dir / config.name
+    job = f"{config.name}_ml"
+
+    def keys(model: str, *assets: str) -> list[AssetKey]:
+        names = dict(zip(("features", "model", "predictions", "drift"),
+                         model_asset_names(config.model_named(model)), strict=True))  # fmt: skip
+        return [AssetKey([config.name, names[asset]]) for asset in assets]
+
+    @sensor(
+        name=f"{config.name}_new_data",
+        job_name=job,
+        minimum_interval_seconds=SENSOR_SECONDS,
+        default_status=DefaultSensorStatus.RUNNING,
+    )
+    def on_new_data(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
+        """New data for a model: rebuild its features, score them with the champion, and
+        compare the newest period with the ones before."""
+        due = new_data(adapter, data_dir)
+        if not due:
+            yield SkipReason("every model's features come from the newest data")
+        for model, version in due.items():
+            yield RunRequest(
+                run_key=f"{model}:{version}:score",
+                asset_selection=keys(model, "features", "predictions", "drift"),
+                tags={"model": model, "data_version": version},
+            )
+
+    @sensor(
+        name=f"{config.name}_retrain",
+        job_name=job,
+        minimum_interval_seconds=SENSOR_SECONDS,
+        default_status=DefaultSensorStatus.RUNNING,
+    )
+    def on_drift(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
+        """The monitor calls for retraining on data no training run has seen: train, let
+        the gate decide, and score and compare again."""
+        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+        due = retraining_due(config, data_dir)
+        if not due:
+            yield SkipReason("no retraining due on data not trained on")
+        for model, version in due.items():
+            yield RunRequest(
+                run_key=f"{model}:{version}:retrain",
+                asset_selection=keys(model, "model", "predictions", "drift"),
+                tags={"model": model, "data_version": version},
+            )
+
+    return [on_new_data, on_drift]
 
 
 defs = build_definitions()
