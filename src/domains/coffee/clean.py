@@ -7,6 +7,8 @@
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
 - The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
   `domains.coffee.roaster_sheets`.
+- The ICO and the World Bank -> `price_indicators`; see `domains.coffee.prices`.
+- PROFECO's shelf prices -> `consumer_prices`; see `domains.coffee.consumer_prices`.
 
 Transforms are pure functions over validated frames. Reading the raw layer, holding
 each table to its contract and writing it with lineage is the core's job
@@ -23,7 +25,14 @@ from datetime import datetime
 import polars as pl
 from polars.expr.whenthen import ChainedThen, Then
 
-from domains.coffee.config import UNCLASSIFIED, CleaningConfig, ProductionConfig, ShopKindRule
+from domains.coffee.config import (
+    UNCLASSIFIED,
+    CleaningConfig,
+    ConsumerPricesConfig,
+    ProductionConfig,
+    ShopKindRule,
+)
+from domains.coffee.consumer_prices import clean_consumer_prices
 from domains.coffee.prices import clean_price_indicators
 from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
@@ -439,6 +448,7 @@ def clean_tables(
     frames: Mapping[str, pl.DataFrame],
     rules: CleaningConfig,
     crop: ProductionConfig,
+    shelves: ConsumerPricesConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
@@ -464,5 +474,9 @@ def clean_tables(
                 frames["ico_prices"], frames["world_bank_prices"], read_at["world_bank_prices"]
             ),
             ("ico_prices", "world_bank_prices"),
+        ),
+        "consumer_prices": CleanTable(
+            clean_consumer_prices(frames[shelves.source], areas, shelves),
+            (shelves.source, "cdmx_boroughs"),
         ),
     }

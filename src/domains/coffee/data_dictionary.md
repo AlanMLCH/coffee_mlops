@@ -194,6 +194,40 @@ catalogue, use `clean.roaster_offers`**; this table counts each offer once per r
 `clean.roaster_origins` for every read, with its `snapshot`: a coffee's sheet can
 change between reads, and a price is explained by the sheet of its own read.
 
+## `clean.consumer_prices` — one price PROFECO recorded on a shelf
+
+PROFECO's *Quién es Quién en los Precios* (stage 4): its staff price packaged coffee in
+supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by
+fortnight. Instant and roasted-and-ground coffee from national brands (Nescafé, Legal,
+Internacional, Los Portales, store brands), not specialty coffee: that is
+`clean.roaster_offers`. The current year's survey, January to the month before last.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `date` | Date | The day the price was recorded |
+| `fortnight` | Date | The fortnight PROFECO files it under: the 1st or the 16th of its month |
+| `product` | String | `instant` or `ground` (roasted and ground) |
+| `brand` | String | As PROFECO writes it (`Nescafé. Clásico`, `Legal`) |
+| `presentation` | String | As PROFECO writes it (`Frasco 170 Gr. Mezclado con Caramelo`) |
+| `grams` | Float | The size the presentation states |
+| `sweetened` | Bool | A blend with sugar or caramel ("Mezclado con ..."): its price per kilogram is per kilogram of both |
+| `decaf` | Bool | Decaffeinated |
+| `price_mxn` | Float | Pesos, for the jar, bag or sachet |
+| `price_mxn_per_kg` | Float | Pesos per kilogram of what the presentation holds |
+| `chain` | String | `Wal-mart`, `Hipermercado Soriana`, `Oxxo`, `Mercado Publico`... |
+| `store_type` | String | `Supermercado / Tienda de Autoservicio`, `Tienda de Conveniencia`, `Farmacias`, `Mercados`, `Central de Abasto` |
+| `store` | String | The store, with its branch (`Walmart Sucursal Polanco`) |
+| `state` | String | As PROFECO spells it (`Ciudad de México`, `Estado de México`) |
+| `municipality` | String | As the store declares it |
+| `latitude`, `longitude` | Float | As PROFECO geocoded the store; 6 of the city's 120 stores fall in another borough than they declare |
+| `borough_id`, `borough` | String? | The city's rows only: the borough the store declares, with `clean.boroughs`' key and spelling |
+
+Read with care: **a median, not a mean** (a promotion is one shelf); **per kilogram of
+product** - instant is concentrated, so a kilogram of it makes several times the cups a
+kilogram of ground coffee does; and a store can list two prices for one product on one
+day (24 times in 2026), both kept. For the city's shelves, filter `state = 'Ciudad de
+México'` or `borough_id IS NOT NULL`.
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**
@@ -282,7 +316,9 @@ date. A month whose month before is missing is left out.
 
 `raw/<source>/ingested_at=<timestamp>/` holds each download **exactly as served**, next
 to a manifest with the URL, sha256, size and ingestion time. Nothing is parsed there.
-Sources: `cqi_2018`, `cqi_2023`, `psd_coffee` (see the README).
+Sources: see the README. Two are kept whole rather than latest: the ICO's page and the
+roasters' catalogues, whose every read is history. PROFECO's archive is the year so far,
+so its latest download holds the year.
 
 ### Documents
 

@@ -3,17 +3,25 @@
 Every domain gets the core's analyses (profiles, drift, feature evidence, residuals).
 These only make sense for coffee: who grows it and who imports what they drink, what
 the places in DENUE's broad "cafeterias" class actually are, how far the rule that
-says so can be trusted, and how much the roasters' sheets actually say about each
-coffee. Pure functions of clean tables, drawn in the core's house style.
+says so can be trusted, how much the roasters' sheets actually say about each
+coffee, and what a kilogram costs from the farm gate to a supermarket's shelf and a
+roaster's shop. Pure functions of clean tables, drawn in the core's house style.
 """
 
 from collections.abc import Mapping
+from datetime import timedelta
 
 import polars as pl
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
 
-from domains.coffee.config import UNCLASSIFIED, MarketAnalysisConfig, ProductionConfig
+from domains.coffee.config import (
+    UNCLASSIFIED,
+    ConsumerPricesConfig,
+    MarketAnalysisConfig,
+    ProductionConfig,
+)
+from domains.coffee.roaster_sheets import fold
 from mlops_core.analysis.figures import (
     INK,
     MUTED,
@@ -44,13 +52,23 @@ SHEET_FIELDS = {
 }
 COVERAGE_FIELDS = ["sheet", *SHEET_FIELDS.values(), "price per kg"]
 ALL_SHOPS = "all"
+NATIONAL, CITY = "national", "city"  # the two scopes of the shelf prices
+# The shelf lines drawn through time: the plain and the sweetened of each product.
+DRAWN_LINES = ["ground", "ground, sweetened", "instant", "instant, sweetened"]
 
 
 def studies(
-    clean: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig, crop: ProductionConfig
+    clean: Mapping[str, pl.DataFrame],
+    market: MarketAnalysisConfig,
+    crop: ProductionConfig,
+    shelves: ConsumerPricesConfig,
+    states: Mapping[str, str],
 ) -> dict[str, pl.DataFrame]:
-    """The domain's studies: the world market, and the city's places."""
+    """The domain's studies: the world market, the city's places, and the price of a
+    kilogram from the farm to the shelf. `states` maps the domain's spelling of a state
+    (folded) to SIAP's."""
     context, shops = clean["market_context"], clean["coffee_shops"]
+    prices, production = clean["consumer_prices"], clean["mexico_production"]
     agreement = kind_agreement(shops)
     return {
         "market_summary": market_summary(context, market.market_year, market.top_countries),
@@ -65,6 +83,10 @@ def studies(
         "roaster_coverage": roaster_coverage(
             clean["roaster_coffees"], clean["roaster_origins"], clean["roaster_offers"]
         ),
+        "consumer_prices_by_fortnight": consumer_prices_by_fortnight(prices, shelves.city),
+        "consumer_prices_by_borough": consumer_prices_by_borough(prices),
+        "consumer_prices_by_state": consumer_prices_by_state(prices, production, states),
+        "price_ladder": price_ladder(prices, clean["roaster_offers"], production, shelves.city),
     }
 
 
@@ -84,6 +106,11 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
         drawn["shop_kinds"] = shop_kinds_figure(denue)
     if not tables["roaster_coverage"].is_empty():
         drawn["roaster_coverage"] = roaster_coverage_figure(tables["roaster_coverage"])
+    if not tables["price_ladder"].is_empty():
+        drawn["price_ladder"] = price_ladder_figure(tables["price_ladder"])
+    national = tables["consumer_prices_by_fortnight"].filter(pl.col("scope") == NATIONAL)
+    if not national.is_empty():
+        drawn["consumer_prices"] = consumer_prices_figure(national)
     return drawn
 
 
@@ -425,5 +452,174 @@ def roaster_coverage_figure(coverage: pl.DataFrame) -> Figure:
     ax.tick_params(length=0)
     for side in ("left", "bottom"):
         ax.spines[side].set_visible(False)
+    figure.tight_layout()
+    return figure
+
+
+def shelf_line() -> pl.Expr:
+    """A product and what its presentation declares, as one label: "ground",
+    "ground, sweetened", "instant, decaf"."""
+    return pl.concat_str(
+        pl.col("product"),
+        pl.when(pl.col("sweetened")).then(pl.lit(", sweetened")).otherwise(pl.lit("")),
+        pl.when(pl.col("decaf")).then(pl.lit(", decaf")).otherwise(pl.lit("")),
+    ).alias("line")
+
+
+def _shelf_summary(prices: pl.DataFrame, *by: str) -> pl.DataFrame:
+    """The median price per kilogram, and how many prices and stores it rests on. The
+    median, because a promotion or a pharmacy's markup is one shelf, not the market."""
+    return prices.group_by(*by).agg(
+        pl.col("price_mxn_per_kg").median().alias("median_mxn_per_kg"),
+        pl.len().alias("prices"),
+        pl.struct("store", "latitude", "longitude").n_unique().alias("stores"),
+    )
+
+
+def consumer_prices_by_fortnight(prices: pl.DataFrame, city: str) -> pl.DataFrame:
+    """What a kilogram of each line cost on the shelf, fortnight by fortnight, across
+    the country and in the city."""
+    lined = prices.with_columns(shelf_line())
+    scoped = pl.concat(
+        [
+            lined.with_columns(pl.lit(NATIONAL).alias("scope")),
+            lined.filter(pl.col("state") == city).with_columns(pl.lit(CITY).alias("scope")),
+        ]
+    )
+    return _shelf_summary(scoped, "scope", "line", "fortnight").sort("scope", "line", "fortnight")
+
+
+def consumer_prices_by_borough(prices: pl.DataFrame) -> pl.DataFrame:
+    """Where in the city a kilogram costs what, per borough and line, over every
+    fortnight so far. PROFECO visits few stores per borough - `stores` says how few -
+    so a borough's figure is its supermarkets' prices, not its residents' spending."""
+    in_city = prices.filter(pl.col("borough_id").is_not_null()).with_columns(shelf_line())
+    return _shelf_summary(in_city, "borough_id", "borough", "line").sort("borough", "line")
+
+
+def consumer_prices_by_state(
+    prices: pl.DataFrame, production: pl.DataFrame, states: Mapping[str, str]
+) -> pl.DataFrame:
+    """What shoppers pay for a kilogram of plain ground or instant coffee in each state,
+    beside what the state's growers were paid for a kilogram of cherry in SIAP's latest
+    year, where it grows coffee. Cherry is not what the shelf sells: it takes several
+    kilograms of it to make one of roasted coffee, a factor this table does not assume.
+    """
+    plain = prices.filter(~pl.col("sweetened") & ~pl.col("decaf"))
+    shelves = _shelf_summary(plain, "state", "product")
+    spelling = {state: states.get(fold(state)) for state in shelves["state"].unique().to_list()}
+    growers = (
+        production.filter(pl.col("year") == production["year"].max())
+        .group_by(pl.col("state").alias("siap_state"))
+        .agg(
+            (pl.col("value_mxn").sum() / pl.col("production_t").sum() / 1000).alias(
+                "cherry_mxn_per_kg"
+            ),
+            pl.col("year").first().alias("siap_year"),
+        )
+    )
+    return (
+        shelves.with_columns(
+            pl.col("state").replace_strict(spelling, return_dtype=pl.String).alias("siap_state")
+        )
+        .join(growers, on="siap_state", how="left")
+        .drop("siap_state")
+        .sort("product", "median_mxn_per_kg", descending=[False, True])
+    )
+
+
+# The shelf's steps of the ladder: its line, and the unit its price is per.
+SHELF_STEPS = {
+    "ground, sweetened": ("supermarket, ground + sugar", "kg of ground coffee and sugar"),
+    "ground": ("supermarket, ground", "kg of ground coffee"),
+    "instant": ("supermarket, instant", "kg of instant coffee"),
+}
+
+
+def price_ladder(
+    prices: pl.DataFrame, offers: pl.DataFrame, production: pl.DataFrame, city: str
+) -> pl.DataFrame:
+    """A kilogram of coffee at each step the data reaches, in pesos: the cherry at the
+    farm gate (Mexico, SIAP's latest year), the supermarket's shelf and the specialty
+    roaster's shop (both in the city). Each step's unit is its own - a kilogram of
+    cherry, of instant, of coffee and sugar - and is said beside it: the steps are not
+    one product marked up, and no conversion between them is assumed."""
+    rows = []
+    if not production.is_empty():
+        latest = production.filter(pl.col("year") == production["year"].max())
+        cherry = latest.select(
+            pl.col("value_mxn").sum() / pl.col("production_t").sum() / 1000
+        ).item()
+        rows.append(
+            ("cherry at the farm gate", "SIAP", "kg of coffee cherry", cherry,
+             latest.height, str(latest["year"][0]))
+        )  # fmt: skip
+    shelf = prices.filter(pl.col("state") == city).with_columns(shelf_line())
+    for line, (step, unit) in SHELF_STEPS.items():
+        on_shelf = shelf.filter(pl.col("line") == line)
+        if not on_shelf.is_empty():
+            first, last = on_shelf.select(
+                pl.col("date").min().alias("first"), pl.col("date").max().alias("last")
+            ).row(0)
+            period = f"{first} to {last}"
+            rows.append(
+                (step, "PROFECO", unit, on_shelf["price_mxn_per_kg"].median(),
+                 on_shelf.height, period)
+            )  # fmt: skip
+    bags = offers.filter(
+        (pl.col("price_mxn_per_kg") > 0) & ~pl.col("price_outlier").fill_null(False)
+    )
+    if not bags.is_empty():
+        rows.append(
+            ("specialty roaster", "roasters", "kg of roasted coffee",
+             bags["price_mxn_per_kg"].median(), bags.height, str(bags["observed_on"].max()))
+        )  # fmt: skip
+    schema = {"step": pl.String, "source": pl.String, "unit": pl.String,
+              "median_mxn_per_kg": pl.Float64, "observations": pl.Int64,
+              "period": pl.String}  # fmt: skip
+    return pl.DataFrame(rows, schema=schema, orient="row").sort("median_mxn_per_kg")
+
+
+def price_ladder_figure(ladder: pl.DataFrame) -> Figure:
+    """Pure magnitude, one hue: a kilogram at each step, each labelled with its unit."""
+    figure, ax = canvas(
+        "A kilogram of coffee, from the farm to the shelf",
+        "median pesos per kg of what each step sells; shops in Mexico City",
+    )
+    ax.barh(ladder["step"], ladder["median_mxn_per_kg"], color=SERIES[0], height=0.62)
+    for step, value, unit in zip(
+        ladder["step"], ladder["median_mxn_per_kg"], ladder["unit"], strict=True
+    ):
+        label = f"  ${value:,.0f} per {unit}"
+        ax.text(value, step, label, va="center", color=SECONDARY, fontsize=8)
+    ax.margins(x=0.75)
+    value_grid(ax)
+    figure.tight_layout()
+    return figure
+
+
+def consumer_prices_figure(national: pl.DataFrame) -> Figure:
+    """Four lines in one unit, one axis, each named at its end: the shelf price of a
+    kilogram, fortnight by fortnight, across the country."""
+    figure, ax = canvas(
+        "Coffee on Mexico's supermarket shelves",
+        "median pesos per kilogram, by fortnight (PROFECO)",
+    )
+    for line, colour in zip(DRAWN_LINES, SERIES, strict=True):
+        series = national.filter(pl.col("line") == line).sort("fortnight")
+        if series.is_empty():
+            continue
+        days = series["fortnight"].to_list()
+        values = series["median_mxn_per_kg"].to_list()
+        ax.plot(days, values, color=colour, linewidth=2, marker="o", markersize=3)
+        ax.text(days[-1], values[-1], f"  {line}", color=colour, fontsize=9, va="center")
+    # Room on the right for the end labels, none on the left before the first fortnight.
+    first, last = national.select(
+        pl.col("fortnight").min().alias("first"), pl.col("fortnight").max().alias("last")
+    ).row(0)
+    ax.set_xlim(first - timedelta(days=6), last + (last - first) * 0.3)
+    ax.set_ylim(bottom=0)
+    figure.autofmt_xdate()
+    value_grid(ax, axis="y")
     figure.tight_layout()
     return figure

@@ -4,10 +4,14 @@ import polars as pl
 import pytest
 
 from domains.coffee.analysis import (
+    consumer_prices_by_borough,
+    consumer_prices_by_fortnight,
+    consumer_prices_by_state,
     kind_agreement,
     kind_scores,
     market_history,
     market_summary,
+    price_ladder,
     production_by_state,
     production_crosscheck,
     roaster_coverage,
@@ -359,3 +363,117 @@ def test_roaster_coverage_counts_coffees_not_origins() -> None:
     assert given("all", "price per kg") == (2, 3)
     assert table["shop"].unique(maintain_order=True).to_list() == ["a", "b", "all"]
     assert table.filter(pl.col("shop") == "a")["field"].to_list()[:2] == ["sheet", "country"]
+
+
+CITY = "Ciudad de México"
+
+
+def shelf_prices() -> pl.DataFrame:
+    """Five prices: three in the city (two stores, one borough each), two in Chiapas."""
+    rows = [
+        # store, state, borough, product, sweetened, decaf, per kg, day
+        ("Walmart Polanco", CITY, "Miguel Hidalgo", "ground", False, False, 400.0, 3),
+        ("Walmart Polanco", CITY, "Miguel Hidalgo", "ground", True, False, 250.0, 3),
+        ("Soriana Coyoacán", CITY, "Coyoacán", "instant", False, False, 900.0, 20),
+        ("Chedraui Tapachula", "Chiapas", None, "ground", False, False, 380.0, 3),
+        ("Chedraui Tapachula", "Chiapas", None, "instant", False, True, 950.0, 3),
+    ]
+    return pl.DataFrame(
+        [
+            {
+                "store": store, "state": state, "borough": borough,
+                "borough_id": None if borough is None else f"id-{borough}",
+                "product": product, "sweetened": sweetened, "decaf": decaf,
+                "price_mxn_per_kg": per_kg, "date": date(2026, 7, day),
+                "fortnight": date(2026, 7, 1 if day <= 15 else 16),
+                "latitude": 19.0, "longitude": -99.0,
+            }
+            for store, state, borough, product, sweetened, decaf, per_kg, day in rows
+        ]
+    )  # fmt: skip
+
+
+def cherry() -> pl.DataFrame:
+    """Two years of SIAP: only the latest one prices the cherry."""
+    return pl.DataFrame(
+        {
+            "year": [2024, 2025, 2025],
+            "state": ["Chiapas", "Chiapas", "Puebla"],
+            "production_t": [10.0, 100.0, 100.0],
+            "value_mxn": [1.0, 500_000.0, 1_500_000.0],
+        }
+    )
+
+
+def roaster_bags() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "price_mxn_per_kg": [1000.0, 1200.0, 5000.0, None],
+            "price_outlier": [False, None, True, None],  # a copied price is left out
+            "observed_on": [date(2026, 9, 27)] * 4,
+        }
+    )
+
+
+def test_shelf_prices_are_followed_by_fortnight_in_the_country_and_the_city() -> None:
+    table = consumer_prices_by_fortnight(shelf_prices(), CITY)
+
+    ground = table.filter(pl.col("line") == "ground")
+    assert ground.select("scope", "median_mxn_per_kg", "prices", "stores").rows() == [
+        ("city", 400.0, 1, 1),
+        ("national", 390.0, 2, 2),
+    ]
+    assert set(table["line"]) == {"ground", "ground, sweetened", "instant", "instant, decaf"}
+    assert table.filter(pl.col("line") == "instant")["fortnight"].to_list() == [
+        date(2026, 7, 16), date(2026, 7, 16),
+    ]  # fmt: skip
+
+
+def test_a_borough_is_summed_up_from_the_city_s_prices_only() -> None:
+    table = consumer_prices_by_borough(shelf_prices())
+
+    assert table.select("borough", "line", "median_mxn_per_kg").rows() == [
+        ("Coyoacán", "instant", 900.0),
+        ("Miguel Hidalgo", "ground", 400.0),
+        ("Miguel Hidalgo", "ground, sweetened", 250.0),
+    ]
+
+
+def test_a_state_s_shelf_is_set_beside_what_its_growers_were_paid() -> None:
+    states = {"chiapas": "Chiapas", "estado de mexico": "México"}
+
+    table = consumer_prices_by_state(shelf_prices(), cherry(), states)
+
+    # Plain coffee only: the sweetened and the decaf are other products.
+    assert table.select("state", "product", "median_mxn_per_kg").rows() == [
+        ("Ciudad de México", "ground", 400.0),  # dearest first, product by product
+        ("Chiapas", "ground", 380.0),
+        ("Ciudad de México", "instant", 900.0),
+    ]
+    chiapas = table.filter(pl.col("state") == "Chiapas").row(0, named=True)
+    assert (chiapas["cherry_mxn_per_kg"], chiapas["siap_year"]) == (5.0, 2025)  # 2025's only
+    assert table.filter(pl.col("state") == CITY)["cherry_mxn_per_kg"].is_null().all()
+
+
+def test_the_ladder_prices_a_kilogram_at_each_step_in_its_own_unit() -> None:
+    ladder = price_ladder(shelf_prices(), roaster_bags(), cherry(), CITY)
+
+    assert ladder.select("step", "unit", "median_mxn_per_kg", "observations").rows() == [
+        ("cherry at the farm gate", "kg of coffee cherry", 10.0, 2),
+        ("supermarket, ground + sugar", "kg of ground coffee and sugar", 250.0, 1),
+        ("supermarket, ground", "kg of ground coffee", 400.0, 1),
+        ("supermarket, instant", "kg of instant coffee", 900.0, 1),
+        ("specialty roaster", "kg of roasted coffee", 1100.0, 2),
+    ]
+    assert ladder.filter(pl.col("source") == "PROFECO")["period"].to_list()[0] == (
+        "2026-07-03 to 2026-07-03"
+    )
+
+
+def test_a_ladder_with_nothing_to_stand_on_is_empty_not_an_error() -> None:
+    nothing = shelf_prices().clear()
+
+    ladder = price_ladder(nothing, roaster_bags().clear(), cherry().clear(), CITY)
+
+    assert ladder.is_empty()
+    assert "median_mxn_per_kg" in ladder.columns

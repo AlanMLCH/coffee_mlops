@@ -6,6 +6,7 @@ is how CI proves the API's dependency list is complete instead of relying on pac
 another pipeline happens to pull in.
 """
 
+import csv
 import io
 import zipfile
 from collections.abc import Iterator
@@ -71,6 +72,92 @@ ICO_PAGE = [
 ]
 
 
+# PROFECO's page names its files only in its links' text; the addresses are tokens, and
+# last year's is listed first.
+PROFECO_FILE = "https://datos.profeco.gob.mx/datos_abiertos/file.php?t=9d62"
+PROFECO_PAGE = (
+    b'<a href="https://www.gob.mx/profeco">PROFECO</a><a href="index.php"><img src="l.png"></a>'
+    b'<a href="file.php?t=b954">\n  Quien es Quien en los Precios 2025</a>'
+    b'<a href="file.php?t=9d62"><span>Quien es Quien en los</span> Precios 2026</a>'
+    b'<a href="file.php?t=42ed">Metadatos dataset</a>'
+)
+# Stores: chain, kind, name, address, state, municipality, latitude, longitude. The two
+# in the city stand where the boundary fixture puts Miguel Hidalgo and La Magdalena
+# Contreras; the market says Miguel Hidalgo and stands in the other.
+POLANCO = ("Wal-mart", "Supermercado / Tienda de Autoservicio", "Walmart Sucursal Polanco",
+           "Ejercito Nacional 843. Cp. 11520", "Ciudad de México", "Miguel Hidalgo",
+           "19.45", "-99.15")  # fmt: skip
+CONTRERAS = ("Soriana Super", "Supermercado / Tienda de Autoservicio",
+             "Soriana Super Sucursal Contreras", "San Jeronimo 630. Cp. 10200",
+             "Ciudad de México", "Magdalena Contreras", "19.3048187", "-99.1022689")  # fmt: skip
+MARKET = ("Mercado Publico", "Mercados", "Mercado Tacuba", "Calz. Mexico Tacuba s/n",
+          "Ciudad de México", "Miguel Hidalgo", "19.3048", "-99.1023")  # fmt: skip
+XALAPA = ("Chedraui", "Supermercado / Tienda de Autoservicio", "Chedraui Sucursal Xalapa",
+          "Av. Lazaro Cardenas 300", "Veracruz", "Xalapa", "19.54", "-96.91")  # fmt: skip
+QQP_COLUMNS = ["producto", "presentacion", "marca", "categoria", "catalogo", "precio",
+               "fecha_registro", "cadena_comercial", "giro", "nombre_comercial", "direccion",
+               "estado", "municipio", "latitud", "longitud"]  # fmt: skip
+INSTANT, GROUND = "Café Soluble", "Café Tostado y Molido"
+
+
+def shelf(product: str, presentation: str, brand: str, price: str, day: str,
+          store: tuple[str, ...], category: str = "Café") -> list[str]:  # fmt: skip
+    """One row of a fortnight's file, in the dictionary's column order."""
+    return [product, presentation, brand, category, "Básicos", price, day, *store]
+
+
+# Three fortnights of 2026, each one of the ways the real files differ: May's cp1252
+# with day-first dates, June's with three undocumented columns and letters lost to "?",
+# July's with a coffee product nobody listed. Beside the coffee, what is not coffee.
+QQP_FORTNIGHTS: dict[str, tuple[str, list[str], list[list[str]]]] = {
+    "QQP_2026/05-2026_Q1.csv": ("cp1252", QQP_COLUMNS, [
+        shelf(INSTANT, "Frasco 120 Gr.", "Nescafé. Clásico", "110", "04/05/2026", POLANCO),
+        shelf(GROUND, "Bolsa 400 Gr. Mezclado con Caramelo", "Legal", "95.9", "04/05/2026",
+              POLANCO),
+        shelf(INSTANT, "Frasco 170 Gr. Sin Cafeína. Descafeinado", "Nescafé. Decaf", "160",
+              "12/05/2026", XALAPA),
+        shelf("Cafeteras", "Eléctrica 12 Tazas", "Oster", "899", "04/05/2026", POLANCO,
+              category="Aparatos Eléctricos"),
+    ]),
+    "QQP_2026/06-2026_Q1.csv": ("utf-8-sig", [*QQP_COLUMNS, "folio", "cv_producto",
+                                              "cv_marca"], [
+        [*shelf(INSTANT, "Frasco 120 Gr.", "Nescafé. Cl?sico", "112", "2026/06/03", POLANCO),
+         "1", "11", "7"],
+        # The same price twice once the letter is back: one row.
+        [*shelf(INSTANT, "Frasco 120 Gr.", "Nescafé. Clásico", "112", "2026/06/03", POLANCO),
+         "2", "11", "7"],
+        # Two prices on one shelf on one day: both kept.
+        [*shelf(GROUND, "Bolsa 400 Gr.", "Internacional Americano", "160", "2026/06/05",
+                CONTRERAS), "3", "12", "8"],
+        [*shelf(GROUND, "Bolsa 400 Gr.", "Internacional Americano", "162", "2026/06/05",
+                CONTRERAS), "4", "12", "8"],
+        [*shelf("Leche", "Caja 1 Lt.", "Lala", "28", "2026/06/05", CONTRERAS,
+                category="Leche"), "5", "13", "9"],
+    ]),
+    "QQP_2026/07-2026_Q2.csv": ("utf-8-sig", QQP_COLUMNS, [
+        shelf(INSTANT, "Frasco 200 Gr.", "Nescafé. Clásico", "190", "2026/07/20", POLANCO),
+        shelf(GROUND, "Bolsa 400 Gr.", "Internacional Americano", "158", "2026/07/21",
+              MARKET),
+        shelf(GROUND, "Bolsa 400 Gr.", "Internacional Americano", "165", "2026/07/22",
+              XALAPA),
+        shelf("Café en Cápsulas", "Caja 10 Pzas.", "Dolce Gusto", "150", "2026/07/20",
+              POLANCO),
+    ]),
+}  # fmt: skip
+
+
+def qqp_archive(fortnights: dict[str, tuple[str, list[str], list[list[str]]]]) -> bytes:
+    """A year of PROFECO's survey: a folder of fortnightly CSVs in one ZIP, each file
+    in its own character set, CRLF, every field quoted where it needs to be."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for member, (encoding, columns, rows) in fortnights.items():
+            text = io.StringIO()
+            csv.writer(text, lineterminator="\r\n").writerows([columns, *rows])
+            archive.writestr(member, text.getvalue().encode(encoding))
+    return buffer.getvalue()
+
+
 def zip_fixture(fixture: str, member: str) -> bytes:
     """Rebuild the upstream ZIP envelope around a recorded CSV excerpt."""
     buffer = io.BytesIO()
@@ -125,17 +212,21 @@ def recorded() -> dict[str, bytes]:
         "siap_agricola": (FIXTURES / "siap_agricola_sample.csv").read_bytes(),
         "world_bank_prices": xlsx("Monthly Prices", WORLD_BANK_SHEET),
         "ico_prices": pdf(ICO_PAGE),
+        "profeco_prices": qqp_archive(QQP_FORTNIGHTS),
     }
 
 
 @pytest.fixture
 def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedServer:
     urls = {name: str(source.url) for name, source in coffee_config.sources.items()}
-    elsewhere = {"cqi_2023", "world_bank_prices"}  # behind a redirect, and behind a link
+    # Behind a redirect, and behind a link.
+    elsewhere = {"cqi_2023", "world_bank_prices", "profeco_prices"}
     payloads = {urls[name]: body for name, body in recorded.items() if name not in elsewhere}
     payloads[SIGNED_URL] = recorded["cqi_2023"]
     payloads[urls["world_bank_prices"]] = WORLD_BANK_PAGE
     payloads[WORLD_BANK_FILE] = recorded["world_bank_prices"]
+    payloads[urls["profeco_prices"]] = PROFECO_PAGE
+    payloads[PROFECO_FILE] = recorded["profeco_prices"]
     # The corpus a publisher serves to anyone. The ones behind a 403 are not here: they
     # are handed over by a person, and their absence is what the extract step reports.
     documents = {

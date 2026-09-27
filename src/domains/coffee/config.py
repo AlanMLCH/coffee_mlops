@@ -3,13 +3,15 @@
 The core's `DomainConfig` covers what every domain has. Coffee adds three API sources
 that each need code (DENUE pages, Overpass takes a query, FAS wants a key and walks
 years), a cleaning vocabulary for two CQI snapshots that disagree about spelling, the
-rules for reading the roasters' product sheets, and the market studies that only make
-sense for a commodity with a world balance.
+rules for reading the roasters' product sheets, what PROFECO's shelf prices say about
+coffee, and the market studies that only make sense for a commodity with a world
+balance.
 """
 
+import re
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mlops_core.config import DomainConfig
@@ -225,6 +227,31 @@ class ProductionConfig(BaseModel):
     country: str  # its PSD name, for setting the municipal totals against the world balance
 
 
+class ConsumerPricesConfig(BaseModel):
+    """What PROFECO's shelf prices need to be read as coffee: which of its products are
+    coffee, and what a presentation's words say about what is in the jar or the bag."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str  # the raw source that downloads the survey
+    products: dict[str, Literal["ground", "instant"]] = Field(min_length=1)
+    # Patterns over the presentation, accents dropped and lower-cased.
+    sweetened: str  # a blend of coffee with sugar or caramel
+    decaf: str
+    city: str  # the state, as PROFECO spells it, whose shelves are given a borough
+    borough_aliases: dict[str, str] = {}  # PROFECO's name -> INEGI's
+
+    @model_validator(mode="after")
+    def _patterns_compile(self) -> Self:
+        for field in ("sweetened", "decaf"):
+            try:
+                re.compile(getattr(self, field))
+            except re.error as broken:
+                message = f"`consumer_prices.{field}` is not a pattern: {broken}"
+                raise ValueError(message) from broken
+        return self
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -247,3 +274,14 @@ class CoffeeConfig(DomainConfig):
     cleaning: CleaningConfig
     production: ProductionConfig
     market_analysis: MarketAnalysisConfig
+    consumer_prices: ConsumerPricesConfig
+
+    @model_validator(mode="after")
+    def _shelf_prices_are_downloaded(self) -> Self:
+        source = self.sources.get(self.consumer_prices.source)
+        if source is None or source.member is None:
+            raise ValueError(
+                f"`consumer_prices.source` is {self.consumer_prices.source!r}: it has to be a "
+                "source whose `member` names the archive's folder of fortnights"
+            )
+        return self

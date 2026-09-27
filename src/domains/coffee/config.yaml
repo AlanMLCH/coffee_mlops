@@ -81,6 +81,23 @@ sources:
     url: https://ico.org/documents/I-CIP.pdf
     filename: I-CIP.pdf
 
+  # Stage 4: what packaged coffee costs on a shop's shelf. PROFECO's "Quién es Quién en
+  # los Precios": its staff price a basket of products in supermarkets, convenience
+  # stores, markets and pharmacies across Mexico. A year is one ZIP of fortnightly CSVs,
+  # republished every month with the month before added (metadata: monthly; the July
+  # release came out on 31 August). Verified 2026-09-27: 195 MB, January-July 2026, 2.5 GB
+  # unpacked, 64,451 rows of coffee; no robots.txt (404); no licence stated on the page
+  # or in the metadata. The page's links are opaque tokens (file.php?t=...), so the file
+  # is found by what its link says, and the page lists 2025 before 2026, so the year is
+  # named: a new year is a change here. 2024 and 2025 are RAR archives, which Python
+  # does not open without an outside tool.
+  profeco_prices:
+    url: https://datos.profeco.gob.mx/datos_abiertos/qqp.php
+    link_text: ^Quien es Quien en los Precios 2026$
+    filename: QQP_2026.zip
+    member: QQP_2026 # the folder of fortnights: the domain's reader reads them all
+    refresh_hours: 168 # a monthly release of 195 MB, not fetched every day
+
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
 # shows only the current month, and each read of the roasters' catalogues is an
 # observation of what they sold then. Every download is kept, never pruned.
@@ -820,6 +837,26 @@ analysis:
     - shop_kinds
     - mexico_production
     - roaster_coverage
+    - price_ladder
+    - consumer_prices
+
+# What PROFECO's shelf prices say about coffee (stage 4). Coffee is found by product
+# name: the category is spelled "Cafe" in some months and "Café" in others.
+consumer_prices:
+  source: profeco_prices
+  products: # PROFECO's product -> which coffee it is
+    Café Soluble: instant
+    Café Tostado y Molido: ground
+  # Read in the presentation, accents dropped and lower-cased: "Bolsa 400 Gr. Mezclado
+  # con Caramelo" is a blend of coffee and sugar, priced per kilogram of both.
+  sweetened: mezclado con
+  decaf: descafeinado
+  # The state whose shelves are given a borough, as PROFECO spells it: the one the store
+  # declares, matched to INEGI's names (case and accents aside), and checked against
+  # where its coordinates fall.
+  city: Ciudad de México
+  borough_aliases: # PROFECO's name -> INEGI's, where they differ by more than that
+    Magdalena Contreras: La Magdalena Contreras
 
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:

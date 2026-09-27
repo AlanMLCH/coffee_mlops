@@ -22,6 +22,7 @@ def test_every_built_table_is_queryable_by_layer(
         "clean.boroughs",
         "clean.coffee_reviews",
         "clean.coffee_shops",
+        "clean.consumer_prices",
         "clean.document_chunks",
         "clean.documents",
         "clean.market_context",

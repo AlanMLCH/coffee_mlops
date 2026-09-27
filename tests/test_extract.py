@@ -18,6 +18,7 @@ from mlops_core.data.extract import (
     latest_ingestion,
     user_agent,
 )
+from tests.conftest import PROFECO_FILE, PROFECO_PAGE
 from tests.fakes import RecordedServer
 
 T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
@@ -38,10 +39,12 @@ def test_every_source_is_stored_byte_for_byte(
         assert artifact.manifest.sha256 == hashlib.sha256(recorded[name]).hexdigest()
         assert artifact.manifest.size_bytes == len(recorded[name])
         source = coffee_config.sources[name]
-        if source.link is None:
-            assert artifact.manifest.url == str(source.url)
-        else:  # the file the page links, which names the release
+        if source.link is not None:  # the file the page links, which names the release
             assert re.search(source.link, artifact.manifest.url)
+        elif source.link_text is not None:  # the one whose link says so
+            assert artifact.manifest.url == PROFECO_FILE
+        else:
+            assert artifact.manifest.url == str(source.url)
         assert artifact.partition.name.startswith("ingested_at=")
 
 
@@ -128,6 +131,21 @@ def test_a_file_is_found_by_the_link_its_page_gives_it() -> None:
             find_link(client, "https://bank.test/research/prices", r"\.csv$")
 
     assert found == "https://bank.test/data/prices-2026-08.xlsx"  # relative, made absolute
+
+
+def test_a_file_is_found_by_what_its_link_says_when_its_address_says_nothing() -> None:
+    """Tokens for addresses, markup and line breaks inside the text, and last year first:
+    the pattern reads the text a person reads."""
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=PROFECO_PAGE))
+    page = "https://datos.profeco.gob.mx/datos_abiertos/qqp.php"
+    with httpx.Client(transport=transport) as client:
+        found = find_link(client, page, r"^Quien es Quien en los Precios 2026$", on="text")
+        anywhere = find_link(client, page, r"Precios \d{4}$", on="text")
+        with pytest.raises(LookupError, match="update `link_text`"):
+            find_link(client, page, r"Precios 2027", on="text")
+
+    assert found == PROFECO_FILE
+    assert anywhere.endswith("t=b954")  # the first match is the first listed, not the latest
 
 
 def test_a_dropped_connection_is_tried_again_and_an_http_error_is_not(

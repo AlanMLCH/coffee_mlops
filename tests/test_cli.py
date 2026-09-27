@@ -64,6 +64,7 @@ def test_extract_writes_raw_layer_under_the_domain(
         "roaster_catalogs",  # the shops need no credential either, only robots.txt's leave
         "world_bank_prices",
         "ico_prices",
+        "profeco_prices",
         *served,
     }
 
@@ -107,6 +108,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "roaster_offer_history",
         "roaster_origin_history",
         "price_indicators",
+        "consumer_prices",
         "documents",
         "document_chunks",
     }
@@ -139,6 +141,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "roaster_offer_history",
         "roaster_origin_history",
         "price_indicators",
+        "consumer_prices",
         "documents",
         "document_chunks",
     }
@@ -329,6 +332,8 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "mexico_production.png",  # review_residual_bias needs predictions; this run has none
         "roaster_coverage.png",
         "offer_feature_importance.png",
+        "price_ladder.png",
+        "consumer_prices.png",
     }
 
 

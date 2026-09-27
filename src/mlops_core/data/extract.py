@@ -27,8 +27,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cache
+from html.parser import HTMLParser
 from importlib.metadata import distributions
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urljoin
 
 import httpx
@@ -42,7 +44,6 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_ATTEMPTS = 4
 CHECKED_AT = "checked_at"  # beside a source's partitions: when it was last downloaded
-_HREF = re.compile(r"""href=["']([^"']+)["']""")
 
 
 class Manifest(BaseModel):
@@ -122,20 +123,54 @@ def ingest(
     fresh = _fresh(raw_dir, name, source.refresh_hours, now)
     if fresh is not None:  # before the page is read too: that is a request as well
         return fresh
-    url = (
-        str(source.url) if source.link is None else find_link(client, str(source.url), source.link)
-    )
+    url = str(source.url)
+    if source.link is not None:
+        url = find_link(client, url, source.link)
+    elif source.link_text is not None:
+        url = find_link(client, url, source.link_text, on="text")
     return ingest_file(name, url, source.filename, raw_dir, client, now)
 
 
-def find_link(client: httpx.Client, page: str, pattern: str) -> str:
-    """The first link on `page` that `pattern` matches, as an absolute URL."""
+def find_link(
+    client: httpx.Client, page: str, pattern: str, on: Literal["href", "text"] = "href"
+) -> str:
+    """The first link on `page` that `pattern` matches, as an absolute URL: matched
+    against where the link points, or against what it says."""
     response = client.get(page)
     response.raise_for_status()
-    for href in _HREF.findall(response.text):
-        if re.search(pattern, href):
-            return urljoin(page, str(href))
-    raise LookupError(f"No link on {page} matches {pattern!r}: look at the page and update `link`")
+    anchors = _Anchors()
+    anchors.feed(response.text)
+    for href, text in anchors.found:
+        if re.search(pattern, href if on == "href" else text):
+            return urljoin(page, href)
+    field = "link" if on == "href" else "link_text"
+    raise LookupError(
+        f"No link on {page} matches {pattern!r}: look at the page and update `{field}`"
+    )
+
+
+class _Anchors(HTMLParser):
+    """Every link on a page: where it points, and its text with the whitespace a page's
+    markup scatters through it collapsed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.found: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a":
+            self._href, self._text = dict(attrs).get("href"), []
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._href is not None:
+            self.found.append((self._href, " ".join("".join(self._text).split())))
+            self._href = None
 
 
 def ingest_file(

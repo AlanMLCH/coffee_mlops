@@ -21,6 +21,7 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "siap_agricola",
         "world_bank_prices",
         "ico_prices",
+        "profeco_prices",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -198,6 +199,33 @@ def test_a_workbook_names_its_sheet_and_a_link_is_a_pattern() -> None:
         SourceConfig(url="https://b.test/p.csv", filename="p.csv", sheet="Prices")
     with pytest.raises(ValidationError, match="unterminated"):
         SourceConfig(url="https://b.test/", filename="p.csv", link=r"prices-(\d+")
+
+
+def test_a_link_is_found_by_where_it_points_or_by_what_it_says_not_both() -> None:
+    from mlops_core.config import SourceConfig
+
+    page = {"url": "https://b.test/", "filename": "p.zip", "member": "p"}
+    SourceConfig(**page, link_text=r"^Precios 2026$")
+    with pytest.raises(ValidationError, match="not both"):
+        SourceConfig(**page, link=r"\.zip$", link_text=r"^Precios 2026$")
+    with pytest.raises(ValidationError, match="`link_text` is not a pattern"):
+        SourceConfig(**page, link_text=r"Precios (2026")
+
+
+def test_shelf_prices_come_from_a_source_that_downloads_their_folder() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["consumer_prices"]["source"] = "ico_prices"  # a PDF, not an archive of tables
+
+    with pytest.raises(ValidationError, match="names the archive's folder of fortnights"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_what_a_presentation_says_is_read_with_patterns_that_compile() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["consumer_prices"]["decaf"] = "descafeinad(o"
+
+    with pytest.raises(ValidationError, match=r"`consumer_prices\.decaf` is not a pattern"):
+        CoffeeConfig.model_validate(config)
 
 
 def test_a_schedule_is_a_cron_in_a_timezone() -> None:

@@ -77,9 +77,14 @@ class SourceConfig(BaseModel):
     # on it this pattern matches: a release whose address carries an id per edition, on
     # a page whose address does not.
     link: str | None = None
+    # The same, matched against what the link says rather than where it points: a page
+    # whose addresses are opaque tokens (`file.php?t=9d62...`) names its files only in
+    # their text.
+    link_text: str | None = None
     filename: str
     # The file inside the archive, when the download is a ZIP: a CSV, or the layer of
-    # a geospatial dataset when `spatial` is set.
+    # a geospatial dataset when `spatial` is set. For an archive of many tables that a
+    # domain's own reader reads, the folder they are in.
     member: str | None = None
     # Literal strings the upstream uses for missing values (e.g. R writes "NA").
     null_values: list[str] = []
@@ -109,11 +114,19 @@ class SourceConfig(BaseModel):
     def _a_workbook_names_its_sheet(self) -> Self:
         if self.filename.endswith(".xlsx") != (self.sheet is not None):
             raise ValueError(f"'{self.filename}': a workbook names its `sheet`, and only one does")
-        if self.link is not None:
-            try:
-                re.compile(self.link)  # a broken pattern fails when the config loads
-            except re.error as broken:
-                raise ValueError(f"`link` is not a pattern: {broken}") from broken
+        return self
+
+    @model_validator(mode="after")
+    def _a_link_is_found_one_way(self) -> Self:
+        if self.link is not None and self.link_text is not None:
+            raise ValueError("Set `link` or `link_text`, not both: a file is found one way")
+        for field in ("link", "link_text"):
+            pattern = getattr(self, field)
+            if pattern is not None:
+                try:
+                    re.compile(pattern)  # a broken pattern fails when the config loads
+                except re.error as broken:
+                    raise ValueError(f"`{field}` is not a pattern: {broken}") from broken
         return self
 
 

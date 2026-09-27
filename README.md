@@ -6,15 +6,17 @@ features → training → batch & online inference → agent/RAG — bootstrappe
 
 It is a **domain-reusable framework**: a generic core (`mlops_core`) runs the whole
 cycle, and a domain is a package under `domains/` that answers what the core cannot
-know. Pointing it at a new domain (video games is next) should cost one adapter plus
-one config file, and never an edit to the core - see [Adding a domain](#adding-a-domain).
+know. Pointing it at a new domain (video games, once coffee is finished) should cost
+one adapter plus one config file, and never an edit to the core - see
+[Adding a domain](#adding-a-domain).
 
 Everything runs locally. No cloud, no recurring costs.
 
 ## Status
 
 **Stage 4 — time series, drift and retraining: in progress.** Stages 1, 2 and 3 are
-done; the international price of green coffee is in, day by day and month by month.
+done; the international price of green coffee is in, day by day and month by month, and
+so is what packaged coffee costs on Mexico's shelves, fortnight by fortnight.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -38,6 +40,7 @@ done; the international price of green coffee is in, day by day and month by mon
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 | [World Bank Pink Sheet](https://www.worldbank.org/en/research/commodity-markets) (stage 4) | Monthly price of other mild Arabicas and Robustas (the ICO's group indicators), 1960 to last month, $/kg | 800 months | Workbook found by its link on the page, which changes with each release |
 | [ICO indicator prices](https://ico.org/documents/I-CIP.pdf) (stage 4) | Daily I-CIP and its four group indicators, US cents/lb, **the current month only** | 18 days so far | A one-page PDF table, read and checked against its own averages; every download kept |
+| [PROFECO, Quién es Quién en los Precios](https://datos.profeco.gob.mx/datos_abiertos/qqp.php) (stage 4) | Shelf prices of packaged instant and ground coffee in supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by fortnight, January-July 2026 | 64,451 | A 195 MB ZIP of fortnightly CSVs (2.5 GB unpacked), found by its link's text; coffee kept |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
@@ -95,6 +98,7 @@ flowchart TD
             direction TB
             world_bank_prices["world_bank_prices<br/>World Bank · workbook, monthly since 1960<br/>found by its link on the page"]
             ico_prices["ico_prices<br/>ICO · one-page PDF, this month only<br/>every download kept: accumulate"]
+            profeco_prices["profeco_prices<br/>PROFECO · ZIP of fortnightly CSVs, 195 MB<br/>found by its link's text · coffee kept"]
         end
         subgraph CORPUS["Documents: text, never figures"]
             direction TB
@@ -120,10 +124,11 @@ flowchart TD
         roaster_offer_history["roaster_offer_history<br/>every read of the shops: offer × read"]
         roaster_origin_history["roaster_origin_history<br/>every read's sheets"]
         price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
+        consumer_prices["consumer_prices<br/>a shelf price · per kg · sweetened · decaf<br/>the city's in the borough they declare"]
         documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
         document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
     end
-    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE<br/>World Bank months against ICO days"]
+    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE and PROFECO<br/>World Bank months against ICO days"]
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
     offer_features["features/offer_features<br/>adapter.enrich: the coffee's origin<br/>split by coffee, not by bag"]
@@ -1122,6 +1127,72 @@ ones read again are ones the model may have learned.
   newest three partitions of every table, `raw/` included; for the ICO's page that would
   have deleted days that can never be fetched again.
 
+## What a kilogram costs on the shelf (stage 4)
+
+`clean.consumer_prices` holds every price of packaged coffee PROFECO's staff recorded in
+2026 so far: 64,451 of them from January to July, across the country; 15,426 in Mexico
+City, from 120 stores in 13 of its 16 boroughs. National brands of instant and
+roasted-and-ground coffee - Nescafé, Legal, Internacional, Los Portales, store brands -
+put per kilogram, with what the presentation declares (a blend with sugar or caramel,
+decaf). It is the rung the tables were missing between the grower and the specialty
+roaster:
+
+![A kilogram of coffee, from the farm to the shelf](docs/figures/price_ladder.png)
+
+| A kilogram, median | Pesos | Of what | Rests on |
+|---|---:|---|---|
+| Cherry at the farm gate (Mexico, 2025) | 8 | coffee cherry | 489 municipalities (SIAP) |
+| Supermarket shelf, ground with sugar | 246 | coffee and sugar | 3,353 prices |
+| Supermarket shelf, ground | 380 | ground coffee | 1,358 prices |
+| Supermarket shelf, instant | 900 | instant coffee | 5,295 prices |
+| Specialty roaster's shop | 1,080 | roasted coffee | 512 offers |
+
+- **Each rung is its own product**, and the table does not pretend otherwise: it takes
+  several kilograms of cherry to make one of roasted coffee, and a kilogram of instant
+  makes several times the cups a kilogram of ground coffee does. No conversion between
+  them is assumed; the margin thesis needs green coffee in pesos, and an exchange rate
+  is not a source yet.
+- **A specialty bag costs 2.8 times the supermarket's plain ground coffee per kilogram**,
+  and only a fifth more than instant.
+- **Where you buy matters less than what you buy.** The chains price nationally: plain
+  ground coffee's median is between 380 and 423 pesos/kg in every state. In the city's
+  boroughs it runs from 330 to 423, and the two cheapest rest on one store each. The
+  growers of those states were paid from 4.8 (Morelos) and 5.5 (Chiapas, the largest)
+  to 14.5 (Querétaro) pesos per kilogram of cherry.
+- **Instant got dearer, ground did not.** The national median of plain instant went from
+  833 to 958 pesos/kg between January and July (+15%); plain ground stayed at 380-395.
+
+![Coffee on Mexico's supermarket shelves](docs/figures/consumer_prices.png)
+
+What it took to read, and what the core gained:
+
+- **A link found by what it says** (`link_text:`). The page's addresses are opaque tokens
+  (`file.php?t=9d62...`), and it lists 2025 before 2026, so "the first year it shows" is
+  last year: the YAML names the year, and a new year is a one-line change. 2024 and 2025
+  are RAR archives, which Python does not open without an outside tool; they are not read.
+- **Fifteen documented columns out of files that do not agree with each other.** The
+  archive is 2.5 GB of fortnightly CSVs; the domain's reader walks them inside the ZIP
+  and keeps coffee. May's two files are cp1252 and the rest UTF-8, June's add three
+  undocumented columns, May writes dates day-first - and every date is checked to fall
+  in the fortnight its file is named for, so a day and a month swapped cannot pass.
+  Coffee is found by product name, because the category is spelled "Cafe" in some
+  months and "Café" in others; anything else filed under coffee is said in the log.
+- **Letters lost to "?"** (June's "Nescafé. Cl?sico", "Naucalpan de Ju?rez") are put back
+  only where the same column spells the value whole and only one spelling fits: 45
+  values, none left.
+- **The borough is the one the store declares, and the coordinates are audited against
+  it** - the other way round from DENUE, whose coordinates agree with its own boroughs
+  9,860 times out of 9,860. Here 114 of 120 stores agree; of the six that do not, two
+  sit within 200 m of the line and four land 1.5 to 12 km away, in the wrong borough (a
+  market known to be in Azcapotzalco, placed in Iztacalco). There the coordinates are
+  what is wrong.
+- **A DuckDB bug, caught by a guard that was already there.** DuckDB 1.5.5's spatial
+  LEFT JOIN turned these 64,451 points into 67,810 rows: some emitted twice, once
+  matched and once with nulls, and 327 lost. The row-count check refused it (with a
+  misleading message, "the areas overlap"). Points are now matched with an inner join,
+  which agrees with `ST_Within` over every pair, and attached back to their rows; a test
+  with 20,000 points pins it.
+
 ## What a kilo costs (stage 3)
 
 The domain's second model, `offer`, prices a kilo of roasted coffee on a Mexico City
@@ -1177,7 +1248,6 @@ not the only place it appears:
 Altitude carries it, then the shop, then the bag's size - and the Gesha column earns its
 place, which is what the variety features were added for.
 
-## Results (stage 1)
 ## Results (stage 1)
 
 Predicting `Total Cup Points` from origin, altitude, variety, process and the origin
@@ -1287,5 +1357,5 @@ The evaluation is built to survive a small test set:
 See the stage table above. The core was extracted at the end of stage 2, once the file
 and API archetypes existed - abstracting before having working cases produces the
 wrong interfaces - and the contract freezes at the end of stage 3, once a third
-archetype (scraping) has been through it. Video games follows, and its line count goes
-in the table above.
+archetype (scraping) has been through it. Video games comes after the coffee domain is
+finished (decided 2026-09-27), and its line count goes in the table above.

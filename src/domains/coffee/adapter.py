@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -119,15 +120,28 @@ class CoffeeAdapter:
 
     def file_readers(self) -> Mapping[str, FileReader]:
         from domains.coffee.sources.ico import read_indicator_prices
+        from domains.coffee.sources.profeco import read_shelf_prices
 
-        return {"ico_prices": read_indicator_prices}
+        shelves = self.config.consumer_prices
+        folder = self.config.sources[shelves.source].member
+        if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
+            raise ValueError(f"{shelves.source} names no folder of fortnights")
+        return {
+            "ico_prices": read_indicator_prices,
+            shelves.source: partial(
+                read_shelf_prices, folder=folder, products=list(shelves.products)
+            ),
+        }
 
     def clean(
         self, raw: Mapping[str, pl.DataFrame], read_at: Mapping[str, datetime]
     ) -> Mapping[str, CleanTable]:
         from domains.coffee.clean import clean_tables
 
-        return clean_tables(raw, self.config.cleaning, self.config.production, read_at)
+        config = self.config
+        return clean_tables(
+            raw, config.cleaning, config.production, config.consumer_prices, read_at
+        )
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
         return clean_schemas(self.config.cleaning)
@@ -146,7 +160,14 @@ class CoffeeAdapter:
     def studies(self, clean: Mapping[str, pl.DataFrame]) -> Mapping[str, pl.DataFrame]:
         from domains.coffee.analysis import studies
 
-        return studies(clean, self.config.market_analysis, self.config.production)
+        config = self.config
+        return studies(
+            clean,
+            config.market_analysis,
+            config.production,
+            config.consumer_prices,
+            config.cleaning.roaster_sheets.states,
+        )
 
     def figures(self, tables: Mapping[str, pl.DataFrame]) -> Mapping[str, Figure]:
         from domains.coffee.analysis import figures

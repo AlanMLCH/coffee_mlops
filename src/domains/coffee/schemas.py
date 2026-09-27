@@ -275,6 +275,32 @@ ICO_PRICES = pa.DataFrameSchema(
     },
 )
 
+# PROFECO's shelf prices, coffee only, as its reader leaves them: what the clean layer
+# depends on, typed. A presentation that states no size could never become a price
+# per kilogram, so it stops the pipeline here.
+PROFECO_PRICES = pa.DataFrameSchema(
+    name="profeco_prices",
+    coerce=True,
+    columns={
+        "producto": pa.Column(pl.String),
+        "presentacion": pa.Column(pl.String, pa.Check.str_matches(r"(?i).*\d\s*(gr|g|kg)\b")),
+        "marca": pa.Column(pl.String),
+        "precio": _price(),  # pesos, per jar, bag or sachet
+        "fecha_registro": pa.Column(
+            pl.String, pa.Check.str_matches(r"^(\d{4}/\d{2}/\d{2}|\d{2}/\d{2}/\d{4})$")
+        ),
+        "cadena_comercial": pa.Column(pl.String),
+        "giro": pa.Column(pl.String),
+        "nombre_comercial": pa.Column(pl.String),
+        "estado": pa.Column(pl.String),
+        "municipio": pa.Column(pl.String),
+        # Inside Mexico's bounding box: a swapped pair or a zero would land outside it.
+        "latitud": pa.Column(pl.Float64, pa.Check.in_range(14.0, 33.0)),
+        "longitud": pa.Column(pl.Float64, pa.Check.in_range(-119.0, -86.0)),
+        "file": pa.Column(pl.String),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -288,6 +314,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "roaster_catalogs": ROASTER_CATALOGS,
     "world_bank_prices": WORLD_BANK_PRICES,
     "ico_prices": ICO_PRICES,
+    "profeco_prices": PROFECO_PRICES,
 }
 
 
@@ -415,6 +442,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "roaster_offer_history": ROASTER_OFFER_HISTORY,
         "roaster_origin_history": roaster_origin_history_schema(rules),
         "price_indicators": PRICE_INDICATORS,
+        "consumer_prices": CONSUMER_PRICES,
     }
 
 
@@ -539,6 +567,46 @@ PRICE_INDICATORS = pa.DataFrameSchema(
         "usd_cents_per_lb": pa.Column(pl.Float64, pa.Check.gt(0)),
         "source": pa.Column(pl.String, pa.Check.isin(["ico", "world_bank"])),
         "read_at": pa.Column(pl.Datetime("us", "UTC")),  # the download the value came from
+    },
+)
+
+
+# One price PROFECO recorded: a product in one presentation, on one shelf, on one day.
+# A shop can have two prices for one product on one day (48 of 64,451 rows); both
+# are kept, so the price is part of what makes a row.
+CONSUMER_PRICES = pa.DataFrameSchema(
+    name="consumer_prices",
+    strict=True,
+    unique=["date", "store", "latitude", "longitude", "brand", "presentation", "price_mxn"],
+    columns={
+        "date": pa.Column(pl.Date),
+        # The fortnight PROFECO files it under: the 1st or the 16th of its month.
+        "fortnight": pa.Column(
+            pl.Date,
+            pa.Check(
+                lambda data: data.lazyframe.select(pl.col(data.key).dt.day().is_in([1, 16])),
+                error="a fortnight starts on the 1st or the 16th",
+            ),
+        ),
+        "product": pa.Column(pl.String, pa.Check.isin(["ground", "instant"])),
+        "brand": pa.Column(pl.String),
+        "presentation": pa.Column(pl.String),  # as PROFECO writes it
+        "grams": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "sweetened": pa.Column(pl.Boolean),  # a blend with sugar or caramel
+        "decaf": pa.Column(pl.Boolean),
+        "price_mxn": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "price_mxn_per_kg": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "chain": pa.Column(pl.String),
+        "store_type": pa.Column(pl.String),  # supermarket, convenience store, market...
+        "store": pa.Column(pl.String),
+        "state": pa.Column(pl.String),
+        "municipality": pa.Column(pl.String),  # as the store declares it
+        "latitude": pa.Column(pl.Float64),
+        "longitude": pa.Column(pl.Float64),
+        # The borough its store declares, by INEGI's key and name: the city's rows only.
+        # Not where the coordinates fall - those put 7 of 120 stores in another borough.
+        "borough_id": pa.Column(pl.String, nullable=True),
+        "borough": pa.Column(pl.String, nullable=True),
     },
 )
 

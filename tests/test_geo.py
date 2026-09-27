@@ -10,6 +10,8 @@ projection, the real CVEGEO and NOMGEO values - but its shapes are a 4x4 grid ov
 city, so which borough a point lands in is arbitrary, fixed, and easy to assert.
 """
 
+import random
+from contextlib import closing
 from pathlib import Path
 
 import duckdb
@@ -105,6 +107,41 @@ def test_overlapping_areas_are_refused_rather_than_counted_twice(areas: pl.DataF
 
     with pytest.raises(ValueError, match="the areas overlap"):
         attribute_points(points, overlapping, "latitude", "longitude")
+
+
+def test_thousands_of_points_each_come_out_once_in_their_own_area() -> None:
+    """DuckDB 1.5.5's spatial LEFT JOIN emitted 20,408 rows for these 20,000 points:
+    some once matched and once more with nulls. Two unit squares side by side make the
+    right answer arithmetic."""
+    with closing(spatial_connection()) as con:
+        squares = con.sql(
+            "SELECT * FROM (VALUES "
+            "('a', ST_AsWKB(ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'))), "
+            "('b', ST_AsWKB(ST_GeomFromText('POLYGON((1 0, 2 0, 2 1, 1 1, 1 0))')))"
+            ") AS t(area_id, boundary)"
+        ).pl()
+    squares = squares.with_columns(pl.col("area_id").alias("area_name"))
+    rng = random.Random(1)
+    n = 20_000
+    points = pl.DataFrame(
+        {
+            "point": range(n),
+            "latitude": [rng.uniform(-1, 2) for _ in range(n)],
+            "longitude": [rng.uniform(-1, 3) for _ in range(n)],
+        }
+    )
+    inside = pl.col("latitude").is_between(0, 1, closed="none")
+    expected = (
+        pl.when(inside & pl.col("longitude").is_between(0, 1, closed="none"))
+        .then(pl.lit("a"))
+        .when(inside & pl.col("longitude").is_between(1, 2, closed="none"))
+        .then(pl.lit("b"))
+    )
+
+    placed = attribute_points(points, squares, "latitude", "longitude")
+
+    assert placed["point"].to_list() == list(range(n))  # every point, once, in order
+    assert placed["area_id"].to_list() == points.select(expected)["literal"].to_list()
 
 
 def test_a_missing_extension_says_what_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:

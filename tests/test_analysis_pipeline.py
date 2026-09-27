@@ -140,9 +140,13 @@ def test_figures_are_drawn_and_the_selection_is_published(
 
     output = build_analysis(analysis_adapter, data_dir, "sqlite:///unused", at=AT, publish_to=docs)
 
-    assert {"review_target_distribution", "market_history", "review_feature_importance"} <= set(
-        output.figures
-    )
+    assert {
+        "review_target_distribution",
+        "market_history",
+        "review_feature_importance",
+        "price_ladder",
+        "consumer_prices",
+    } <= set(output.figures)
     for path in output.figures.values():
         assert path.suffix == ".png" and path.stat().st_size > 0
     # Only the configured selection is copied where the docs can reference it.

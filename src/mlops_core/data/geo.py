@@ -5,7 +5,7 @@ as WKB in WGS84, so features, the API, the analysis and the agent read an area t
 without installing or loading anything spatial. Two jobs live here: turn a downloaded map
 layer into a frame of areas, and say which area each point falls in.
 
-Three traps, each of them silent, each found against the real data:
+Four traps, each of them silent, each found against the real data:
 
 - **`ST_Transform` needs `always_xy := true`.** EPSG:4326 officially orders its axes
   latitude first, so without it the call does not fail -- it returns coordinates that
@@ -17,6 +17,11 @@ Three traps, each of them silent, each found against the real data:
   Conic preserves angles, not areas, so the number carries a little distortion: the 16
   areas of one real layer sum to 1,486 km2 against the published 1,495 (0.6% out). That
   is the accuracy to expect from these figures, and it is plenty for a density.
+- **DuckDB's spatial LEFT JOIN is wrong past a few thousand points** (1.5.5). Its
+  spatial join operator loses some unmatched points and emits some matched ones a second
+  time, with nulls: 64,451 shelf prices came out as 67,810 rows, 327 points gone. The
+  inner join agrees with `ST_Within` evaluated over every pair, so points are matched
+  with an inner join and attached back to their rows here.
 """
 
 import logging
@@ -35,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 WGS84 = "EPSG:4326"  # what every point source in this project speaks
 AREA_COLUMNS = ["area_id", "area_name", "area_km2", "boundary"]
+_ROW = "__row"  # a point's position, for attaching its area back to it
 
 
 def spatial_connection() -> "duckdb.DuckDBPyConnection":
@@ -104,25 +110,29 @@ def attribute_points(
         return points.with_columns(
             pl.lit(None, pl.String).alias("area_id"), pl.lit(None, pl.String).alias("area_name")
         )
+    # Only what the join needs crosses into DuckDB: the row, and where it is.
+    located = points.with_row_index(_ROW).select(_ROW, latitude, longitude)
     query = f"""
-        SELECT p.*, a.area_id, a.area_name
+        SELECT p.{_ROW}, a.area_id, a.area_name
         FROM points p
-        LEFT JOIN areas a
+        JOIN areas a
           ON ST_Within(ST_Point(p."{longitude}", p."{latitude}"), ST_GeomFromWKB(a.boundary))
     """
     with closing(spatial_connection()) as con:
-        con.register("points", points)
+        con.register("points", located)
         con.register("areas", areas)
-        attributed: pl.DataFrame = con.execute(query).pl()
+        matched: pl.DataFrame = con.execute(query).pl()
 
-    if attributed.height != points.height:
+    twice = matched.height - matched[_ROW].n_unique()
+    if twice:
         # One point inside two areas duplicates its row and would inflate every count
         # downstream. Administrative areas do not overlap, so this means a broken layer.
-        raise ValueError(
-            f"The spatial join turned {points.height} points into {attributed.height} rows: "
-            "the areas overlap"
-        )
-    return attributed
+        raise ValueError(f"{twice} points fell in two areas at once: the areas overlap")
+    return (
+        points.with_row_index(_ROW)
+        .join(matched.cast({_ROW: pl.UInt32}), on=_ROW, how="left", maintain_order="left")
+        .drop(_ROW)
+    )
 
 
 # A metre in degrees of latitude, for the coarse prefilter below. Longitude degrees are
