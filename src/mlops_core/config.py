@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://127.0.0.1:6333"
     # The prediction API, from docker-compose (profile `api`): the agent's prediction tool.
     api_url: str = "http://127.0.0.1:8000"
+    # Whether Dagster's schedule and sensors start on by themselves. Off: the project runs
+    # by hand, and opening the orchestrator's UI starts nothing. A deployment meant to keep
+    # its own history (the ICO's month, the shops' catalogues) sets MLOPS_AUTOMATE=true.
+    automate: bool = False
 
 
 class SpatialConfig(BaseModel):

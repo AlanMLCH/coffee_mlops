@@ -350,3 +350,16 @@ def test_a_domain_whose_sources_keep_no_history_gets_no_reads(
 
     assert not any(a.key.path[-1].endswith("_reads") for a in defs.assets)
     assert [s.name for s in defs.sensors] == ["coffee_new_data", "coffee_retrain"]
+
+
+def test_nothing_starts_on_its_own_unless_the_deployment_says_so(tmp_path: Path) -> None:
+    """By hand is the default: opening the UI must not start downloads or retraining."""
+    from dagster import DefaultScheduleStatus, DefaultSensorStatus
+
+    by_hand = build_definitions(settings=Settings(data_dir=tmp_path))
+    automated = build_definitions(settings=Settings(data_dir=tmp_path, automate=True))
+
+    assert {s.default_status for s in by_hand.schedules} == {DefaultScheduleStatus.STOPPED}
+    assert {s.default_status for s in by_hand.sensors} == {DefaultSensorStatus.STOPPED}
+    assert {s.default_status for s in automated.schedules} == {DefaultScheduleStatus.RUNNING}
+    assert {s.default_status for s in automated.sensors} == {DefaultSensorStatus.RUNNING}

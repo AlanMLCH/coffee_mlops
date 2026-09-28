@@ -184,7 +184,7 @@ flowchart TD
     green_price_features & mlflow -.-> green_price_predictions
     review_features & offer_features & green_price_features & review_predictions & offer_predictions --> monitor --> monitoring_tables
     monitor -- "due: retrain, the gate decides" --> train
-    schedule{{"Dagster: coffee_daily_data (cron in the YAML)<br/>sensors: coffee_new_data · coffee_retrain<br/>keyed by data version: one change, one run<br/>coffee_reads: a partition per day a source was read"}}
+    schedule{{"Dagster: coffee_daily_data (cron in the YAML)<br/>sensors: coffee_new_data · coffee_retrain<br/>keyed by data version: one change, one run<br/>coffee_reads: a partition per day a source was read<br/>all off unless MLOPS_AUTOMATE=true: by hand"}}
     schedule -.-> extract_files & extract_apis
     schedule -.-> monitor
     mlflow --> api
@@ -247,9 +247,9 @@ newest complete partition, so a writer never blocks the readers.
 **Orchestration** (Dagster) is a thin layer over the same functions: every layer is an
 asset, the Pandera contracts run as asset checks, and each installed domain generates
 its own graph and its own `<domain>_data` / `<domain>_ml` jobs. Nothing needs it — the
-CLI runs every step on its own. What it adds is running without anyone: the data
-pipeline on the domain's `schedule`, and the model pipeline when the data changes (see
-[Running on its own](#running-on-its-own-stage-4)).
+CLI runs every step on its own. What it adds is running without anyone, when switched on:
+the data pipeline on the domain's `schedule`, and the model pipeline when the data
+changes (see [By hand, or on its own](#by-hand-or-on-its-own-stage-4)).
 
 ### The core and the domains
 
@@ -1153,9 +1153,24 @@ First run, on the real layers:
   report path used here does not import them, and the monitor sets it anyway. Evidently
   brings some twenty packages, so it is an extra of its own (`monitoring`).
 
-### Running on its own (stage 4)
+### By hand, or on its own (stage 4)
 
-`make dagster` starts Dagster with one schedule and three sensors per domain, all on:
+**The project runs by hand** (decided 2026-09-28): nothing is left running to collect
+history, and every run is one someone started.
+
+```bash
+make extract     # read every source that is due: run it before a month ends, or the
+                 # ICO's page takes that month's days with it; each run is also one read
+                 # of the shops' catalogues
+make data        # extract, validate and clean
+make ml          # features, training through the gate, batch scores
+make monitor     # drift per model; make retrain retrains what it calls for
+```
+
+Everything can also run on its own. `make dagster` starts Dagster with one schedule and
+three sensors per domain, **all off** unless `MLOPS_AUTOMATE=true` - so opening the UI to
+look at the partitions starts no download and no retraining. Switched on (in the UI, one
+by one, or all with the variable):
 
 | | When | What runs |
 |---|---|---|
@@ -1476,3 +1491,8 @@ and API archetypes existed - abstracting before having working cases produces th
 wrong interfaces - and the contract freezes at the end of stage 3, once a third
 archetype (scraping) has been through it. Video games comes after the coffee domain is
 finished (decided 2026-09-27), and its line count goes in the table above.
+
+Running it automated and online is a plan, not a commitment: [docs/cloud-plan.md](docs/cloud-plan.md)
+says why it cannot live on Vercel as it is (the local model, and every other piece that
+has to stay on), and lays out three steps, cheapest first - a static showcase, a
+scheduled workflow that keeps the history, and the whole app on servers.

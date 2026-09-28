@@ -4,10 +4,12 @@ The orchestrator is a thin layer: every asset calls the same function the CLI ca
 so nothing here is required to run the pipelines. Installing a package under `domains/`
 adds a whole graph, which is how the framework proves it is domain-parameterized.
 
-What runs on its own: the data pipeline on the domain's `schedule`; each model's
+What can run on its own: the data pipeline on the domain's `schedule`; each model's
 features, scores and drift when the data it reads changes (sensor `<domain>_new_data`);
 and its training when the monitor calls for it on data it was not trained on (sensor
-`<domain>_retrain`). The questions the sensors ask are `triggers`' pure functions.
+`<domain>_retrain`). The questions the sensors ask are `triggers`' pure functions. All of
+it starts off: the project runs by hand, and a deployment that should run on its own
+turns it on with `MLOPS_AUTOMATE=true` (or each one in the UI).
 
 A source whose history is its downloads (`accumulate`) also gets a daily-partitioned
 asset, `<source>_reads`: a partition is a day it was read, in the schedule's timezone -
@@ -79,6 +81,15 @@ Materialized = MaterializeResult[None]
 SENSOR_SECONDS = 600
 # The calendar of a domain without a schedule: a read's day has to be some zone's.
 DEFAULT_TIMEZONE = "UTC"
+
+
+def schedule_status(settings: Settings) -> DefaultScheduleStatus:
+    """On only where the deployment says so: by hand is the default."""
+    return DefaultScheduleStatus.RUNNING if settings.automate else DefaultScheduleStatus.STOPPED
+
+
+def sensor_status(settings: Settings) -> DefaultSensorStatus:
+    return DefaultSensorStatus.RUNNING if settings.automate else DefaultSensorStatus.STOPPED
 
 
 def pipeline_assets(adapter: DomainAdapter) -> dict[str, list[str]]:
@@ -320,7 +331,7 @@ def build_definitions(
             job_name=f"{adapter.config.name}_data",
             cron_schedule=adapter.config.schedule.data,
             execution_timezone=adapter.config.schedule.timezone,
-            default_status=DefaultScheduleStatus.RUNNING,
+            default_status=schedule_status(settings),
         )
         for adapter in adapters
         if adapter.config.schedule is not None
@@ -355,7 +366,7 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
         name=f"{config.name}_new_data",
         job_name=job,
         minimum_interval_seconds=SENSOR_SECONDS,
-        default_status=DefaultSensorStatus.RUNNING,
+        default_status=sensor_status(settings),
     )
     def on_new_data(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
         """New data for a model: rebuild its features, score them with the champion, and
@@ -374,7 +385,7 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
         name=f"{config.name}_retrain",
         job_name=job,
         minimum_interval_seconds=SENSOR_SECONDS,
-        default_status=DefaultSensorStatus.RUNNING,
+        default_status=sensor_status(settings),
     )
     def on_drift(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
         """The monitor calls for retraining on data no training run has seen: train, let
@@ -424,7 +435,7 @@ def read_sensors(
         name=f"{config.name}_reads",
         jobs=jobs,
         minimum_interval_seconds=SENSOR_SECONDS,
-        default_status=DefaultSensorStatus.RUNNING,
+        default_status=sensor_status(settings),
     )
     def on_reads(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
         """A day with a download not checked yet. The key names the day's latest
