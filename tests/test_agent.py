@@ -521,6 +521,7 @@ def test_evaluate_asks_every_question_and_compares_with_the_last_run(
 def mcp_server(
     session: duckdb.DuckDBPyConnection,
     respond: Callable[[httpx.Request], httpx.Response] | None = None,
+    areas: Any = None,
 ) -> Any:
     from mlops_core.agent.mcp_server import build_server
 
@@ -531,6 +532,7 @@ def mcp_server(
         lambda question, k: [PASSAGE] * k,
         api(respond or (lambda request: httpx.Response(200, json=PREDICTED))),
         lambda passage: f"FAO, page {passage['part']}",
+        areas,
     )
 
 
@@ -548,6 +550,7 @@ def test_the_mcp_server_offers_the_agents_tools_all_read_only(
         "predict_offer",
         "predict_green_price",
         "search_documents",
+        "draw",
     }
     assert all(t.annotations is not None and t.annotations.read_only_hint for t in tools.values())
     # A prediction tool's input is the model's own request body, descriptions included.
@@ -603,6 +606,48 @@ def test_mcp_says_when_the_prediction_service_fails(session: duckdb.DuckDBPyConn
         asyncio.run(server.call_tool("predict_review", {"item": {"country": "Ethiopia"}}))
 
 
+BY_STATE = "SELECT state, production_t FROM clean.mexico_production ORDER BY state"
+
+
+def test_mcp_draws_a_result_as_its_shape_asks(session: duckdb.DuckDBPyConnection) -> None:
+    server = mcp_server(session)
+
+    drawn = asyncio.run(server.call_tool("draw", {"sql": BY_STATE}))
+
+    image, summary = drawn.content
+    assert image.type == "image" and image.mime_type == "image/png"
+    assert json.loads(summary.text) == {
+        "chart": {"kind": "bar", "x": "state", "y": "production_t"},
+        "rows": 2,
+        "truncated": False,
+    }
+
+
+def test_mcp_draws_the_chart_the_client_asks_for_if_the_result_can_carry_it(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    from mlops_core.explore.charts import Areas
+
+    shapes = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"id": s[:2], "name": s},
+         "geometry": {"type": "Polygon", "coordinates": [[[0, i], [1, i], [1, i + 1], [0, i]]]}}
+        for i, s in enumerate(["Chiapas", "Puebla"])
+    ]}  # fmt: skip
+    server = mcp_server(session, areas=Areas("state_id", "state", shapes))
+
+    mapped = asyncio.run(server.call_tool("draw", {"sql": BY_STATE}))
+    listed = asyncio.run(server.call_tool("draw", {"sql": BY_STATE, "chart": {"kind": "table"}}))
+
+    assert json.loads(mapped.content[1].text)["chart"] == {"kind": "areas", "y": "production_t"}
+    assert json.loads(listed.content[0].text)["values"] == [["Chiapas", 391690.56], ["Puebla", 1.0]]
+    with pytest.raises(ToolError, match="y must be a number; 'state' is not"):
+        asyncio.run(server.call_tool(
+            "draw", {"sql": BY_STATE, "chart": {"kind": "bar", "x": "production_t", "y": "state"}}
+        ))  # fmt: skip
+    with pytest.raises(ToolError, match="Only SELECT may run"):
+        asyncio.run(server.call_tool("draw", {"sql": "DROP VIEW clean.mexico_production"}))
+
+
 def test_mcp_cells_travel_as_json() -> None:
     from mlops_core.agent.mcp_server import _plain
 
@@ -632,6 +677,7 @@ def test_the_mcp_command_serves_on_stdio(
             "stdio",
             [
                 "query_tables",
+                "draw",
                 "predict_review",
                 "predict_offer",
                 "predict_green_price",

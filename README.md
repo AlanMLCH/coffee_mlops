@@ -953,6 +953,7 @@ a project's `.mcp.json`):
 | `query_tables(sql)` | One read-only SELECT over the layers - the agent's locked-down session, so the guardrails hold whatever model is calling |
 | `predict_review(item)`, `predict_offer(item)` | One tool per model the domain declares; the argument is the model's own request body, and its JSON schema, field descriptions included, is what the client sees and the server validates |
 | `search_documents(question, k)` | Dense search over the corpus, each passage with its publisher, title and page or section |
+| `draw(sql, chart)` | The result of one read-only SELECT as a chart, a PNG: bars, a line, a scatter, points on a map, or a map of the boroughs - chosen by the client's model, or by the result's shape |
 | `dictionary://tables` | The data dictionary: what the client's model writes its SQL against |
 
 - **A wrapper, not a second agent.** Each tool calls the function the agent calls; no
@@ -966,6 +967,17 @@ a project's `.mcp.json`):
 - **Checked as a client sees it**: driven over stdio with the SDK's own client - list the
   tools, read the dictionary, run a query, have a `COPY` refused, price a bag, score a
   lot, search the documents - and tested in process against the same server.
+- **`draw` shows the first tool's answer; it is not a fourth source of evidence.** It runs
+  its SQL in the same locked session (up to 20,000 rows: a chart is drawn, not read by a
+  model) and draws the result. A chart is small and checkable - a kind, and which column
+  is x, y and colour, the colour being how a result is split into segments - so the
+  client's model may choose it; left out, the result's shape chooses (a date and a number
+  are a line, rows with coordinates are points, a column naming a borough makes a map).
+  Either way it is checked against the columns before anything is drawn: asked for bars
+  whose height is a name, the tool says why not. Drawn as Vega-Lite and rendered by Vega
+  itself without a browser (`vl-convert`), so the explorer below shows the same chart
+  live. The boroughs' outlines come out of the area table's WKB, read in plain Python:
+  the explorer needs no spatial extension to draw them.
 
 ## The price of green coffee (stage 4)
 

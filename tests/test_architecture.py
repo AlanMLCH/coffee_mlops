@@ -87,6 +87,13 @@ def offenders(paths: list[Path], forbidden: str) -> list[str]:
         ("monitoring", "mlops_core.ml"),
         ("ml", "mlops_core.monitoring"),
         ("serving", "mlops_core.monitoring"),
+        # The explorer draws what the agent's locked session returns; it never builds.
+        ("explore", "mlops_core.data"),
+        ("explore", "mlops_core.ml"),
+        ("data", "mlops_core.explore"),
+        ("ml", "mlops_core.explore"),
+        ("rag", "mlops_core.explore"),
+        ("serving", "mlops_core.explore"),
     ],
 )
 def test_packages_do_not_reach_across_the_boundary(package: str, forbidden: str) -> None:

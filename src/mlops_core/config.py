@@ -460,6 +460,60 @@ class ScheduleConfig(BaseModel):
     timezone: str  # IANA, e.g. Europe/Madrid: the cron is read in it
 
 
+class MapView(BaseModel):
+    """Where the explorer's map opens: a centre, a zoom (0 is the world), a tilt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    zoom: float = Field(ge=0, le=20)
+    pitch: float = Field(0, ge=0, le=60)  # degrees: tilted, the areas' columns stand up
+
+
+class AreasConfig(BaseModel):
+    """The table of places a result can name, and its columns: the key and the name a
+    query may use for an area, and its outline (WKB, as the core's spatial join writes)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    table: str  # layer.table, e.g. clean.<areas>
+    id: str
+    name: str
+    boundary: str
+
+
+class MapLayer(BaseModel):
+    """A layer the map offers before any question is asked: a query and what it draws.
+    It runs in the agent's locked session, as any question's SQL does."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    kind: Literal["points", "areas"]  # points: latitude and longitude; areas: a key and a number
+    sql: str
+    description: str = ""
+
+
+class ExploreConfig(BaseModel):
+    """The explorer app (`mlops explore`): its map, its layers, and questions to start with."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: str
+    view: MapView
+    areas: AreasConfig | None = None
+    layers: list[MapLayer] = []
+    examples: list[str] = []
+
+    @model_validator(mode="after")
+    def _an_areas_layer_has_areas(self) -> Self:
+        drawn = [layer.name for layer in self.layers if layer.kind == "areas"]
+        if drawn and self.areas is None:
+            raise ValueError(f"Layers {drawn} draw areas, but `explore.areas` names none")
+        return self
+
+
 class DomainConfig(BaseModel):
     """The sections the core runs. A domain subclasses this to add its own."""
 
@@ -479,6 +533,7 @@ class DomainConfig(BaseModel):
     analysis: AnalysisConfig
     monitoring: MonitoringConfig
     schedule: ScheduleConfig | None = None  # unset, nothing runs until someone asks
+    explore: ExploreConfig | None = None  # the explorer app's map; unset, it has none
 
     @model_validator(mode="after")
     def _documents_are_named_once(self) -> Self:

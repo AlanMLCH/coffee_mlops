@@ -871,6 +871,47 @@ consumer_prices:
   borough_aliases: # PROFECO's name -> INEGI's, where they differ by more than that
     Magdalena Contreras: La Magdalena Contreras
 
+# The explorer (`make explore`): a map of the city's coffee, questions to the agent, and a
+# chart of each answer. Each layer is one SELECT, run in the agent's locked session.
+explore:
+  title: Coffee in Mexico City
+  view: {latitude: 19.39, longitude: -99.14, zoom: 10.2, pitch: 40}
+  areas: {table: clean.boroughs, id: borough_id, name: borough, boundary: boundary}
+  layers:
+    - name: Coffee shops per km² (DENUE)
+      kind: areas
+      description: Places the official register names as coffee, per square kilometre of borough
+      sql: >-
+        SELECT b.borough_id, count(*) / any_value(b.area_km2) AS coffee_shops_per_km2
+        FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
+        WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
+    - name: Median shelf price of ground coffee
+      kind: areas
+      description: PROFECO, plain ground coffee, pesos per kilogram, January to July 2026
+      sql: >-
+        SELECT borough_id, median(price_mxn_per_kg) AS median_mxn_per_kg, count(*) AS prices
+        FROM clean.consumer_prices
+        WHERE borough_id IS NOT NULL AND product = 'ground' AND NOT sweetened AND NOT decaf
+        GROUP BY borough_id
+    - name: Coffee shops
+      kind: points
+      description: DENUE and OpenStreetMap, side by side
+      sql: >-
+        SELECT name, source, borough, latitude, longitude
+        FROM clean.coffee_shops WHERE kind = 'coffee'
+    - name: Shelves PROFECO priced
+      kind: points
+      description: The supermarkets, markets and pharmacies behind the shelf prices
+      sql: >-
+        SELECT store, chain, borough, latitude, longitude, count(*) AS prices
+        FROM clean.consumer_prices WHERE borough_id IS NOT NULL
+        GROUP BY store, chain, borough, latitude, longitude
+  examples:
+    - Which boroughs have the most coffee shops per square kilometre, according to DENUE?
+    - What is the median price per kilogram of plain ground coffee on the shelves of each borough?
+    - What was the national median price per kilogram of plain instant coffee in each fortnight of 2026?
+    - How did the monthly price of other mild Arabicas change in 2026, in US cents per pound?
+
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:
   market_year: 2025

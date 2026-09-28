@@ -88,6 +88,9 @@ agent = [
 mcp = [
     "coffee-mlops[rag]",
     "mcp>=2.2.0",
+    # Vega's own renderer, without a browser: `draw` returns the same Vega-Lite spec the
+    # explorer shows live, as a PNG. One package, no dependencies, works offline.
+    "vl-convert-python>=1.9.0",
 ]
 # Drift between periods, and whether a model's error left the interval it was accepted
 # with. Evidently's statistical tests (K-S, chi-squared, Wasserstein, ...) and its HTML

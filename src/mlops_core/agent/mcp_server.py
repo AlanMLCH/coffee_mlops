@@ -7,6 +7,12 @@ tool takes what that model can write itself: SQL against the data dictionary (of
 as a resource), an item in a prediction model's own request body, a question for the
 documents. Any installed domain gets a server: the tools, their descriptions and their
 input schemas come from its config and its adapter, not from code written for it.
+
+One more tool draws rather than answers: `draw` runs a query in the same locked session
+and returns its result as a chart, a PNG - bars, lines, a scatter, or a map when the rows
+are places or name the domain's areas. Not a fourth source of evidence: a way to see the
+first one. The client's model may say which chart; if it does not, the result's shape
+decides, and either way the chart is checked against the columns before it is drawn.
 """
 
 import json
@@ -16,13 +22,15 @@ from typing import Any
 
 import duckdb
 import httpx
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel
 
 from mlops_core.adapter import DomainAdapter
 from mlops_core.agent.sql import Refused, run_select
+from mlops_core.explore.charts import Areas, Chart, check_chart, frame, infer_chart, png, vega_lite
+from mlops_core.explore.layers import MAP_ROWS
 
 # Nothing here writes, and nothing reaches past this machine's own services.
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
@@ -38,9 +46,11 @@ def build_server(
     passages: Passages,
     api: httpx.Client,
     sources: Callable[[dict[str, Any]], str],
+    areas: Areas | None = None,
 ) -> MCPServer:
-    """The domain's MCP server: `query_tables`, one `predict_<model>` per model, and
-    `search_documents`, plus the data dictionary as a resource."""
+    """The domain's MCP server: `query_tables`, one `predict_<model>` per model,
+    `search_documents` and `draw`, plus the data dictionary as a resource. `areas` are
+    what a map of areas is drawn over, when the domain has some."""
     config = adapter.config
     server = MCPServer(
         f"mlops-{config.name}",
@@ -67,6 +77,44 @@ def build_server(
             f"Run one read-only SQL SELECT (DuckDB dialect) over the {config.name} tables, "
             f"named layer.table as {DICTIONARY_URI} describes them. At most 50 rows come "
             "back; aggregate rather than list. Anything but a single SELECT is refused."
+        ),
+        annotations=READ_ONLY,
+    )
+
+    def draw(sql: str, chart: Chart | None = None) -> list[Image | str]:
+        with lock:
+            try:
+                result = run_select(con, sql, max_rows=MAP_ROWS)
+            except (Refused, duckdb.Error) as failed:
+                raise ToolError(str(failed).strip().splitlines()[0]) from failed
+        rows = frame(result.columns, result.rows)
+        chosen = chart or infer_chart(rows, areas)
+        problems = check_chart(chosen, rows, areas)
+        if problems:
+            raise ToolError("; ".join(problems))
+        summary = {"chart": chosen.model_dump(exclude_none=True, exclude_defaults=True),
+                   "rows": rows.height, "truncated": result.truncated}  # fmt: skip
+        spec = vega_lite(chosen, rows, areas)
+        if spec is None:  # nothing to draw: the rows are the answer
+            return [json.dumps(summary | {"columns": result.columns,
+                                          "values": [[_plain(v) for v in row]
+                                                     for row in result.rows[:50]]})]  # fmt: skip
+        return [Image(data=png(spec), format="png"), json.dumps(summary)]
+
+    mapped = (
+        f" areas: a number per area, the rows naming it by {areas.id} or {areas.name};"
+        if areas
+        else ""
+    )
+    server.add_tool(
+        draw,
+        description=(
+            "Draw the result of one read-only SQL SELECT (as query_tables takes it) as a "
+            "chart, returned as a PNG. Kinds: bar (x a category, y a number); line (x a date "
+            "or year, y a number); scatter (two numbers); points (rows with latitude and "
+            f"longitude, on a map);{mapped} table. color splits the marks by a column with "
+            "at most 12 values. Leave chart out and the result's shape chooses; aggregate in "
+            "the SQL, since the chart draws the rows as they come."
         ),
         annotations=READ_ONLY,
     )

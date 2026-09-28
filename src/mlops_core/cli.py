@@ -722,6 +722,7 @@ def mcp_server(domain: Domain = None) -> None:
         from mlops_core.agent.mcp_server import build_server
         from mlops_core.agent.sql import read_only, views
         from mlops_core.agent.tools import cite
+        from mlops_core.explore.layers import areas_if_built
         from mlops_core.rag.llm import LocalModel, ollama_client
         from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
 
@@ -730,6 +731,7 @@ def mcp_server(domain: Domain = None) -> None:
     _corpus(config)
     settings = Settings()
     con = read_only(_data_dir(config))
+    areas = areas_if_built(con, config.explore)
     dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
     chunks, documents = _corpus_tables(config)
     titles = {row["document_id"]: row for row in documents.iter_rows(named=True)}
@@ -746,6 +748,7 @@ def mcp_server(domain: Domain = None) -> None:
             search.passages,
             api,
             lambda passage: cite(passage, titles),
+            areas,
         )
         server.run("stdio")
 
