@@ -14,7 +14,7 @@ from dagster import AssetKey, AssetSelection, build_sensor_context, materialize
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.adapter import ApiExtraction
 from mlops_core.config import Settings
-from mlops_core.data.extract import MANIFEST_NAME, Manifest
+from mlops_core.data.extract import CHECKS, MANIFEST_NAME, Check, Manifest
 from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import TrainResult
 from mlops_core.orchestration import definitions
@@ -261,8 +261,9 @@ def test_a_due_retraining_trains_and_lets_the_gate_decide(
 # --- The reads of a source whose history is its downloads, a partition a day ---------------
 
 
-def read_on(data_dir: Path, source: str, at: datetime) -> None:
-    """A complete raw ingestion of `source` made at `at`, as extract leaves one."""
+def read_on(data_dir: Path, source: str, at: datetime) -> str:
+    """A complete raw ingestion of `source` made at `at`, as extract left one before
+    downloads were logged; its partition's name."""
     partition = data_dir / "coffee" / "raw" / source / f"ingested_at={at:%Y%m%dT%H%M%S%fZ}"
     partition.mkdir(parents=True)
     (partition / "read.json").write_text("{}", encoding="utf-8")
@@ -271,6 +272,7 @@ def read_on(data_dir: Path, source: str, at: datetime) -> None:
         sha256=at.isoformat(), size_bytes=2, ingested_at=at,
     )  # fmt: skip
     (partition / MANIFEST_NAME).write_text(manifest.model_dump_json(), encoding="utf-8")
+    return partition.name
 
 
 def reads_asset(tmp_path: Path, source: str) -> tuple[Any, Any]:
@@ -283,9 +285,14 @@ def test_a_day_a_source_was_read_is_a_partition_checked_read_by_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Two reads on 21 September in the city (one of them after 6 pm: the 22nd in UTC),
-    # none on the 22nd, one on the 23rd.
-    for at in ("2026-09-21T15:00:00", "2026-09-22T02:00:00", "2026-09-23T15:00:00"):
-        read_on(tmp_path, "roaster_catalogs", datetime.fromisoformat(at).replace(tzinfo=UTC))
+    # none on the 22nd, one on the 23rd that found what the 21st left.
+    for at in ("2026-09-21T15:00:00", "2026-09-22T02:00:00"):
+        last = read_on(tmp_path, "roaster_catalogs", datetime.fromisoformat(at).replace(tzinfo=UTC))
+    unchanged = Check(
+        checked_at=datetime(2026, 9, 23, 15, tzinfo=UTC), partition=last, changed=False
+    )
+    log = tmp_path / "coffee" / "raw" / "roaster_catalogs" / CHECKS
+    log.write_text(unchanged.model_dump_json() + "\n", encoding="utf-8")
     checked: list[str] = []
 
     def validate_read(adapter: object, name: str, artifact: Any) -> Any:
@@ -301,8 +308,13 @@ def test_a_day_a_source_was_read_is_a_partition_checked_read_by_read(
     assert reads.partitions_def.timezone == "America/Mexico_City"
     result = materialize([reads, raw], partition_key="2026-09-21")
     metadata = result.asset_materializations_for_node("coffee__roaster_catalogs_reads")[0].metadata
-    assert (metadata["reads"].value, metadata["rows"].value) == (2, 4)
+    assert (metadata["downloads"].value, metadata["new"].value, metadata["rows"].value) == (2, 2, 4)
     assert len(checked) == 2
+    # Read on the 23rd and nothing new: what it showed is checked again, and said to be old.
+    again = materialize([reads, raw], partition_key="2026-09-23")
+    metadata = again.asset_materializations_for_node("coffee__roaster_catalogs_reads")[0].metadata
+    assert (metadata["downloads"].value, metadata["new"].value) == (1, 0)
+    assert checked[-1] == last
     unread = materialize([reads, raw], partition_key="2026-09-22", raise_on_error=False)
     assert not unread.success
     (failure,) = [e for e in unread.all_events if e.event_type_value == "STEP_FAILURE"]
@@ -323,9 +335,9 @@ def test_each_new_read_asks_for_its_day_once(tmp_path: Path) -> None:
 
     assert [(r.job_name, r.partition_key, r.run_key) for r in requests] == [
         ("coffee_ico_prices_reads", "2026-09-25",
-         "ico_prices:2026-09-25:ingested_at=20260926T041300000000Z"),
+         "ico_prices:2026-09-25:2026-09-26T04:13:00+00:00"),
         ("coffee_roaster_catalogs_reads", "2026-09-27",
-         "roaster_catalogs:2026-09-27:ingested_at=20260927T110600000000Z"),
+         "roaster_catalogs:2026-09-27:2026-09-27T11:06:00+00:00"),
     ]  # fmt: skip
 
 

@@ -1135,15 +1135,22 @@ First run, on the real layers:
 - **A source whose history is its downloads gets a partition a day.** `ico_prices_reads`
   and `roaster_catalogs_reads` are daily-partitioned assets: a partition is a day the
   source was read, in the schedule's timezone (a read at 8 pm in Mexico City is already
-  tomorrow in UTC), and materializing it checks each of that day's reads against the
-  contract on its own. The partitions show what a flat asset could not: which days were
-  read and which were not. For these sources a missed day is history that can never be
-  asked for again - the shops show only today's catalogue, the ICO only the current
-  month - so a backfill re-checks the days that were read (after a contract change, say)
-  and fails on a day nobody read, saying why, instead of pretending to fill it. The
-  first look found the gap it was built for: the roasters were read on 3 days of 8 (five
-  reads), the ICO's page on 1 of 4, because nothing ran the daily schedule on the other days. Not a
-  cache: checking a read takes 0.06 s, so the clean layer still stacks every read.
+  tomorrow in UTC), and materializing it checks what the source showed that day against
+  the contract, read by read. The partitions show what a flat asset could not: which
+  days were read and which were not. For these sources a missed day is history that can
+  never be asked for again - the shops show only today's catalogue, the ICO only the
+  current month - so a backfill re-checks the days that were read (after a contract
+  change, say) and fails on a day nobody read, saying why, instead of pretending to fill
+  it. Not a cache: checking a read takes 0.06 s, so the clean layer still stacks every
+  read.
+- **"Not read" is not "nothing new".** A download identical to the last one stores
+  nothing, so the partitions alone would count a quiet day as a missed one: the ICO's
+  page was read on 27 September, a Sunday, and had no new prices. Every download is now
+  logged beside the source's partitions (`checks.jsonl`: when, the read it left or
+  found, whether it was new), and a partition is a day with any download. For the days
+  before the log, what is known is what was kept: the downloads that changed something,
+  and the last check. By that record the roasters were read on 3 days of 8 and the ICO's
+  page on 2 of 4, because nothing ran the daily schedule on the others.
 
 ### The roasters' catalogues, read after read
 

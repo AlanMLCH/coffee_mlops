@@ -10,9 +10,10 @@ and its training when the monitor calls for it on data it was not trained on (se
 `<domain>_retrain`). The questions the sensors ask are `triggers`' pure functions.
 
 A source whose history is its downloads (`accumulate`) also gets a daily-partitioned
-asset, `<source>_reads`: a partition is a day it was read, in the schedule's timezone,
-and materializing one checks that day's reads against the contract, each on its own.
-The sensor `<domain>_reads` asks for a day once for each new read, so the partitions
+asset, `<source>_reads`: a partition is a day it was read, in the schedule's timezone -
+whether the read brought something new or found what the day before had - and
+materializing one checks that day's reads against the contract, each on its own. The
+sensor `<domain>_reads` asks for a day once for each new download, so the partitions
 show which days were read and which were not - the history such a source can never be
 asked for again - and a backfill re-checks the days read, and says of each day nobody
 read that it cannot be read now.
@@ -57,7 +58,7 @@ from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
 from mlops_core.config import ModelConfig, Settings
 from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
-from mlops_core.data.extract import extract_all, http_client, ingestions_by_day
+from mlops_core.data.extract import checks_by_day, extract_all, http_client, ingestions
 from mlops_core.data.validate import validate_raw, validate_read
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
@@ -155,7 +156,7 @@ def read_days(adapter: DomainAdapter, name: str, settings: Settings) -> DailyPar
     was) through today: a read made this morning is a partition before the day ends."""
     raw_dir = settings.data_dir / adapter.config.name / "raw"
     timezone = reads_timezone(adapter)
-    days = sorted(ingestions_by_day(raw_dir, name, timezone))
+    days = sorted(checks_by_day(raw_dir, name, timezone))
     first = days[0] if days else datetime.now(ZoneInfo(timezone)).date().isoformat()
     return DailyPartitionsDefinition(start_date=first, timezone=timezone, end_offset=1)
 
@@ -177,21 +178,25 @@ def read_assets(
         deps=[raw_sources],
     )
     def reads(context: AssetExecutionContext) -> Materialized:
-        """The day's reads of the source, each checked against its contract on its own."""
+        """What the source showed on the day: each read the day's downloads left or
+        found, checked against its contract on its own."""
         day = context.partition_key
-        artifacts = ingestions_by_day(raw_dir, name, timezone).get(day, [])
-        if not artifacts:
+        downloads = checks_by_day(raw_dir, name, timezone).get(day, [])
+        if not downloads:
             raise Failure(
                 f"{name} was not read on {day}. It shows only what it holds when it is "
                 "read: a day nobody read cannot be downloaded now, and the next read "
                 "brings only what the source shows then."
             )
-        checked = [validate_read(adapter, name, artifact) for artifact in artifacts]
+        stored = {artifact.partition.name: artifact for artifact in ingestions(raw_dir, name)}
+        shown = list(dict.fromkeys(check.partition for check in downloads))  # in order, once
+        checked = [validate_read(adapter, name, stored[partition]) for partition in shown]
         return MaterializeResult(
             metadata={
-                "reads": len(checked),
+                "downloads": len(downloads),
+                "new": sum(check.changed for check in downloads),
                 "rows": sum(read.frame.height for read in checked),
-                "latest": artifacts[-1].partition.name,
+                "latest": shown[-1],
             }
         )
 
@@ -422,14 +427,14 @@ def read_sensors(
         default_status=DefaultSensorStatus.RUNNING,
     )
     def on_reads(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
-        """A day with a read not checked yet. The key names the day's latest read, so a
-        second read the same day is checked too, and nothing twice."""
+        """A day with a download not checked yet. The key names the day's latest
+        download, so a second one the same day is checked too, and nothing twice."""
         requested = False
         for source in config.accumulate:
-            for day, artifacts in ingestions_by_day(raw_dir, source, timezone).items():
+            for day, downloads in checks_by_day(raw_dir, source, timezone).items():
                 requested = True
                 yield RunRequest(
-                    run_key=f"{source}:{day}:{artifacts[-1].partition.name}",
+                    run_key=f"{source}:{day}:{downloads[-1].checked_at.isoformat()}",
                     job_name=reads_job(adapter, source),
                     partition_key=day,
                 )

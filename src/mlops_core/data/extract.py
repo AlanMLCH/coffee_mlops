@@ -15,7 +15,9 @@ answers a later request. An HTTP error is not retried: a 404 is an answer.
 
 A source with `refresh_hours` is not downloaded again until it is due. When it was last
 *checked* is kept beside its partitions (`checked_at`): the latest partition says when
-it last *changed*, and an unchanged download stores nothing.
+it last *changed*, and an unchanged download stores nothing. Every check is also logged
+(`checks.jsonl`, one line each, changed or not): for a source whose history is its
+downloads, the days it was looked at are history too.
 """
 
 import hashlib
@@ -45,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_ATTEMPTS = 4
 CHECKED_AT = "checked_at"  # beside a source's partitions: when it was last downloaded
+CHECKS = "checks.jsonl"  # beside them too: every download, changed or not
 
 
 class Manifest(BaseModel):
@@ -114,15 +117,48 @@ def ingestions(raw_dir: Path, source: str) -> list[RawArtifact]:
     return [_artifact(partition) for partition in complete]
 
 
-def ingestions_by_day(raw_dir: Path, source: str, timezone: str) -> dict[str, list[RawArtifact]]:
-    """Every complete ingestion of a source grouped by the day it was read, as
-    `YYYY-MM-DD` in `timezone`: the calendar the operator reads, not UTC's - a read at 8 pm
-    in Mexico City is already tomorrow in UTC."""
+class Check(BaseModel):
+    """One download of a source: when, the partition it left or found, and whether it
+    brought something new."""
+
+    checked_at: datetime
+    partition: str
+    changed: bool
+
+
+def checks(raw_dir: Path, source: str) -> list[Check]:
+    """Every download of a source, oldest first. Before the log existed only two kinds
+    were kept, and those are what an older source can tell: the downloads that changed
+    something (its partitions) and the last one (`checked_at`)."""
+    log = raw_dir / source / CHECKS
+    logged = (
+        [Check.model_validate_json(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        if log.is_file()
+        else []
+    )
+    known = {(c.checked_at, c.partition) for c in logged}
+    stored = ingestions(raw_dir, source)
+    older = [
+        Check(checked_at=a.manifest.ingested_at, partition=a.partition.name, changed=True)
+        for a in stored
+        if (a.manifest.ingested_at, a.partition.name) not in known
+    ]
+    last = last_checked(raw_dir, source)
+    if stored and last is not None and not any(c.checked_at == last for c in [*logged, *older]):
+        latest = stored[-1]
+        older.append(Check(checked_at=last, partition=latest.partition.name,
+                           changed=last == latest.manifest.ingested_at))  # fmt: skip
+    return sorted([*logged, *older], key=lambda c: c.checked_at)
+
+
+def checks_by_day(raw_dir: Path, source: str, timezone: str) -> dict[str, list[Check]]:
+    """A source's downloads grouped by the day they were made, as `YYYY-MM-DD` in
+    `timezone`: the calendar the operator reads, not UTC's - a download at 8 pm in Mexico
+    City is already tomorrow in UTC."""
     zone = ZoneInfo(timezone)
-    days: dict[str, list[RawArtifact]] = {}
-    for artifact in ingestions(raw_dir, source):
-        day = artifact.manifest.ingested_at.astimezone(zone).date().isoformat()
-        days.setdefault(day, []).append(artifact)
+    days: dict[str, list[Check]] = {}
+    for check in checks(raw_dir, source):
+        days.setdefault(check.checked_at.astimezone(zone).date().isoformat(), []).append(check)
     return days
 
 
@@ -247,6 +283,8 @@ def _store(
     if previous is not None and previous.manifest.sha256 == sha256:
         part_file.unlink()
         logger.info("%s unchanged since %s", name, previous.manifest.ingested_at)
+        _log_check(raw_dir, name, Check(checked_at=ingested_at, partition=previous.partition.name,
+                                        changed=False))  # fmt: skip
         return previous
 
     partition = new_partition(raw_dir / name, "ingested_at", ingested_at)
@@ -262,7 +300,13 @@ def _store(
     )
     (partition / MANIFEST_NAME).write_text(manifest.model_dump_json(indent=2))
     logger.info("%s ingested: %s (%d bytes)", name, partition, size)
+    _log_check(raw_dir, name, Check(checked_at=ingested_at, partition=partition.name, changed=True))
     return RawArtifact(partition, manifest)
+
+
+def _log_check(raw_dir: Path, name: str, check: Check) -> None:
+    with (raw_dir / name / CHECKS).open("a", encoding="utf-8", newline="\n") as log:
+        log.write(check.model_dump_json() + "\n")
 
 
 def extract_all(

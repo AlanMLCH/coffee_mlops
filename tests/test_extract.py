@@ -8,13 +8,15 @@ import pytest
 
 from mlops_core.config import DomainConfig
 from mlops_core.data.extract import (
+    CHECKS,
     MANIFEST_NAME,
+    checks,
+    checks_by_day,
     extract_all,
     find_link,
     ingest,
     ingest_file,
     ingestions,
-    ingestions_by_day,
     last_checked,
     latest_ingestion,
     user_agent,
@@ -239,7 +241,40 @@ def test_a_document_is_not_fetched_again_until_it_is_due(
     assert soon == first and soon.path.read_bytes() == b"%PDF first edition"
 
 
-def test_reads_are_grouped_by_the_day_they_were_made_in_the_operators_calendar(
+def test_every_download_is_logged_changed_or_not(
+    tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client
+) -> None:
+    """An unchanged download stores nothing, but the day it happened is still history."""
+    source = coffee_config.sources["psd_coffee"]
+    first = ingest("psd_coffee", source, tmp_path, client, now=T0)
+    ingest("psd_coffee", source, tmp_path, client, now=T1)  # the same bytes
+
+    logged = checks(tmp_path, "psd_coffee")
+
+    assert [(c.checked_at, c.partition, c.changed) for c in logged] == [
+        (T0, first.partition.name, True),
+        (T1, first.partition.name, False),  # found what T0 left
+    ]
+    assert len((tmp_path / "psd_coffee" / CHECKS).read_text().splitlines()) == 2
+
+
+def test_a_source_read_before_the_log_tells_its_changes_and_its_last_check(
+    tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client
+) -> None:
+    source = coffee_config.sources["psd_coffee"]
+    first = ingest("psd_coffee", source, tmp_path, client, now=T0)
+    ingest("psd_coffee", source, tmp_path, client, now=T1)
+    (tmp_path / "psd_coffee" / CHECKS).unlink()  # as a source ingested before the log
+
+    assert [(c.checked_at, c.changed) for c in checks(tmp_path, "psd_coffee")] == [
+        (T0, True),  # its partition
+        (T1, False),  # its `checked_at`, which found that partition
+    ]
+    assert first.partition.name == checks(tmp_path, "psd_coffee")[-1].partition
+    assert checks(tmp_path, "never_read") == []
+
+
+def test_downloads_are_grouped_by_the_day_they_were_made_in_the_operators_calendar(
     tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client
 ) -> None:
     """20:30 in Mexico City is already tomorrow in UTC: the day is the operator's."""
@@ -247,8 +282,5 @@ def test_reads_are_grouped_by_the_day_they_were_made_in_the_operators_calendar(
     evening = datetime(2026, 9, 28, 2, 30, tzinfo=UTC)  # 27 September, 20:30 in the city
     ingest("psd_coffee", source, tmp_path, client, now=evening)
 
-    by_day = ingestions_by_day(tmp_path, "psd_coffee", "America/Mexico_City")
-
-    assert list(by_day) == ["2026-09-27"]
-    assert list(ingestions_by_day(tmp_path, "psd_coffee", "UTC")) == ["2026-09-28"]
-    assert ingestions_by_day(tmp_path, "never_read", "UTC") == {}
+    assert list(checks_by_day(tmp_path, "psd_coffee", "America/Mexico_City")) == ["2026-09-27"]
+    assert list(checks_by_day(tmp_path, "psd_coffee", "UTC")) == ["2026-09-28"]
