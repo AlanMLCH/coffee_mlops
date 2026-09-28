@@ -8,6 +8,11 @@
 {"id": "data-08", "question": "What is the median price per kilogram of the roasters' offers, leaving out flagged outliers?", "route": "data"}
 {"id": "data-09", "question": "What is the mean absolute difference between predicted and actual total cup points for the lots of the 2023 snapshot?", "route": "data"}
 {"id": "data-10", "question": "For which roaster does the price model overestimate the price per kilogram the most, on average?", "route": "data"}
+{"id": "data-11", "question": "What is the median price per kilogram of plain ground coffee (neither sweetened nor decaf) on Mexico City's shelves, according to PROFECO?", "route": "data"}
+{"id": "data-12", "question": "In which Mexico City borough did PROFECO record the most coffee prices?", "route": "data"}
+{"id": "data-13", "question": "What was the national median price per kilogram of plain instant coffee (neither sweetened nor decaf) in the second fortnight of July 2026?", "route": "data"}
+{"id": "data-14", "question": "What was the average exchange rate, in pesos per US dollar, in August 2026?", "route": "data"}
+{"id": "data-15", "question": "What did a kilogram of green coffee of the other mild Arabicas cost in pesos in August 2026?", "route": "data"}
 {"id": "prediction-01", "question": "What cup score would a washed Colombian lot grown at 1,800 metres get?", "route": "prediction", "model": "review", "item": {"country": "Colombia", "processing_method": "washed", "altitude_m": 1800}}
 {"id": "prediction-02", "question": "Predict the total cup points of a natural Ethiopian heirloom lot from 2,000 m.", "route": "prediction", "model": "review", "item": {"country": "Ethiopia", "processing_method": "natural", "variety": "ethiopian heirlooms", "altitude_m": 2000}}
 {"id": "prediction-03", "question": "How much per kilogram would Almanegra charge for a 250 g bag of a washed Gesha from Chiapas?", "route": "prediction", "model": "offer", "item": {"shop": "almanegra", "bag_grams": 250, "processing_method": "washed", "variety": "gesha", "state": "Chiapas"}}

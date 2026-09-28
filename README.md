@@ -920,6 +920,16 @@ fixes a cause, not a question, and none names one. The model is deterministic en
 repeat a run exactly - not always: data-02's query changed between two runs with the
 same prompts.
 
+**Stage 4's tables get questions of their own.** Five more data questions - the city's
+median shelf price of ground coffee, the borough PROFECO priced most, the national
+median of instant in a fortnight, a month's peso-dollar rate, green coffee in pesos -
+each with a reference query run against the real layers and matching figures already
+established (380 pesos/kg, Benito Juárez, 958.33, FRED's own 17.0609 for August, 136).
+Written by the assistant, like the rest of the SQL and routing sets, and declared so.
+With them the benchmark is 86% SQL (25 of 29, the five new ones right) and 93% routing,
+and the agent end to end **80% correct, 98% verified on 45 questions**, the five new ones
+answered right; on the 40 it shares with the run before, +0 [-8, +8].
+
 ### The same tools over MCP
 
 `mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for
