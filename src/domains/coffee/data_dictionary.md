@@ -175,6 +175,29 @@ World Bank's monthly averages of two of them since 1960, converted from $/kg.
 A month's average is not the mean of its daily rows until the month is over: the ICO's
 rows cover the days published so far.
 
+## `clean.exchange_rates` — pesos per US dollar, one business day (Federal Reserve)
+
+The Federal Reserve Bank of New York's noon buying rate (release H.10), through FRED,
+daily since 8 November 1993. A day no rate was set (a US holiday) has no row.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `date` | Date | The business day |
+| `mxn_per_usd` | Float | Pesos per US dollar |
+
+Green coffee in pesos per kilogram is `usd_cents_per_lb / 45.359237 * mxn_per_usd`; a
+month's price goes with the mean of that month's rates (how FRED averages its own monthly
+series):
+
+```sql
+SELECT p.period, p.indicator,
+       p.usd_cents_per_lb / 45.359237 * avg(r.mxn_per_usd) AS mxn_per_kg
+FROM clean.price_indicators p
+JOIN clean.exchange_rates r ON date_trunc('month', r.date) = p.period
+WHERE p.frequency = 'monthly'
+GROUP BY p.period, p.indicator, p.usd_cents_per_lb
+```
+
 ## `clean.roaster_offer_history` — one offer as one read of the catalogues found it
 
 Every read of the shops is kept (stage 4): the tables above are the catalogue as it is

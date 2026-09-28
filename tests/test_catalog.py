@@ -25,6 +25,7 @@ def test_every_built_table_is_queryable_by_layer(
         "clean.consumer_prices",
         "clean.document_chunks",
         "clean.documents",
+        "clean.exchange_rates",
         "clean.market_context",
         "clean.mexico_production",
         "clean.price_indicators",

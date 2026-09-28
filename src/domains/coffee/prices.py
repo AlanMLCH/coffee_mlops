@@ -11,6 +11,10 @@ The ICO's history is every download of its page stacked: a day read twice keeps 
 latest reading, since a correction can only come later. Where a month is in both, the
 two are compared and the log says how far apart they are - the World Bank's month
 against the mean of the ICO's days - the way the PSD file and the FAS API are.
+
+The peso-dollar rate is what puts those dollars in the shelves' currency: the Federal
+Reserve's daily noon buying rate in New York, through FRED. A month's rate is the mean of
+its days, which is how FRED computes its own monthly series (checked to four decimals).
 """
 
 import logging
@@ -27,6 +31,7 @@ CENTS_PER_LB_PER_USD_PER_KG = 100 * 0.45359237
 # The World Bank's columns, and the ICO group indicator each one is.
 WORLD_BANK_SERIES = {"Coffee, Arabica": "other_milds", "Coffee, Robusta": "robustas"}
 WORLD_BANK_MONTH = "column_1"  # its months ("1960M01") head no column
+FRED_DATE, FRED_RATE = "observation_date", "DEXMXUS"  # FRED names the column by the series
 
 
 def clean_price_indicators(
@@ -84,3 +89,21 @@ def reconcile_prices(table: pl.DataFrame) -> dict[tuple[str, str], float]:
             row["days"], row["days_mean"], gap,
         )  # fmt: skip
     return gaps
+
+
+def clean_exchange_rates(daily: pl.DataFrame) -> pl.DataFrame:
+    """FRED's business days with a rate, as dates. A day without one is a day no rate was
+    set (a US holiday), not a missing value to fill: nothing traded at a noon fixing."""
+    rates = (
+        daily.drop_nulls(FRED_RATE)
+        .select(
+            pl.col(FRED_DATE).str.to_date().alias("date"),
+            pl.col(FRED_RATE).alias("mxn_per_usd"),
+        )
+        .sort("date")
+    )
+    logger.info(
+        "exchange rates: %d days from %s to %s; %d days without a rate left out",
+        rates.height, rates["date"].min(), rates["date"].max(), daily.height - rates.height,
+    )  # fmt: skip
+    return rates

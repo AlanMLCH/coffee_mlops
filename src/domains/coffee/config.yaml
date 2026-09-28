@@ -81,6 +81,18 @@ sources:
     url: https://ico.org/documents/I-CIP.pdf
     filename: I-CIP.pdf
 
+  # Stage 4: pesos per US dollar, to put green coffee in the currency the shelves charge.
+  # The Federal Reserve's noon buying rate in New York (H.10 release), daily since
+  # 8 November 1993, through FRED: a CSV, no key, and robots.txt allows the path.
+  # Verified 2026-09-27: 8,575 business days, 336 of them empty (US holidays: no rate
+  # was set); the mean of a month's days is FRED's own monthly series (EXMXUS) to four
+  # decimals, 394 months of 394. Banxico's FIX is Mexico's official rate, but its API
+  # takes a token, and a clean clone should build without one.
+  fred_usd_mxn:
+    url: https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXMXUS
+    filename: DEXMXUS.csv
+    refresh_hours: 20 # released weekly; checked on the daily run, early or late
+
   # Stage 4: what packaged coffee costs on a shop's shelf. PROFECO's "Quién es Quién en
   # los Precios": its staff price a basket of products in supermarkets, convenience
   # stores, markets and pharmacies across Mexico. A year is one ZIP of fortnightly CSVs,
@@ -839,6 +851,7 @@ analysis:
     - roaster_coverage
     - price_ladder
     - consumer_prices
+    - green_coffee_pesos
 
 # What PROFECO's shelf prices say about coffee (stage 4). Coffee is found by product
 # name: the category is spelled "Cafe" in some months and "Café" in others.

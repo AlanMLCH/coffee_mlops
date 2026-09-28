@@ -48,6 +48,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "world_bank_prices": 3,  # months, read from a workbook's sheet
         "ico_prices": 3,  # days, read from a PDF page by the domain
         "profeco_prices": 10,  # coffee, from three fortnights of everything PROFECO prices
+        "fred_usd_mxn": 5,  # days, one of them without a rate
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()

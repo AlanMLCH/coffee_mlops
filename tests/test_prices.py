@@ -13,7 +13,11 @@ import pytest
 from pandera.errors import SchemaErrors
 
 from domains.coffee.adapter import CoffeeAdapter
-from domains.coffee.prices import clean_price_indicators, reconcile_prices
+from domains.coffee.prices import (
+    clean_exchange_rates,
+    clean_price_indicators,
+    reconcile_prices,
+)
 from domains.coffee.schemas import ICO_PRICES, PRICE_INDICATORS
 from domains.coffee.sources.ico import parse_indicator_prices, read_indicator_prices
 from mlops_core.contracts import check_contract
@@ -167,3 +171,19 @@ def test_a_price_table_with_a_repeated_period_breaks_its_contract() -> None:
 
     with pytest.raises(SchemaErrors):
         check_contract(PRICE_INDICATORS, pl.concat([table, table.head(1)]))
+
+
+def test_a_day_without_a_rate_is_left_out_not_filled(caplog: pytest.LogCaptureFixture) -> None:
+    """FRED leaves a US holiday empty: no rate was set that day, so there is none to carry."""
+    caplog.set_level(logging.INFO)
+    fred = pl.DataFrame(
+        {
+            "observation_date": ["2026-07-03", "2026-07-01", "2026-07-02"],
+            "DEXMXUS": [None, 17.4, 17.5],
+        }
+    )
+
+    rates = clean_exchange_rates(fred)
+
+    assert rates.rows() == [(date(2026, 7, 1), 17.4), (date(2026, 7, 2), 17.5)]
+    assert "2 days from 2026-07-01 to 2026-07-02; 1 days without a rate left out" in caplog.text

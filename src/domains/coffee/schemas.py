@@ -301,6 +301,18 @@ PROFECO_PRICES = pa.DataFrameSchema(
     },
 )
 
+# FRED's daily peso-dollar rate as downloaded: one business day a row, empty on the days
+# no rate was set (US holidays).
+FRED_USD_MXN = pa.DataFrameSchema(
+    name="fred_usd_mxn",
+    coerce=True,
+    unique=["observation_date"],
+    columns={
+        "observation_date": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}-\d{2}-\d{2}$")),
+        "DEXMXUS": pa.Column(pl.Float64, pa.Check.gt(0), nullable=True),  # pesos per dollar
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -315,6 +327,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "world_bank_prices": WORLD_BANK_PRICES,
     "ico_prices": ICO_PRICES,
     "profeco_prices": PROFECO_PRICES,
+    "fred_usd_mxn": FRED_USD_MXN,
 }
 
 
@@ -443,6 +456,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "roaster_origin_history": roaster_origin_history_schema(rules),
         "price_indicators": PRICE_INDICATORS,
         "consumer_prices": CONSUMER_PRICES,
+        "exchange_rates": EXCHANGE_RATES,
     }
 
 
@@ -607,6 +621,18 @@ CONSUMER_PRICES = pa.DataFrameSchema(
         # Not where the coordinates fall - those put 7 of 120 stores in another borough.
         "borough_id": pa.Column(pl.String, nullable=True),
         "borough": pa.Column(pl.String, nullable=True),
+    },
+)
+
+
+# Pesos per US dollar on each business day a rate was set.
+EXCHANGE_RATES = pa.DataFrameSchema(
+    name="exchange_rates",
+    strict=True,
+    unique=["date"],
+    columns={
+        "date": pa.Column(pl.Date),
+        "mxn_per_usd": pa.Column(pl.Float64, pa.Check.gt(0)),
     },
 )
 

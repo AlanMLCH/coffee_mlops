@@ -40,6 +40,7 @@ so is what packaged coffee costs on Mexico's shelves, fortnight by fortnight.
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 | [World Bank Pink Sheet](https://www.worldbank.org/en/research/commodity-markets) (stage 4) | Monthly price of other mild Arabicas and Robustas (the ICO's group indicators), 1960 to last month, $/kg | 800 months | Workbook found by its link on the page, which changes with each release |
 | [ICO indicator prices](https://ico.org/documents/I-CIP.pdf) (stage 4) | Daily I-CIP and its four group indicators, US cents/lb, **the current month only** | 18 days so far | A one-page PDF table, read and checked against its own averages; every download kept |
+| [FRED, Mexican pesos to one US dollar](https://fred.stlouisfed.org/series/DEXMXUS) (stage 4) | The Federal Reserve's daily noon buying rate in New York (H.10), since November 1993 | 8,239 days | CSV, no key |
 | [PROFECO, Quién es Quién en los Precios](https://datos.profeco.gob.mx/datos_abiertos/qqp.php) (stage 4) | Shelf prices of packaged instant and ground coffee in supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by fortnight, January-July 2026 | 64,451 | A 195 MB ZIP of fortnightly CSVs (2.5 GB unpacked), found by its link's text; coffee kept |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
@@ -98,6 +99,7 @@ flowchart TD
             direction TB
             world_bank_prices["world_bank_prices<br/>World Bank · workbook, monthly since 1960<br/>found by its link on the page"]
             ico_prices["ico_prices<br/>ICO · one-page PDF, this month only<br/>every download kept: accumulate"]
+            fred_usd_mxn["fred_usd_mxn<br/>FRED · pesos per dollar, daily since 1993"]
             profeco_prices["profeco_prices<br/>PROFECO · ZIP of fortnightly CSVs, 195 MB<br/>found by its link's text · coffee kept"]
         end
         subgraph CORPUS["Documents: text, never figures"]
@@ -124,6 +126,7 @@ flowchart TD
         roaster_offer_history["roaster_offer_history<br/>every read of the shops: offer × read"]
         roaster_origin_history["roaster_origin_history<br/>every read's sheets"]
         price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
+        exchange_rates["exchange_rates<br/>pesos per dollar × business day"]
         consumer_prices["consumer_prices<br/>a shelf price · per kg · sweetened · decaf<br/>the city's in the borough they declare"]
         documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
         document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
@@ -989,6 +992,27 @@ indicator and day or month, in US cents per pound:
   real download: a dropped connection is now tried again, up to three times, while an
   HTTP error is still an answer.
 
+**In pesos.** `clean.exchange_rates` holds the peso-dollar rate, the Federal Reserve's
+daily noon buying rate in New York through FRED (no key; Banxico's official FIX needs a
+token, and a clean clone should build without one). A month's price goes with the mean of
+its month's rates, which is how FRED computes its own monthly series: the two agree to four
+decimals in all 394 months. `analysis.green_coffee_in_pesos` has every month since
+November 1993.
+
+![Green coffee in pesos](docs/figures/green_coffee_pesos.png)
+
+A kilogram of other mild Arabicas, the ICO group Mexico's coffee is priced in, cost 136
+pesos in August 2026, against 72 on average in 2020. From its peak of 185 in February
+2025 it fell 27% in pesos but only 12% in dollars: the peso went from 20.47 to 17.06 to
+the dollar in between. For a Mexican roaster buying at the world price, the exchange rate
+moved the cost of green coffee more than the market did.
+
+The agent sees the new table as well (the data dictionary gives it the conversion as a
+query). Its evaluation after this change: 78% correct, 100% verified, against 82% before.
+The two questions that differ are two that flip between runs of the same prompts; routed
+on their own three times over, with the table offered and without it, the 20 price and
+data questions go where they should every time the table is there.
+
 ### Where the price goes next month
 
 `green_price` is the third model: the change, in percent, of the World Bank's monthly
@@ -1141,19 +1165,24 @@ roaster:
 
 ![A kilogram of coffee, from the farm to the shelf](docs/figures/price_ladder.png)
 
-| A kilogram, median | Pesos | Of what | Rests on |
+| A kilogram | Pesos | Of what | Measured as |
 |---|---:|---|---|
-| Cherry at the farm gate (Mexico, 2025) | 8 | coffee cherry | 489 municipalities (SIAP) |
-| Supermarket shelf, ground with sugar | 246 | coffee and sugar | 3,353 prices |
-| Supermarket shelf, ground | 380 | ground coffee | 1,358 prices |
-| Supermarket shelf, instant | 900 | instant coffee | 5,295 prices |
-| Specialty roaster's shop | 1,080 | roasted coffee | 512 offers |
+| Cherry at the farm gate (Mexico, 2025) | 8 | coffee cherry | value over volume, 489 municipalities (SIAP) |
+| Green coffee at the port (other milds, August 2026) | 136 | green coffee | the month's price at its mean peso-dollar rate (World Bank, FRED) |
+| Supermarket shelf, ground with sugar | 246 | coffee and sugar | median of 3,353 prices |
+| Supermarket shelf, ground | 380 | ground coffee | median of 1,358 prices |
+| Supermarket shelf, instant | 900 | instant coffee | median of 5,295 prices |
+| Specialty roaster's shop | 1,080 | roasted coffee | median of 512 offers |
 
 - **Each rung is its own product**, and the table does not pretend otherwise: it takes
-  several kilograms of cherry to make one of roasted coffee, and a kilogram of instant
-  makes several times the cups a kilogram of ground coffee does. No conversion between
-  them is assumed; the margin thesis needs green coffee in pesos, and an exchange rate
-  is not a source yet.
+  several kilograms of cherry to make one of green coffee, roasting takes away more of
+  its weight, and a kilogram of instant makes several times the cups a kilogram of ground
+  coffee does. No conversion between them is assumed.
+- **The margin, as far as the data reaches:** a kilogram of roasted coffee from a
+  specialty roaster costs 7.9 times a kilogram of green coffee at the port, and the
+  supermarket's plain ground coffee 2.8 times - before the weight roasting takes away,
+  the roaster's work, freight, duties and the shop. What each of those costs is not in
+  any source here.
 - **A specialty bag costs 2.8 times the supermarket's plain ground coffee per kilogram**,
   and only a fifth more than instant.
 - **Where you buy matters less than what you buy.** The chains price nationally: plain

@@ -7,6 +7,8 @@ from domains.coffee.analysis import (
     consumer_prices_by_borough,
     consumer_prices_by_fortnight,
     consumer_prices_by_state,
+    green_coffee_figure,
+    green_coffee_in_pesos,
     kind_agreement,
     kind_scores,
     market_history,
@@ -455,16 +457,70 @@ def test_a_state_s_shelf_is_set_beside_what_its_growers_were_paid() -> None:
     assert table.filter(pl.col("state") == CITY)["cherry_mxn_per_kg"].is_null().all()
 
 
-def test_the_ladder_prices_a_kilogram_at_each_step_in_its_own_unit() -> None:
-    ladder = price_ladder(shelf_prices(), roaster_bags(), cherry(), CITY)
+def green_prices() -> pl.DataFrame:
+    """Two months of both indicators, a daily row that is not a month, and a month from
+    before the peso-dollar series."""
+    return pl.DataFrame(
+        {
+            "period": [date(2026, 7, 1), date(2026, 8, 1), date(2026, 8, 1),
+                       date(2026, 8, 3), date(1990, 1, 1)],
+            "frequency": ["monthly", "monthly", "monthly", "daily", "monthly"],
+            "indicator": ["other_milds", "other_milds", "robustas", "other_milds", "robustas"],
+            "usd_cents_per_lb": [100 * 0.45359237 * 8.0, 100 * 0.45359237 * 7.0,
+                                 100 * 0.45359237 * 4.0, 999.0, 50.0],
+        }
+    )  # fmt: skip
 
-    assert ladder.select("step", "unit", "median_mxn_per_kg", "observations").rows() == [
-        ("cherry at the farm gate", "kg of coffee cherry", 10.0, 2),
-        ("supermarket, ground + sugar", "kg of ground coffee and sugar", 250.0, 1),
-        ("supermarket, ground", "kg of ground coffee", 400.0, 1),
-        ("supermarket, instant", "kg of instant coffee", 900.0, 1),
-        ("specialty roaster", "kg of roasted coffee", 1100.0, 2),
+
+def rates() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "date": [date(2026, 7, 1), date(2026, 7, 2), date(2026, 8, 3)],
+            "mxn_per_usd": [17.0, 18.0, 20.0],
+        }
+    )
+
+
+def test_green_coffee_is_put_in_pesos_at_the_month_s_mean_rate() -> None:
+    green = green_coffee_in_pesos(green_prices(), rates())
+
+    # $8/kg at July's mean of 17.5; the daily row and the month without rates are left out.
+    assert green.select("period", "indicator", "rate_days", "mxn_per_kg").rows() == [
+        (date(2026, 7, 1), "other_milds", 2, pytest.approx(140.0)),
+        (date(2026, 8, 1), "other_milds", 1, pytest.approx(140.0)),
+        (date(2026, 8, 1), "robustas", 1, pytest.approx(80.0)),
     ]
+
+
+def test_green_coffee_is_drawn_with_whichever_indicators_it_has() -> None:
+    """A workbook that stopped publishing one series still draws the other."""
+    milds = green_coffee_in_pesos(green_prices(), rates()).filter(
+        pl.col("indicator") == "other_milds"
+    )
+
+    figure = green_coffee_figure(milds)
+
+    labels = {text.get_text().strip() for text in figure.axes[0].texts}
+    assert "other mild Arabicas" in labels and "Robustas" not in labels
+    assert len(figure.axes[0].lines) == 1
+
+
+def test_the_ladder_prices_a_kilogram_at_each_step_in_its_own_unit() -> None:
+    green = green_coffee_in_pesos(green_prices(), rates())
+
+    ladder = price_ladder(shelf_prices(), roaster_bags(), cherry(), green, CITY)
+
+    assert ladder.select("step", "unit", "measure", "mxn_per_kg", "observations").rows() == [
+        ("cherry at the farm gate", "kg of coffee cherry", "value over volume", 10.0, 2),
+        ("green coffee at the port", "kg of green coffee", "the month's price",
+         pytest.approx(140.0), 1),
+        ("supermarket, ground + sugar", "kg of ground coffee and sugar", "median", 250.0, 1),
+        ("supermarket, ground", "kg of ground coffee", "median", 400.0, 1),
+        ("supermarket, instant", "kg of instant coffee", "median", 900.0, 1),
+        ("specialty roaster", "kg of roasted coffee", "median", 1100.0, 2),
+    ]  # fmt: skip
+    # The latest month of the group Mexico's Arabica is priced in.
+    assert ladder.filter(pl.col("source") == "World Bank, FRED")["period"].item() == "2026-08"
     assert ladder.filter(pl.col("source") == "PROFECO")["period"].to_list()[0] == (
         "2026-07-03 to 2026-07-03"
     )
@@ -473,7 +529,9 @@ def test_the_ladder_prices_a_kilogram_at_each_step_in_its_own_unit() -> None:
 def test_a_ladder_with_nothing_to_stand_on_is_empty_not_an_error() -> None:
     nothing = shelf_prices().clear()
 
-    ladder = price_ladder(nothing, roaster_bags().clear(), cherry().clear(), CITY)
+    no_green = green_coffee_in_pesos(green_prices(), rates().clear())
+
+    ladder = price_ladder(nothing, roaster_bags().clear(), cherry().clear(), no_green, CITY)
 
     assert ladder.is_empty()
-    assert "median_mxn_per_kg" in ladder.columns
+    assert "mxn_per_kg" in ladder.columns

@@ -4,8 +4,9 @@ Every domain gets the core's analyses (profiles, drift, feature evidence, residu
 These only make sense for coffee: who grows it and who imports what they drink, what
 the places in DENUE's broad "cafeterias" class actually are, how far the rule that
 says so can be trusted, how much the roasters' sheets actually say about each
-coffee, and what a kilogram costs from the farm gate to a supermarket's shelf and a
-roaster's shop. Pure functions of clean tables, drawn in the core's house style.
+coffee, and what a kilogram costs from the farm gate and the port to a supermarket's
+shelf and a roaster's shop. Pure functions of clean tables, drawn in the core's house
+style.
 """
 
 from collections.abc import Mapping
@@ -21,6 +22,7 @@ from domains.coffee.config import (
     MarketAnalysisConfig,
     ProductionConfig,
 )
+from domains.coffee.prices import CENTS_PER_LB_PER_USD_PER_KG
 from domains.coffee.roaster_sheets import fold
 from mlops_core.analysis.figures import (
     INK,
@@ -55,6 +57,9 @@ ALL_SHOPS = "all"
 NATIONAL, CITY = "national", "city"  # the two scopes of the shelf prices
 # The shelf lines drawn through time: the plain and the sweetened of each product.
 DRAWN_LINES = ["ground", "ground, sweetened", "instant", "instant, sweetened"]
+# The ICO group Mexico's Arabica is priced in: green coffee's step of the ladder.
+GREEN_STEP = "other_milds"
+GREEN_LABELS = {"other_milds": "other mild Arabicas", "robustas": "Robustas"}
 
 
 def studies(
@@ -70,6 +75,7 @@ def studies(
     context, shops = clean["market_context"], clean["coffee_shops"]
     prices, production = clean["consumer_prices"], clean["mexico_production"]
     agreement = kind_agreement(shops)
+    green = green_coffee_in_pesos(clean["price_indicators"], clean["exchange_rates"])
     return {
         "market_summary": market_summary(context, market.market_year, market.top_countries),
         "market_history": market_history(context, market.spotlight_country, market.history_since),
@@ -86,7 +92,10 @@ def studies(
         "consumer_prices_by_fortnight": consumer_prices_by_fortnight(prices, shelves.city),
         "consumer_prices_by_borough": consumer_prices_by_borough(prices),
         "consumer_prices_by_state": consumer_prices_by_state(prices, production, states),
-        "price_ladder": price_ladder(prices, clean["roaster_offers"], production, shelves.city),
+        "green_coffee_in_pesos": green,
+        "price_ladder": price_ladder(
+            prices, clean["roaster_offers"], production, green, shelves.city
+        ),
     }
 
 
@@ -111,6 +120,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     national = tables["consumer_prices_by_fortnight"].filter(pl.col("scope") == NATIONAL)
     if not national.is_empty():
         drawn["consumer_prices"] = consumer_prices_figure(national)
+    if not tables["green_coffee_in_pesos"].is_empty():
+        drawn["green_coffee_pesos"] = green_coffee_figure(tables["green_coffee_in_pesos"])
     return drawn
 
 
@@ -536,14 +547,44 @@ SHELF_STEPS = {
 }
 
 
+def green_coffee_in_pesos(indicators: pl.DataFrame, rates: pl.DataFrame) -> pl.DataFrame:
+    """The World Bank's monthly green coffee prices in pesos per kilogram, month by month
+    since the peso-dollar series starts (November 1993): each month's price at the mean
+    of that month's daily rates, the way FRED averages its own monthly series."""
+    monthly_rates = rates.group_by(pl.col("date").dt.truncate("1mo").alias("period")).agg(
+        pl.col("mxn_per_usd").mean(), pl.len().alias("rate_days")
+    )
+    return (
+        indicators.filter(pl.col("frequency") == "monthly")
+        .join(monthly_rates, on="period", how="inner")
+        .select(
+            "period",
+            "indicator",
+            "usd_cents_per_lb",
+            "mxn_per_usd",
+            "rate_days",
+            (
+                pl.col("usd_cents_per_lb") / CENTS_PER_LB_PER_USD_PER_KG * pl.col("mxn_per_usd")
+            ).alias("mxn_per_kg"),
+        )
+        .sort("indicator", "period")
+    )
+
+
 def price_ladder(
-    prices: pl.DataFrame, offers: pl.DataFrame, production: pl.DataFrame, city: str
+    prices: pl.DataFrame,
+    offers: pl.DataFrame,
+    production: pl.DataFrame,
+    green: pl.DataFrame,
+    city: str,
 ) -> pl.DataFrame:
     """A kilogram of coffee at each step the data reaches, in pesos: the cherry at the
-    farm gate (Mexico, SIAP's latest year), the supermarket's shelf and the specialty
+    farm gate (Mexico, SIAP's latest year), green coffee at the port (the latest month
+    of other mild Arabicas, in pesos), the supermarket's shelf and the specialty
     roaster's shop (both in the city). Each step's unit is its own - a kilogram of
-    cherry, of instant, of coffee and sugar - and is said beside it: the steps are not
-    one product marked up, and no conversion between them is assumed."""
+    cherry, of green coffee, of instant, of coffee and sugar - and is said beside it:
+    the steps are not one product marked up, and no conversion between them is assumed.
+    Nor is each step's figure the same statistic, and `measure` says which it is."""
     rows = []
     if not production.is_empty():
         latest = production.filter(pl.col("year") == production["year"].max())
@@ -551,8 +592,15 @@ def price_ladder(
             pl.col("value_mxn").sum() / pl.col("production_t").sum() / 1000
         ).item()
         rows.append(
-            ("cherry at the farm gate", "SIAP", "kg of coffee cherry", cherry,
-             latest.height, str(latest["year"][0]))
+            ("cherry at the farm gate", "SIAP", "kg of coffee cherry", "value over volume",
+             cherry, latest.height, str(latest["year"][0]))
+        )  # fmt: skip
+    milds = green.filter(pl.col("indicator") == GREEN_STEP)
+    if not milds.is_empty():
+        month = milds.filter(pl.col("period") == milds["period"].max()).row(0, named=True)
+        rows.append(
+            ("green coffee at the port", "World Bank, FRED", "kg of green coffee",
+             "the month's price", month["mxn_per_kg"], 1, month["period"].strftime("%Y-%m"))
         )  # fmt: skip
     shelf = prices.filter(pl.col("state") == city).with_columns(shelf_line())
     for line, (step, unit) in SHELF_STEPS.items():
@@ -563,7 +611,7 @@ def price_ladder(
             ).row(0)
             period = f"{first} to {last}"
             rows.append(
-                (step, "PROFECO", unit, on_shelf["price_mxn_per_kg"].median(),
+                (step, "PROFECO", unit, "median", on_shelf["price_mxn_per_kg"].median(),
                  on_shelf.height, period)
             )  # fmt: skip
     bags = offers.filter(
@@ -571,25 +619,23 @@ def price_ladder(
     )
     if not bags.is_empty():
         rows.append(
-            ("specialty roaster", "roasters", "kg of roasted coffee",
+            ("specialty roaster", "roasters", "kg of roasted coffee", "median",
              bags["price_mxn_per_kg"].median(), bags.height, str(bags["observed_on"].max()))
         )  # fmt: skip
     schema = {"step": pl.String, "source": pl.String, "unit": pl.String,
-              "median_mxn_per_kg": pl.Float64, "observations": pl.Int64,
+              "measure": pl.String, "mxn_per_kg": pl.Float64, "observations": pl.Int64,
               "period": pl.String}  # fmt: skip
-    return pl.DataFrame(rows, schema=schema, orient="row").sort("median_mxn_per_kg")
+    return pl.DataFrame(rows, schema=schema, orient="row").sort("mxn_per_kg")
 
 
 def price_ladder_figure(ladder: pl.DataFrame) -> Figure:
     """Pure magnitude, one hue: a kilogram at each step, each labelled with its unit."""
     figure, ax = canvas(
         "A kilogram of coffee, from the farm to the shelf",
-        "median pesos per kg of what each step sells; shops in Mexico City",
+        "pesos per kg of what each step sells; shelves and shops in Mexico City",
     )
-    ax.barh(ladder["step"], ladder["median_mxn_per_kg"], color=SERIES[0], height=0.62)
-    for step, value, unit in zip(
-        ladder["step"], ladder["median_mxn_per_kg"], ladder["unit"], strict=True
-    ):
+    ax.barh(ladder["step"], ladder["mxn_per_kg"], color=SERIES[0], height=0.62)
+    for step, value, unit in zip(ladder["step"], ladder["mxn_per_kg"], ladder["unit"], strict=True):
         label = f"  ${value:,.0f} per {unit}"
         ax.text(value, step, label, va="center", color=SECONDARY, fontsize=8)
     ax.margins(x=0.75)
@@ -620,6 +666,31 @@ def consumer_prices_figure(national: pl.DataFrame) -> Figure:
     ax.set_xlim(first - timedelta(days=6), last + (last - first) * 0.3)
     ax.set_ylim(bottom=0)
     figure.autofmt_xdate()
+    value_grid(ax, axis="y")
+    figure.tight_layout()
+    return figure
+
+
+def green_coffee_figure(green: pl.DataFrame) -> Figure:
+    """Two series in one unit, one axis, each named at its end: green coffee in pesos a
+    kilogram, month by month since the peso-dollar series starts."""
+    figure, ax = canvas(
+        "Green coffee in pesos",
+        "pesos per kilogram, monthly: the World Bank's price at the month's peso-dollar rate",
+    )
+    for (indicator, label), colour in zip(GREEN_LABELS.items(), SERIES, strict=False):
+        series = green.filter(pl.col("indicator") == indicator).sort("period")
+        if series.is_empty():
+            continue
+        months = series["period"].to_list()
+        values = series["mxn_per_kg"].to_list()
+        ax.plot(months, values, color=colour, linewidth=1.6)
+        ax.text(months[-1], values[-1], f"  {label}", color=colour, fontsize=9, va="center")
+    first, last = green.select(
+        pl.col("period").min().alias("first"), pl.col("period").max().alias("last")
+    ).row(0)
+    ax.set_xlim(first, last + (last - first) * 0.12)
+    ax.set_ylim(bottom=0)
     value_grid(ax, axis="y")
     figure.tight_layout()
     return figure

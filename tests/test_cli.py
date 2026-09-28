@@ -65,6 +65,7 @@ def test_extract_writes_raw_layer_under_the_domain(
         "world_bank_prices",
         "ico_prices",
         "profeco_prices",
+        "fred_usd_mxn",
         *served,
     }
 
@@ -109,6 +110,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "roaster_origin_history",
         "price_indicators",
         "consumer_prices",
+        "exchange_rates",
         "documents",
         "document_chunks",
     }
@@ -142,6 +144,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "roaster_origin_history",
         "price_indicators",
         "consumer_prices",
+        "exchange_rates",
         "documents",
         "document_chunks",
     }
@@ -334,6 +337,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "offer_feature_importance.png",
         "price_ladder.png",
         "consumer_prices.png",
+        "green_coffee_pesos.png",
     }
 
 

@@ -146,6 +146,7 @@ def test_figures_are_drawn_and_the_selection_is_published(
         "review_feature_importance",
         "price_ladder",
         "consumer_prices",
+        "green_coffee_pesos",
     } <= set(output.figures)
     for path in output.figures.values():
         assert path.suffix == ".png" and path.stat().st_size > 0

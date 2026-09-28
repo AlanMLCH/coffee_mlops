@@ -7,7 +7,8 @@
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
 - The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
   `domains.coffee.roaster_sheets`.
-- The ICO and the World Bank -> `price_indicators`; see `domains.coffee.prices`.
+- The ICO and the World Bank -> `price_indicators`, and FRED's peso-dollar rate ->
+  `exchange_rates`; see `domains.coffee.prices`.
 - PROFECO's shelf prices -> `consumer_prices`; see `domains.coffee.consumer_prices`.
 
 Transforms are pure functions over validated frames. Reading the raw layer, holding
@@ -33,7 +34,7 @@ from domains.coffee.config import (
     ShopKindRule,
 )
 from domains.coffee.consumer_prices import clean_consumer_prices
-from domains.coffee.prices import clean_price_indicators
+from domains.coffee.prices import clean_exchange_rates, clean_price_indicators
 from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
     PSD_ATTRIBUTES,
@@ -474,6 +475,9 @@ def clean_tables(
                 frames["ico_prices"], frames["world_bank_prices"], read_at["world_bank_prices"]
             ),
             ("ico_prices", "world_bank_prices"),
+        ),
+        "exchange_rates": CleanTable(
+            clean_exchange_rates(frames["fred_usd_mxn"]), ("fred_usd_mxn",)
         ),
         "consumer_prices": CleanTable(
             clean_consumer_prices(frames[shelves.source], areas, shelves),

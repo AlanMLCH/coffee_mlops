@@ -213,6 +213,10 @@ def recorded() -> dict[str, bytes]:
         "world_bank_prices": xlsx("Monthly Prices", WORLD_BANK_SHEET),
         "ico_prices": pdf(ICO_PAGE),
         "profeco_prices": qqp_archive(QQP_FORTNIGHTS),
+        # FRED's layout: a day a row, empty where no rate was set. Two of the workbook's
+        # months have rates; September has none yet.
+        "fred_usd_mxn": b"observation_date,DEXMXUS\n2026-07-01,17.4000\n2026-07-02,17.5000\n"
+        b"2026-07-03,\n2026-08-03,17.0000\n2026-08-04,17.1000\n",
     }
 
 
