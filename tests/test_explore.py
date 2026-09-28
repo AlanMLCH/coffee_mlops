@@ -146,6 +146,16 @@ def test_the_result_s_shape_chooses_the_chart(result: pl.DataFrame, expected: Ch
     assert infer_chart(result, AREAS) == expected
 
 
+def test_the_number_the_rows_are_sorted_by_is_the_one_drawn() -> None:
+    """The query ordered by density: the count beside it is context, not the answer."""
+    result = pl.DataFrame(
+        {"area": ["North", "South", "East"], "shops": [3, 9, 5], "per_km2": [21.2, 18.0, 4.1]}
+    )
+
+    assert infer_chart(result, AREAS).y == "per_km2"
+    assert infer_chart(result.head(2), AREAS).y == "shops"  # two rows are always sorted
+
+
 def test_without_areas_a_named_place_is_just_a_category() -> None:
     result = pl.DataFrame({"area": ["North", "South"], "price": [1.0, 2.0]})
 

@@ -365,6 +365,23 @@ data = [
     { name = "httpx" },
     { name = "pypdf" },
 ]
+explore = [
+    { name = "cryptography" },
+    { name = "defusedxml" },
+    { name = "duckdb" },
+    { name = "fastexcel" },
+    { name = "httpx" },
+    { name = "langgraph" },
+    { name = "lightgbm" },
+    { name = "matplotlib" },
+    { name = "mlflow" },
+    { name = "optuna" },
+    { name = "pypdf" },
+    { name = "qdrant-client" },
+    { name = "scikit-learn" },
+    { name = "snowballstemmer" },
+    { name = "streamlit" },
+]
 mcp = [
     { name = "cryptography" },
     { name = "defusedxml" },
@@ -443,6 +460,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "coffee-mlops", extras = ["agent", "analysis"], marker = "extra == 'explore'" },
     { name = "coffee-mlops", extras = ["data"], marker = "extra == 'rag'" },
     { name = "coffee-mlops", extras = ["data", "ml", "monitoring"], marker = "extra == 'orchestration'" },
     { name = "coffee-mlops", extras = ["ml"], marker = "extra == 'analysis'" },
@@ -485,7 +503,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'serving'", specifier = ">=0.53.0" },
     { name = "vl-convert-python", marker = "extra == 'mcp'", specifier = ">=1.9.0" },
 ]
-provides-extras = ["data", "ml", "serving", "analysis", "rag", "orchestration", "agent", "mcp", "monitoring"]
+provides-extras = ["data", "ml", "serving", "analysis", "rag", "orchestration", "agent", "mcp", "explore", "monitoring"]
 
 [package.metadata.requires-dev]
 dev = [

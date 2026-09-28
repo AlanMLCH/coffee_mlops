@@ -92,6 +92,11 @@ mcp = [
     # explorer shows live, as a PNG. One package, no dependencies, works offline.
     "vl-convert-python>=1.9.0",
 ]
+# The explorer app: a map (deck.gl, through pydeck), questions to the agent, and a chart of
+# each answer (Vega-Lite). Streamlit brings pydeck and altair; nothing else is new.
+explore = [
+    "coffee-mlops[agent,analysis]",
+]
 # Drift between periods, and whether a model's error left the interval it was accepted
 # with. Evidently's statistical tests (K-S, chi-squared, Wasserstein, ...) and its HTML
 # report; it brings some twenty packages, which is why it is an extra of its own. Every
@@ -141,13 +146,13 @@ mypy_path = "src"
 files = ["src/mlops_core", "src/domains", "experiments"]
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "scipy.*", "snowballstemmer", "evidently.*"] # ship no type information
+module = ["sklearn.*", "scipy.*", "snowballstemmer", "evidently.*", "pydeck.*"] # ship no type information
 ignore_missing_imports = true
 
 [tool.coverage.run]
 # The dashboard is exercised through Streamlit's AppTest, which runs the file as its
 # own script: the tests do cover it, coverage just cannot attribute the lines.
-omit = ["*/analysis/dashboard.py"]
+omit = ["*/analysis/dashboard.py", "*/explore/app.py"]
 
 [tool.coverage.report]
 # The project keeps full coverage; a drop should fail rather than be noticed later.

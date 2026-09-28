@@ -75,7 +75,7 @@ def infer_chart(result: pl.DataFrame, areas: Areas | None = None, title: str = "
     if latitude and longitude and not result.is_empty():
         return Chart(kind="points", color=_series(result, _labels(result)), title=title)
     periods = _periods(result)
-    numbers = [c for c in _numbers(result) if c not in periods]
+    numbers = _measures(result, [c for c in _numbers(result) if c not in periods])
     area = _area_column(result, areas)
     if area and numbers:
         return Chart(kind="areas", y=numbers[0], title=title)
@@ -219,6 +219,15 @@ def _coordinates(result: pl.DataFrame) -> tuple[str | None, str | None]:
 def _numbers(result: pl.DataFrame) -> list[str]:
     coordinates = set(_coordinates(result))
     return [c for c in result.columns if result[c].dtype.is_numeric() and c not in coordinates]
+
+
+def _measures(result: pl.DataFrame, numbers: list[str]) -> list[str]:
+    """The numbers, the one the rows are sorted by first: a query orders by what the
+    question asked about (`ORDER BY shops_per_km2 DESC`), and a count beside it is context."""
+    if result.height < 3:
+        return numbers
+    ordered = [c for c in numbers if result[c].is_sorted() or result[c].is_sorted(descending=True)]
+    return ordered + [c for c in numbers if c not in ordered]
 
 
 def _periods(result: pl.DataFrame) -> list[str]:

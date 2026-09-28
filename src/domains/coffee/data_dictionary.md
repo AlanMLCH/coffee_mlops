@@ -249,7 +249,9 @@ Read with care: **a median, not a mean** (a promotion is one shelf); **per kilog
 product** - instant is concentrated, so a kilogram of it makes several times the cups a
 kilogram of ground coffee does; and a store can list two prices for one product on one
 day (24 times in 2026), both kept. For the city's shelves, filter `state = 'Ciudad de
-México'` or `borough_id IS NOT NULL`.
+México'` or `borough_id IS NOT NULL`; across the country, filter no state. **Plain** coffee -
+ground or instant with nothing else in it - is `NOT sweetened AND NOT decaf`. PROFECO
+reports by fortnight: group by `fortnight` for its periods.
 
 ## `features.review_features` — model input
 

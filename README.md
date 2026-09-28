@@ -162,7 +162,8 @@ flowchart TD
         ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
-        mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents<br/>dictionary://tables · guardrails server-side"]
+        mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents · draw<br/>dictionary://tables · guardrails server-side"]
+        explorer["mlops explore: Streamlit + deck.gl<br/>the YAML's map layers · a chat to the agent<br/>each answer's rows as a chart you can change"]
         agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
         agent_answers[("evaluations/agent_answers<br/>per question · one MLflow run, a trace each")]
     end
@@ -202,6 +203,7 @@ flowchart TD
     catalog -- "locked-down SQL" --> agent
     api -- "predictions" --> agent
     agent & questions --> agent_eval --> agent_answers
+    agent & catalog --> explorer
 
     classDef core fill:#dbe9fb,stroke:#2a78d6,color:#111
     classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
@@ -215,7 +217,7 @@ flowchart TD
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
-    class agent,mcp core
+    class agent,mcp,explorer core
     class corpus_sources,questions domain
     class embed,ladder,agent_eval core
     class chunk_embeddings,qdrant,retrieval_runs,agent_answers store
@@ -335,6 +337,10 @@ make train MODEL=review       # one model only (also: features, predict, ml)
 make services-up PROFILE=ai   # Qdrant at http://127.0.0.1:6333
 make index                    # embed the chunks, build the index
 make retrieval                # BM25 -> dense -> hybrid, each through the gate
+
+# The explorer: needs the layers built; its questions need Ollama, the index and the API
+make services-up PROFILE=api  # the prediction API
+make explore                  # http://localhost:8502: the map, the chat, the charts
 
 make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) AS bias \
   FROM predictions.review_predictions p JOIN features.review_features f USING (review_id) \
@@ -978,6 +984,37 @@ a project's `.mcp.json`):
   itself without a browser (`vl-convert`), so the explorer below shows the same chart
   live. The boroughs' outlines come out of the area table's WKB, read in plain Python:
   the explorer needs no spatial extension to draw them.
+
+### The explorer: a map, questions and charts
+
+`make explore` opens the project as a person would use it, at http://localhost:8502: a
+map of Mexico City's coffee, a chat to the agent, and a chart of every answer.
+
+- **The map** is deck.gl (through Streamlit's pydeck): tilted, with the boroughs raised
+  as columns by a number - coffee shops per km² from DENUE, the median shelf price of
+  ground coffee - and places as points: the coffee shops of both registers, coloured by
+  register, and the shelves PROFECO priced. The layers are the domain's, declared in its
+  YAML (`explore:`) as SQL, and each one runs in the agent's locked session, so the map
+  can show nothing a question could not ask for. The core draws whatever the YAML
+  declares: it knows areas and points, not boroughs and coffee shops.
+- **The chat** is the agent of `make ask`, with its citations, its unverified figures
+  flagged, and the query behind every answer in plain sight.
+- **Every answer is drawn.** Its query is run again for the chart (up to 20,000 rows: the
+  model reads 50, a chart can show them all), and the result's shape picks the chart:
+  a column naming a borough makes a map, a date a line, a label bars, coordinates points.
+  Among the numbers, the one the rows are sorted by is drawn - a query orders by what the
+  question asked, and a count beside it is context. Kind, x, y and colour (the
+  segmentation) can then be changed; each choice is checked against the columns before
+  it is drawn, and bars whose height is a name are refused with the reason. An answer
+  about places can be put on the map beside the layers.
+- **The same chart for MCP clients**: `draw` returns the spec the explorer shows, as a
+  PNG. The app asks the agent in process, as `make ask` does; MCP stays the interface for
+  clients this project does not write.
+- **What it showed about the agent.** Asked for the median price of plain ground coffee
+  by borough, the model left decaf in (Tlalpan at 447.5 instead of 422.5); asked for a
+  fortnightly series, it grouped by month. The first was a word the data dictionary never
+  defined - it now says what plain means, and the evaluation is unchanged at 80% correct;
+  the second is the 4B model, and the page shows the query that did it.
 
 ## The price of green coffee (stage 4)
 

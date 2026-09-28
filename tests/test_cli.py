@@ -360,6 +360,26 @@ def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.M
     assert os.environ["MLOPS_DOMAIN"] == "coffee"
 
 
+def test_the_explore_command_launches_the_explorer_headless(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launched: dict[str, object] = {}
+    monkeypatch.setitem(
+        sys.modules,
+        "streamlit.web",
+        types.SimpleNamespace(
+            cli=types.SimpleNamespace(main=lambda: launched.update(argv=sys.argv))
+        ),
+    )
+
+    result = CliRunner().invoke(cli.app, ["explore", "--port", "9998"])
+
+    assert result.exit_code == 0, result.output
+    argv = launched["argv"]
+    assert str(argv[2]).endswith("app.py") and "9998" in argv  # type: ignore[index, operator]
+    assert os.environ["MLOPS_DOMAIN"] == "coffee"
+
+
 def test_secrets_reports_what_is_configured_without_printing_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

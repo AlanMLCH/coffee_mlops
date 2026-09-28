@@ -274,6 +274,26 @@ def dashboard(domain: Domain = None, port: int = 8501) -> None:
     streamlit_cli.main()
 
 
+@app.command()
+def explore(domain: Domain = None, port: int = 8502) -> None:
+    """Open the explorer: a map of the domain's places, questions to its agent, and a
+    chart of each answer.
+
+    The map needs only the built layers; the questions need what `mlops agent ask` needs
+    (Ollama, Qdrant with an index, the prediction API).
+    """
+    with _needs_extra("explore"):
+        from streamlit.web import cli as streamlit_cli
+
+        import mlops_core.explore.maps  # noqa: F401 - pydeck: the extra is really there
+
+    app_path = Path(__file__).resolve().parent / "explore" / "app.py"
+    os.environ["MLOPS_DOMAIN"] = _adapter(domain).config.name
+    sys.argv = ["streamlit", "run", str(app_path), "--server.port", str(port),
+                "--server.headless", "true"]  # fmt: skip
+    streamlit_cli.main()
+
+
 @rag_app.command()
 def draft(
     domain: Domain = None,
@@ -550,7 +570,7 @@ def ask(
     settings = Settings()
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(f"{adapter.config.name}-agent")
-    with _agent(adapter, settings) as (agent, _):
+    with agent_session(adapter, settings) as (agent, _):
         reply = agent.ask(question)
     typer.echo(reply.text)
     for source in reply.sources:
@@ -607,7 +627,7 @@ def evaluate_agent(domain: Domain = None) -> None:
     settings = Settings()
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(f"{config.name}-agent-eval")
-    with _agent(adapter, settings) as (agent, generator), mlflow.start_run() as run:
+    with agent_session(adapter, settings) as (agent, generator), mlflow.start_run() as run:
         answers = run_evaluation(agent.ask, truths, agent.con)
         table, previous = record(answers, _data_dir(config))
         comparison = versus(previous, answers) if previous is not None else None
@@ -754,10 +774,10 @@ def mcp_server(domain: Domain = None) -> None:
 
 
 @contextmanager
-def _agent(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent", str]]:
+def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent", str]]:
     """The agent with every service it needs - Ollama, the index, the prediction API -
     and its generator's identity (model@digest). Tracking must already point at MLflow:
-    the prompts are registered there."""
+    the prompts are registered there. Public: the explorer app asks this same agent."""
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
     from mlops_core.agent.dictionary import dictionary_path, schema_context
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
