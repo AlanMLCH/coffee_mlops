@@ -32,6 +32,7 @@ from importlib.metadata import distributions
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
@@ -111,6 +112,18 @@ def ingestions(raw_dir: Path, source: str) -> list[RawArtifact]:
     whose each download is a window."""
     complete = sorted(p for p in (raw_dir / source).glob("*=*") if (p / MANIFEST_NAME).is_file())
     return [_artifact(partition) for partition in complete]
+
+
+def ingestions_by_day(raw_dir: Path, source: str, timezone: str) -> dict[str, list[RawArtifact]]:
+    """Every complete ingestion of a source grouped by the day it was read, as
+    `YYYY-MM-DD` in `timezone`: the calendar the operator reads, not UTC's - a read at 8 pm
+    in Mexico City is already tomorrow in UTC."""
+    zone = ZoneInfo(timezone)
+    days: dict[str, list[RawArtifact]] = {}
+    for artifact in ingestions(raw_dir, source):
+        day = artifact.manifest.ingested_at.astimezone(zone).date().isoformat()
+        days.setdefault(day, []).append(artifact)
+    return days
 
 
 def ingest(

@@ -12,7 +12,8 @@ still has work to do.
 
 A source whose history is its downloads (named in the config's `accumulate`, file or API
 alike) is read whole: every ingestion, each checked against the contract on its own,
-stacked with the time of its download.
+stacked with the time of its download. One such download can also be checked alone
+(`validate_read`): the orchestrator does it read by read, a partition each.
 """
 
 import json
@@ -103,21 +104,21 @@ def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSo
         raise ValueError(f"`accumulate` names sources that do not exist: {nameless}")
     history = set(config.accumulate)
     validated = {}
-    for name, source in config.sources.items():
+    for name in config.sources:
         if latest_ingestion(raw_dir, name) is None:
             raise FileNotFoundError(
                 f"No raw ingestion for '{name}' in {raw_dir}; run extract first"
             )
-        read = partial(_read, source=source, readers=readers)
+        read = _reader(adapter, name, readers, json_readers)
         validated[name] = _validated(name, raw_dir, contracts[name], name in history, read)
 
-    for name, read_json in json_readers.items():
+    for name in json_readers:
         if latest_ingestion(raw_dir, name) is None:
             # Not an error: a source whose credential is missing is skipped at extract,
             # and everything that does not depend on it still builds.
             logger.info("%s has never been ingested; skipping its contract", name)
             continue
-        read = partial(_read_json, reader=read_json)
+        read = _reader(adapter, name, readers, json_readers)
         validated[name] = _validated(name, raw_dir, contracts[name], name in history, read)
 
     for document in adapter.config.documents:
@@ -130,6 +131,26 @@ def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSo
             DOCUMENT_PARTS, artifact, read_document(artifact, document)
         )
     return validated
+
+
+def validate_read(adapter: DomainAdapter, name: str, artifact: RawArtifact) -> ValidatedSource:
+    """One download of a source, checked on its own against the source's contract."""
+    read = _reader(adapter, name, adapter.file_readers(), adapter.json_readers())
+    return _checked(adapter.raw_contracts()[name], artifact, read(artifact))
+
+
+def _reader(
+    adapter: DomainAdapter,
+    name: str,
+    readers: Mapping[str, FileReader],
+    json_readers: Mapping[str, JsonReader],
+) -> Callable[[RawArtifact], pl.DataFrame]:
+    """How a download of the source is read: a file the config describes, or the JSON an
+    API answered, flattened by the domain."""
+    source = adapter.config.sources.get(name)
+    if source is not None:
+        return partial(_read, source=source, readers=readers)
+    return partial(_read_json, reader=json_readers[name])
 
 
 def _validated(

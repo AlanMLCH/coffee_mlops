@@ -14,6 +14,7 @@ from mlops_core.data.extract import (
     ingest,
     ingest_file,
     ingestions,
+    ingestions_by_day,
     last_checked,
     latest_ingestion,
     user_agent,
@@ -236,3 +237,18 @@ def test_a_document_is_not_fetched_again_until_it_is_due(
     soon = ingest_file("paper", url, "paper.pdf", tmp_path, client, ten_days, refresh_hours=720)
 
     assert soon == first and soon.path.read_bytes() == b"%PDF first edition"
+
+
+def test_reads_are_grouped_by_the_day_they_were_made_in_the_operators_calendar(
+    tmp_path: Path, coffee_config: DomainConfig, client: httpx.Client
+) -> None:
+    """20:30 in Mexico City is already tomorrow in UTC: the day is the operator's."""
+    source = coffee_config.sources["psd_coffee"]
+    evening = datetime(2026, 9, 28, 2, 30, tzinfo=UTC)  # 27 September, 20:30 in the city
+    ingest("psd_coffee", source, tmp_path, client, now=evening)
+
+    by_day = ingestions_by_day(tmp_path, "psd_coffee", "America/Mexico_City")
+
+    assert list(by_day) == ["2026-09-27"]
+    assert list(ingestions_by_day(tmp_path, "psd_coffee", "UTC")) == ["2026-09-28"]
+    assert ingestions_by_day(tmp_path, "never_read", "UTC") == {}

@@ -2,6 +2,7 @@
 checks must fail loudly when the data breaks its contract."""
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,6 +14,7 @@ from dagster import AssetKey, AssetSelection, build_sensor_context, materialize
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.adapter import ApiExtraction
 from mlops_core.config import Settings
+from mlops_core.data.extract import MANIFEST_NAME, Manifest
 from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import TrainResult
 from mlops_core.orchestration import definitions
@@ -35,6 +37,8 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
     assert [a.key.to_user_string() for a in defs.assets if a.key.path[0] == "tea"] == [
         "tea/raw_sources",
         "tea/clean_tables",
+        "tea/ico_prices_reads",
+        "tea/roaster_catalogs_reads",
         "tea/review_features",
         "tea/review_model",
         "tea/review_predictions",
@@ -48,13 +52,27 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/green_price_predictions",
         "tea/green_price_drift",
     ]
-    assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml", "tea_data", "tea_ml"]
+    assert [j.name for j in defs.jobs] == [
+        "coffee_data",
+        "coffee_ml",
+        "tea_data",
+        "tea_ml",
+        "coffee_ico_prices_reads",
+        "coffee_roaster_catalogs_reads",
+        "tea_ico_prices_reads",
+        "tea_roaster_catalogs_reads",
+    ]
 
 
 def test_without_a_list_every_installed_domain_gets_a_graph(tmp_path: Path) -> None:
     defs = build_definitions(settings=Settings(data_dir=tmp_path))
 
-    assert [j.name for j in defs.jobs] == ["coffee_data", "coffee_ml"]
+    assert [j.name for j in defs.jobs] == [
+        "coffee_data",
+        "coffee_ml",
+        "coffee_ico_prices_reads",
+        "coffee_roaster_catalogs_reads",
+    ]
 
 
 def features_asset(tmp_path: Path, adapter: CoffeeAdapter | None = None) -> tuple[list, object]:
@@ -131,8 +149,10 @@ def test_every_asset_runs_its_own_pipeline_step(
         monkeypatch.setattr(definitions, name, stub)
     monkeypatch.setattr(definitions, "http_client", contextmanager(lambda: iter([None])))
     assets, _ = features_asset(tmp_path, coffee_adapter)
+    # The pipelines' assets; the partitioned reads run a day at a time, on their own.
+    reads = [["coffee", f"{name}_reads"] for name in coffee_adapter.config.accumulate]
 
-    result = materialize(assets)
+    result = materialize(assets, selection=AssetSelection.all() - AssetSelection.assets(*reads))
 
     assert result.success
     # The data steps run once; each model step once per model.
@@ -236,3 +256,85 @@ def test_a_due_retraining_trains_and_lets_the_gate_decide(
     ]
     monkeypatch.setattr(definitions, "retraining_due", lambda config, data_dir: {})
     assert on_drift.evaluate_tick(build_sensor_context()).run_requests == []
+
+
+# --- The reads of a source whose history is its downloads, a partition a day ---------------
+
+
+def read_on(data_dir: Path, source: str, at: datetime) -> None:
+    """A complete raw ingestion of `source` made at `at`, as extract leaves one."""
+    partition = data_dir / "coffee" / "raw" / source / f"ingested_at={at:%Y%m%dT%H%M%S%fZ}"
+    partition.mkdir(parents=True)
+    (partition / "read.json").write_text("{}", encoding="utf-8")
+    manifest = Manifest(
+        source=source, url="https://shop.test/", filename="read.json",
+        sha256=at.isoformat(), size_bytes=2, ingested_at=at,
+    )  # fmt: skip
+    (partition / MANIFEST_NAME).write_text(manifest.model_dump_json(), encoding="utf-8")
+
+
+def reads_asset(tmp_path: Path, source: str) -> tuple[Any, Any]:
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    by_name = {a.key.path[-1]: a for a in defs.assets}
+    return by_name[f"{source}_reads"], by_name["raw_sources"].to_source_asset()
+
+
+def test_a_day_a_source_was_read_is_a_partition_checked_read_by_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two reads on 21 September in the city (one of them after 6 pm: the 22nd in UTC),
+    # none on the 22nd, one on the 23rd.
+    for at in ("2026-09-21T15:00:00", "2026-09-22T02:00:00", "2026-09-23T15:00:00"):
+        read_on(tmp_path, "roaster_catalogs", datetime.fromisoformat(at).replace(tzinfo=UTC))
+    checked: list[str] = []
+
+    def validate_read(adapter: object, name: str, artifact: Any) -> Any:
+        checked.append(artifact.partition.name)
+        return SimpleNamespace(frame=pl.DataFrame({"offer": [1, 2]}))
+
+    monkeypatch.setattr(definitions, "validate_read", validate_read)
+    reads, raw = reads_asset(tmp_path, "roaster_catalogs")
+
+    assert reads.partitions_def.get_partition_keys()[:3] == [
+        "2026-09-21", "2026-09-22", "2026-09-23",
+    ]  # fmt: skip
+    assert reads.partitions_def.timezone == "America/Mexico_City"
+    result = materialize([reads, raw], partition_key="2026-09-21")
+    metadata = result.asset_materializations_for_node("coffee__roaster_catalogs_reads")[0].metadata
+    assert (metadata["reads"].value, metadata["rows"].value) == (2, 4)
+    assert len(checked) == 2
+    unread = materialize([reads, raw], partition_key="2026-09-22", raise_on_error=False)
+    assert not unread.success
+    (failure,) = [e for e in unread.all_events if e.event_type_value == "STEP_FAILURE"]
+    assert "was not read on 2026-09-22" in failure.event_specific_data.error.message
+
+
+def test_each_new_read_asks_for_its_day_once(tmp_path: Path) -> None:
+    on_reads = sensor_named(tmp_path, "coffee_reads")
+    assert "no source" in on_reads.evaluate_tick(build_sensor_context()).skip_message
+    read_on(tmp_path, "ico_prices", datetime(2026, 9, 26, 4, 13, tzinfo=UTC))
+    read_on(tmp_path, "roaster_catalogs", datetime(2026, 9, 27, 11, 6, tzinfo=UTC))
+    # Rebuilt: a source's partitions start the first day it was read.
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    on_reads = next(s for s in defs.sensors if s.name == "coffee_reads")
+
+    context = build_sensor_context(definitions=defs)
+    requests = on_reads.evaluate_tick(context).run_requests
+
+    assert [(r.job_name, r.partition_key, r.run_key) for r in requests] == [
+        ("coffee_ico_prices_reads", "2026-09-25",
+         "ico_prices:2026-09-25:ingested_at=20260926T041300000000Z"),
+        ("coffee_roaster_catalogs_reads", "2026-09-27",
+         "roaster_catalogs:2026-09-27:ingested_at=20260927T110600000000Z"),
+    ]  # fmt: skip
+
+
+def test_a_domain_whose_sources_keep_no_history_gets_no_reads(
+    coffee_adapter: CoffeeAdapter, tmp_path: Path
+) -> None:
+    latest_only = CoffeeAdapter(coffee_adapter.config.model_copy(update={"accumulate": []}))
+
+    defs = build_definitions([latest_only], Settings(data_dir=tmp_path))
+
+    assert not any(a.key.path[-1].endswith("_reads") for a in defs.assets)
+    assert [s.name for s in defs.sensors] == ["coffee_new_data", "coffee_retrain"]

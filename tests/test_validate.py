@@ -241,3 +241,18 @@ def test_accumulate_must_name_a_source_that_exists(
         ValueError, match=r"`accumulate` names sources that do not exist: \['tea_leaves'\]"
     ):
         validate_raw(CoffeeAdapter(config), raw_dir)
+
+
+def test_one_read_is_checked_on_its_own(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> None:
+    """A file read and an API read alike, each against its source's contract."""
+    from mlops_core.data.extract import latest_ingestion
+    from mlops_core.data.validate import validate_read
+
+    for name, rows in (("ico_prices", 3), ("roaster_catalogs", 33)):
+        artifact = latest_ingestion(raw_dir, name)
+        assert artifact is not None
+
+        checked = validate_read(coffee_adapter, name, artifact)
+
+        assert checked.frame.height == rows
+        assert checked.lineage == artifact.partition.name

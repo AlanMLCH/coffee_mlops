@@ -183,7 +183,7 @@ flowchart TD
     green_price_features & mlflow -.-> green_price_predictions
     review_features & offer_features & green_price_features & review_predictions & offer_predictions --> monitor --> monitoring_tables
     monitor -- "due: retrain, the gate decides" --> train
-    schedule{{"Dagster: coffee_daily_data (cron in the YAML)<br/>sensors: coffee_new_data · coffee_retrain<br/>keyed by data version: one change, one run"}}
+    schedule{{"Dagster: coffee_daily_data (cron in the YAML)<br/>sensors: coffee_new_data · coffee_retrain<br/>keyed by data version: one change, one run<br/>coffee_reads: a partition per day a source was read"}}
     schedule -.-> extract_files & extract_apis
     schedule -.-> monitor
     mlflow --> api
@@ -1106,13 +1106,14 @@ First run, on the real layers:
 
 ### Running on its own (stage 4)
 
-`make dagster` starts Dagster with one schedule and two sensors per domain, all on:
+`make dagster` starts Dagster with one schedule and three sensors per domain, all on:
 
 | | When | What runs |
 |---|---|---|
 | `coffee_daily_data` | every day at 07:00, Mexico City (the YAML's `schedule:`) | extract and clean: the ICO's page is read each day, so its month builds up |
 | `coffee_new_data` | a model's clean inputs come from new data | its features, its champion's scores, and the drift report |
 | `coffee_retrain` | the drift report calls for retraining, on data no training run has used | training - the gate decides - then scores and drift again |
+| `coffee_reads` | a source whose history is its downloads was read again | that day's partition of `<source>_reads`: each of the day's reads checked against its contract |
 
 - **New data means new raw data, not a new build.** Every clean build writes new
   partitions, identical or not, so "a partition appeared" says nothing. A model's **data
@@ -1131,6 +1132,18 @@ First run, on the real layers:
 - **The first real check found work to do:** the roasters changed their catalogues
   between 22 and 26 September, so the offer model's data is newer than its features -
   and the sensor would rebuild them.
+- **A source whose history is its downloads gets a partition a day.** `ico_prices_reads`
+  and `roaster_catalogs_reads` are daily-partitioned assets: a partition is a day the
+  source was read, in the schedule's timezone (a read at 8 pm in Mexico City is already
+  tomorrow in UTC), and materializing it checks each of that day's reads against the
+  contract on its own. The partitions show what a flat asset could not: which days were
+  read and which were not. For these sources a missed day is history that can never be
+  asked for again - the shops show only today's catalogue, the ICO only the current
+  month - so a backfill re-checks the days that were read (after a contract change, say)
+  and fails on a day nobody read, saying why, instead of pretending to fill it. The
+  first look found the gap it was built for: the roasters were read on 3 days of 8 (five
+  reads), the ICO's page on 1 of 4, because nothing ran the daily schedule on the other days. Not a
+  cache: checking a read takes 0.06 s, so the clean layer still stacks every read.
 
 ### The roasters' catalogues, read after read
 

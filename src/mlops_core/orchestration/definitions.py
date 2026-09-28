@@ -9,24 +9,38 @@ features, scores and drift when the data it reads changes (sensor `<domain>_new_
 and its training when the monitor calls for it on data it was not trained on (sensor
 `<domain>_retrain`). The questions the sensors ask are `triggers`' pure functions.
 
+A source whose history is its downloads (`accumulate`) also gets a daily-partitioned
+asset, `<source>_reads`: a partition is a day it was read, in the schedule's timezone,
+and materializing one checks that day's reads against the contract, each on its own.
+The sensor `<domain>_reads` asks for a day once for each new read, so the partitions
+show which days were read and which were not - the history such a source can never be
+asked for again - and a backfill re-checks the days read, and says of each day nobody
+read that it cannot be read now.
+
 Assets manage their own storage (immutable Parquet partitions), so they return
 `MaterializeResult` metadata instead of handing values to an IO manager. Each of the
 domain's models gets its own three assets, named after it.
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import mlflow
 from dagster import (
     AssetCheckResult,
     AssetChecksDefinition,
+    AssetExecutionContext,
     AssetKey,
     AssetsDefinition,
     AssetSelection,
+    DailyPartitionsDefinition,
     DefaultScheduleStatus,
     DefaultSensorStatus,
     Definitions,
+    Failure,
     MaterializeResult,
     RunRequest,
     ScheduleDefinition,
@@ -43,8 +57,8 @@ from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
 from mlops_core.config import ModelConfig, Settings
 from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
-from mlops_core.data.extract import extract_all, http_client
-from mlops_core.data.validate import validate_raw
+from mlops_core.data.extract import extract_all, http_client, ingestions_by_day
+from mlops_core.data.validate import validate_raw, validate_read
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
 from mlops_core.ml.registry import NoChampion
@@ -53,10 +67,17 @@ from mlops_core.monitoring.drift import monitor_model
 from mlops_core.orchestration.triggers import new_data, retraining_due
 from mlops_core.storage import read_table
 
+if TYPE_CHECKING:  # not exported by dagster; only its name is needed
+    from dagster._core.definitions.unresolved_asset_job_definition import (
+        UnresolvedAssetJobDefinition,
+    )
+
 # Assets write their own Parquet, so they hand Dagster metadata, not a value.
 Materialized = MaterializeResult[None]
 # How often the sensors look: the data changes once a day at most.
 SENSOR_SECONDS = 600
+# The calendar of a domain without a schedule: a read's day has to be some zone's.
+DEFAULT_TIMEZONE = "UTC"
 
 
 def pipeline_assets(adapter: DomainAdapter) -> dict[str, list[str]]:
@@ -118,9 +139,63 @@ def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefi
         return MaterializeResult(metadata={name: str(path) for name, path in paths.items()})
 
     built = [raw_sources, clean_tables]
+    built += [read_assets(adapter, name, settings, raw_sources) for name in config.accumulate]
     for model in config.models:
         built += model_assets(adapter, model, settings, clean_tables)
     return built
+
+
+def reads_timezone(adapter: DomainAdapter) -> str:
+    schedule = adapter.config.schedule
+    return schedule.timezone if schedule else DEFAULT_TIMEZONE
+
+
+def read_days(adapter: DomainAdapter, name: str, settings: Settings) -> DailyPartitionsDefinition:
+    """A partition a day, from the first day the source was read (today, if it never
+    was) through today: a read made this morning is a partition before the day ends."""
+    raw_dir = settings.data_dir / adapter.config.name / "raw"
+    timezone = reads_timezone(adapter)
+    days = sorted(ingestions_by_day(raw_dir, name, timezone))
+    first = days[0] if days else datetime.now(ZoneInfo(timezone)).date().isoformat()
+    return DailyPartitionsDefinition(start_date=first, timezone=timezone, end_offset=1)
+
+
+def read_assets(
+    adapter: DomainAdapter, name: str, settings: Settings, raw_sources: AssetsDefinition
+) -> AssetsDefinition:
+    """`<source>_reads`: one partition per day a source whose history is its downloads
+    was read."""
+    config = adapter.config
+    raw_dir = settings.data_dir / config.name / "raw"
+    timezone = reads_timezone(adapter)
+
+    @asset(
+        name=f"{name}_reads",
+        key_prefix=[config.name],
+        group_name=config.name,
+        partitions_def=read_days(adapter, name, settings),
+        deps=[raw_sources],
+    )
+    def reads(context: AssetExecutionContext) -> Materialized:
+        """The day's reads of the source, each checked against its contract on its own."""
+        day = context.partition_key
+        artifacts = ingestions_by_day(raw_dir, name, timezone).get(day, [])
+        if not artifacts:
+            raise Failure(
+                f"{name} was not read on {day}. It shows only what it holds when it is "
+                "read: a day nobody read cannot be downloaded now, and the next read "
+                "brings only what the source shows then."
+            )
+        checked = [validate_read(adapter, name, artifact) for artifact in artifacts]
+        return MaterializeResult(
+            metadata={
+                "reads": len(checked),
+                "rows": sum(read.frame.height for read in checked),
+                "latest": artifacts[-1].partition.name,
+            }
+        )
+
+    return reads
 
 
 def model_assets(
@@ -222,8 +297,9 @@ def build_definitions(
         domain = domain_assets(adapter, settings)
         assets += domain
         checks += domain_checks(adapter, settings, domain)
-    # One job per pipeline, mirroring `mlops data run` and `ml run`.
-    jobs = [
+    # One job per pipeline, mirroring `mlops data run` and `ml run`, and one per source
+    # whose history is its downloads.
+    jobs: list[UnresolvedAssetJobDefinition] = [
         define_asset_job(
             name=f"{adapter.config.name}_{pipeline}",
             selection=AssetSelection.assets(*[[adapter.config.name, name] for name in names]),
@@ -231,6 +307,8 @@ def build_definitions(
         for adapter in adapters
         for pipeline, names in pipeline_assets(adapter).items()
     ]
+    read_jobs = {adapter.config.name: reads_jobs(adapter) for adapter in adapters}
+    jobs += [job for domain_jobs in read_jobs.values() for job in domain_jobs]
     schedules = [
         ScheduleDefinition(
             name=f"{adapter.config.name}_daily_data",
@@ -242,7 +320,14 @@ def build_definitions(
         for adapter in adapters
         if adapter.config.schedule is not None
     ]
-    sensors = [sensor for adapter in adapters for sensor in model_sensors(adapter, settings)]
+    sensors = [
+        sensor
+        for adapter in adapters
+        for sensor in [
+            *model_sensors(adapter, settings),
+            *read_sensors(adapter, settings, read_jobs[adapter.config.name]),
+        ]
+    ]
     return Definitions(
         assets=assets, asset_checks=checks, jobs=jobs, schedules=schedules, sensors=sensors
     )
@@ -301,6 +386,57 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
             )
 
     return [on_new_data, on_drift]
+
+
+def reads_job(adapter: DomainAdapter, source: str) -> str:
+    return f"{adapter.config.name}_{source}_reads"
+
+
+def reads_jobs(adapter: DomainAdapter) -> "list[UnresolvedAssetJobDefinition]":
+    """A job per source whose history is its downloads: a partitioned asset runs a day at
+    a time, on its own partitions."""
+    return [
+        define_asset_job(
+            name=reads_job(adapter, source),
+            selection=AssetSelection.assets([adapter.config.name, f"{source}_reads"]),
+        )
+        for source in adapter.config.accumulate
+    ]
+
+
+def read_sensors(
+    adapter: DomainAdapter, settings: Settings, jobs: "list[UnresolvedAssetJobDefinition]"
+) -> list[SensorDefinition]:
+    """Check each day a source whose history is its downloads was read, once per read.
+    None when the domain has no such source."""
+    config = adapter.config
+    if not config.accumulate:
+        return []
+    raw_dir = settings.data_dir / config.name / "raw"
+    timezone = reads_timezone(adapter)
+
+    @sensor(
+        name=f"{config.name}_reads",
+        jobs=jobs,
+        minimum_interval_seconds=SENSOR_SECONDS,
+        default_status=DefaultSensorStatus.RUNNING,
+    )
+    def on_reads(context: SensorEvaluationContext):  # type: ignore[no-untyped-def]
+        """A day with a read not checked yet. The key names the day's latest read, so a
+        second read the same day is checked too, and nothing twice."""
+        requested = False
+        for source in config.accumulate:
+            for day, artifacts in ingestions_by_day(raw_dir, source, timezone).items():
+                requested = True
+                yield RunRequest(
+                    run_key=f"{source}:{day}:{artifacts[-1].partition.name}",
+                    job_name=reads_job(adapter, source),
+                    partition_key=day,
+                )
+        if not requested:
+            yield SkipReason("no source whose history is its downloads has been read yet")
+
+    return [on_reads]
 
 
 defs = build_definitions()
