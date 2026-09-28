@@ -111,9 +111,10 @@ sources:
     refresh_hours: 168 # a monthly release of 195 MB, not fetched every day
 
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
-# shows only the current month, and each read of the roasters' catalogues is an
-# observation of what they sold then. Every download is kept, never pruned.
-accumulate: [ico_prices, roaster_catalogs]
+# shows only the current month, each read of the roasters' catalogues is an observation
+# of what they sold then, and PROFECO's archive holds only the current year - when 2027's
+# replaces it, 2026's fortnights must stay. Every download is kept (raw is never pruned).
+accumulate: [ico_prices, roaster_catalogs, profeco_prices]
 
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.

@@ -7,6 +7,11 @@ and with a specialty roaster's bag; says what else the presentation declares (a 
 with sugar or caramel is priced per kilogram of both; decaf); and gives the city's
 prices the borough their store is in.
 
+Every read of the survey is kept (the source accumulates): PROFECO publishes the year so
+far, so the archive of January 2027 will no longer hold 2026. Each fortnight's rows come
+from the latest read that carries that fortnight's file - a correction can only come
+later - and a fortnight no newer read carries is kept from the read that had it.
+
 One thing in the files is repaired, from what the files themselves say: June's wrote
 some accented letters as a question mark ("Nescafé. Cl?sico", "Naucalpan de Ju?rez").
 A value is restored only when the same column spells it whole somewhere else, and
@@ -30,7 +35,7 @@ import polars as pl
 from domains.coffee.config import ConsumerPricesConfig
 from domains.coffee.roaster_sheets import bag_grams
 from domains.coffee.schemas import CONSUMER_PRICES
-from domains.coffee.sources.profeco import record_date
+from domains.coffee.sources.profeco import FILE, record_date
 from mlops_core.data.geo import attribute_points
 
 logger = logging.getLogger(__name__)
@@ -40,12 +45,14 @@ LOST_LETTERS = ("marca", "presentacion", "nombre_comercial", "municipio")
 _LOST = "?"
 _NON_ASCII = "[^\\x00-\\x7f]"  # the one letter a "?" stands for
 _KEY = "__borough_key"  # a name folded, to meet INEGI's spelling of it
+READ_AT = "ingested_at"  # the read each row came from, when the reads are stacked
 
 
 def clean_consumer_prices(
     raw: pl.DataFrame, areas: pl.DataFrame, rules: ConsumerPricesConfig
 ) -> pl.DataFrame:
     """The survey's coffee rows, per kilogram, each placed in a borough if it is in one."""
+    raw = latest_fortnights(raw)
     restored = raw.with_columns(restore_lost_letters(raw[column]) for column in LOST_LETTERS)
     date = record_date(pl.col("fecha_registro"))
     month = date.dt.truncate("1mo")
@@ -81,6 +88,20 @@ def clean_consumer_prices(
     return in_boroughs.select(*CONSUMER_PRICES.columns).sort(
         "date", "state", "store", "brand", "presentation", "price_mxn"
     )
+
+
+def latest_fortnights(raw: pl.DataFrame) -> pl.DataFrame:
+    """Each fortnight's file from the latest read that carries it. Without reads stacked
+    (no `ingested_at`), the one read there is."""
+    if READ_AT not in raw.columns:
+        return raw
+    latest = pl.col(READ_AT).max().over(FILE)
+    kept = raw.filter(pl.col(READ_AT) == latest)
+    logger.info(
+        "consumer_prices: %d fortnights from %d reads of the survey",
+        kept[FILE].n_unique(), raw[READ_AT].n_unique(),
+    )  # fmt: skip
+    return kept.drop(READ_AT)
 
 
 def restore_lost_letters(values: pl.Series) -> pl.Series:

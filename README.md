@@ -23,8 +23,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first), and 17 documents for the agent to read.
-- **Keeps every download untouched** in a content-addressed raw layer, and holds every
-  source and every clean table to a Pandera contract that stops the pipeline when broken.
+- **Keeps every download untouched and forever** in a content-addressed raw layer:
+  running again only adds what is new, never overwrites. Every source and every clean
+  table is held to a Pandera contract that stops the pipeline when broken.
 - **Trains three models**, each promoted only if a paired bootstrap is 95% sure it beats
   both the baselines and the current champion; every run and model is in MLflow.
 - **Monitors drift** between periods with Evidently, and retrains once per new version

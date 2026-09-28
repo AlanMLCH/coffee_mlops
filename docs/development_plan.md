@@ -1247,6 +1247,13 @@ ones read again are ones the model may have learned.
 - **`make prune` never touches a source whose history is its downloads.** It kept the
   newest three partitions of every table, `raw/` included; for the ICO's page that would
   have deleted days that can never be fetched again.
+- **Then it stopped touching `raw/` at all** (2026-09-28). The raw layer is the record:
+  every download that brought something new, as it came, never overwritten - a download
+  identical to the last one stores nothing, and one that differs is a new partition
+  beside the old. Running the pipeline again only ever adds. `make prune` now clears old
+  builds of the derived layers, which are rebuilt from raw, and nothing else: a download
+  cannot always be made again (a page that shows only this month, a catalogue that shows
+  only today, a file its publisher has replaced).
 
 ## What a kilogram costs on the shelf (stage 4)
 
@@ -1292,6 +1299,13 @@ roaster:
 
 What it took to read, and what the core gained:
 
+- **Every read is kept, and a new year does not replace the old one.** The archive is
+  the year so far, so each release holds the ones before it - until January, when 2027's
+  archive no longer holds 2026. The source accumulates (every read validated on its own
+  and stacked), and each fortnight's rows come from the latest read that carries its file:
+  a correction can only come later, and a fortnight no newer read carries stays from the
+  read that had it. Reading an archive takes about 10 s, so a year of monthly reads adds
+  some two minutes to a clean build.
 - **A link found by what it says** (`link_text:`). The page's addresses are opaque tokens
   (`file.php?t=9d62...`), and it lists 2025 before 2026, so "the first year it shows" is
   last year: the YAML names the year, and a new year is a one-line change. 2024 and 2025

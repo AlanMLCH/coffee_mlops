@@ -954,15 +954,11 @@ def prune(
     domain: Domain = None,
     keep: Annotated[int | None, typer.Option(help="Complete partitions to keep per table")] = None,
 ) -> None:
-    """Delete old partitions of every layer, keeping the newest ones - and every download
-    of a source whose history is its downloads."""
-    adapter = _adapter(domain)
-    config = adapter.config
+    """Delete old builds of the derived layers, keeping the newest ones. The raw layer is
+    never pruned: every download stays, as the record the rest is rebuilt from."""
+    config = _adapter(domain).config
     settings = Settings()
-    history = [f"raw/{name}" for name in config.accumulate]
-    pruned = prune_layers(
-        _data_dir(config), keep if keep is not None else settings.keep_partitions, keep_all=history
-    )
+    pruned = prune_layers(_data_dir(config), keep if keep is not None else settings.keep_partitions)
     for table, count in pruned.items():
         typer.echo(f"{table}: {count} partitions removed")
     if not pruned:

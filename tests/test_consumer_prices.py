@@ -181,3 +181,24 @@ def test_a_letter_is_restored_only_where_one_whole_spelling_fits(
     assert "municipio: restored 1 values with lost letters; 2 have no single" in caplog.text
     clean = pl.Series("marca", ["Legal"])
     assert restore_lost_letters(clean) is clean  # nothing lost, nothing done
+
+
+def test_each_fortnight_comes_from_the_latest_read_that_carries_it(
+    raw: pl.DataFrame, areas: pl.DataFrame, rules: ConsumerPricesConfig
+) -> None:
+    """A new year's archive no longer holds the old year: its fortnights must stay. And a
+    fortnight read twice keeps its later reading, since a correction can only come later."""
+    from datetime import UTC, datetime
+
+    may = pl.col("file") == "QQP_2026/05-2026_Q1.csv"
+    first = raw.with_columns(pl.lit(datetime(2026, 8, 1, tzinfo=UTC)).alias("ingested_at"))
+    # The next archive: May corrected (every price a peso more), and nothing else of 2026.
+    later = raw.filter(may).with_columns(
+        pl.col("precio") + 1, pl.lit(datetime(2027, 1, 16, tzinfo=UTC)).alias("ingested_at")
+    )
+
+    prices = clean_consumer_prices(pl.concat([first, later]), areas, rules)
+
+    assert prices.height == clean_consumer_prices(raw, areas, rules).height  # nothing lost
+    corrected = prices.filter(pl.col("date") == date(2026, 5, 4)).sort("price_mxn")
+    assert corrected["price_mxn"].to_list() == [96.9, 111.0]

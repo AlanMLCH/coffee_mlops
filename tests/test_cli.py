@@ -281,7 +281,7 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
 def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     table = tmp_path / "coffee" / "clean" / "coffee_reviews"
-    history = tmp_path / "coffee" / "raw" / "ico_prices"  # every download is its history
+    history = tmp_path / "coffee" / "raw" / "psd_coffee"  # any source: raw is the record
     for day in (1, 2, 3):
         frame = pl.DataFrame({"v": [day]})
         write_table(frame, table, inputs={}, at=datetime(2026, 9, day, tzinfo=UTC))
@@ -291,7 +291,7 @@ def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.Monke
 
     assert result.exit_code == 0, result.output
     assert "clean/coffee_reviews: 2 partitions removed" in result.output
-    assert "ico_prices" not in result.output
+    assert "psd_coffee" not in result.output
     assert len(list(history.glob("*=*"))) == 3
 
 

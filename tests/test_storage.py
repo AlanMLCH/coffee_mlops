@@ -94,8 +94,10 @@ def test_pruning_removes_a_build_that_crashed_long_ago(tmp_path: Path) -> None:
     assert not abandoned.exists()
 
 
-def test_pruning_walks_every_layer_and_table(tmp_path: Path) -> None:
-    for layer, table in (("clean", "coffee_reviews"), ("features", "review_features")):
+def test_pruning_walks_every_derived_layer_and_never_touches_the_record(tmp_path: Path) -> None:
+    """Old builds can be rebuilt from raw; an old download cannot always be made again."""
+    layers = (("clean", "coffee_reviews"), ("features", "review_features"), ("raw", "psd"))
+    for layer, table in layers:
         for day in (1, 2):
             write_table(
                 pl.DataFrame({"v": [day]}),
@@ -107,6 +109,7 @@ def test_pruning_walks_every_layer_and_table(tmp_path: Path) -> None:
     pruned = prune_layers(tmp_path, keep=1)
 
     assert pruned == {"clean/coffee_reviews": 1, "features/review_features": 1}
+    assert len(list((tmp_path / "raw" / "psd").glob("*=*"))) == 2
 
 
 # --- The data version -------------------------------------------------------------------

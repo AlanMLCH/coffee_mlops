@@ -21,6 +21,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
+RAW = "raw"  # the layer of downloads as they came: the record, never pruned
 # Microseconds, not seconds: two builds inside the same second are rare but real (a
 # test, a retry, a fast loop), and colliding on a partition name crashed the run.
 TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
@@ -143,18 +144,16 @@ def prune_partitions(
     return deleted
 
 
-def prune_layers(
-    data_dir: Path, keep: int, now: datetime | None = None, keep_all: Sequence[str] = ()
-) -> dict[str, int]:
-    """Prune every table of every layer under a domain's data dir, except those in
-    `keep_all` (`<layer>/<table>`): a source whose history is every download - the
-    current month's page, read day after day - would lose what can never be fetched
-    again."""
+def prune_layers(data_dir: Path, keep: int, now: datetime | None = None) -> dict[str, int]:
+    """Prune every table of every derived layer under a domain's data dir; never `raw/`.
+
+    The raw layer is the record: every download that brought something new, as it came.
+    A derived layer can be rebuilt from it, so its old builds can go; a download cannot
+    always be made again - a page that shows only the current month, a catalogue that
+    shows only today, a file its publisher has since replaced."""
     pruned = {}
-    for layer in sorted(p for p in data_dir.iterdir() if p.is_dir()):
+    for layer in sorted(p for p in data_dir.iterdir() if p.is_dir() and p.name != RAW):
         for table_dir in sorted(p for p in layer.iterdir() if p.is_dir()):
-            if f"{layer.name}/{table_dir.name}" in keep_all:
-                continue
             removed = prune_partitions(table_dir, keep, now)
             if removed:
                 pruned[f"{layer.name}/{table_dir.name}"] = len(removed)
