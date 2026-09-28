@@ -194,7 +194,7 @@ catalogue, use `clean.roaster_offers`**; this table counts each offer once per r
 `clean.roaster_origins` for every read, with its `snapshot`: a coffee's sheet can
 change between reads, and a price is explained by the sheet of its own read.
 
-## `clean.consumer_prices` — one price PROFECO recorded on a shelf
+## `clean.consumer_prices` — one shelf price of mass-market packaged coffee (PROFECO)
 
 PROFECO's *Quién es Quién en los Precios* (stage 4): its staff price packaged coffee in
 supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by

@@ -1194,6 +1194,13 @@ What it took to read, and what the core gained:
   misleading message, "the areas overlap"). Points are now matched with an inner join,
   which agrees with `ST_Within` over every pair, and attached back to their rows; a test
   with 20,000 points pins it.
+- **The agent reads the table too, and its heading is what the router sees.** Worded
+  first as "one price PROFECO recorded on a shelf", it drew questions about what a
+  roaster *would* charge for a bag to the tables instead of the price model: 75% correct.
+  Said as what it is - mass-market packaged coffee - the evaluation is back to **82%
+  correct, 98% verified, routing 95%** (80% and 98% before PROFECO). The wording was fixed
+  because it was ambiguous, but it was measured on the same 40 questions that exposed it,
+  so read the 82% as optimistic.
 
 ## What a kilo costs (stage 3)
 
