@@ -32,7 +32,9 @@ DOCS = Path(__file__).resolve().parents[1] / "docs"
 # Beside the domain's code: the agent reads it as the schema its SQL is written against.
 DATA_DICTIONARY = (domain_dir("coffee") / "data_dictionary.md").read_text(encoding="utf-8")
 MODEL_CARD = (DOCS / "model-card.md").read_text(encoding="utf-8")
-README = (DOCS.parent / "README.md").read_text(encoding="utf-8")
+# The detailed record, stage by stage: it holds the full architecture diagram. The README
+# is the summary, with a diagram of the main pieces only.
+DEVELOPMENT_PLAN = (DOCS / "development_plan.md").read_text(encoding="utf-8")
 
 
 def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
@@ -113,7 +115,7 @@ def test_the_model_card_states_the_leakage_rule(coffee_config: DomainConfig) -> 
 
 
 def architecture_diagram() -> str:
-    return "\n".join(re.findall(r"```mermaid\n(.*?)```", README, flags=re.DOTALL))
+    return "\n".join(re.findall(r"```mermaid\n(.*?)```", DEVELOPMENT_PLAN, flags=re.DOTALL))
 
 
 @pytest.mark.parametrize("domain", available_domains())
@@ -137,5 +139,17 @@ def test_the_architecture_diagram_shows_every_source_and_table(domain: str) -> N
     declared = {m.group(1) for m in re.finditer(r"(?<![\w])(\w+)(?=\[|\(|\{)", diagram)}
     missing = sorted(names - declared)
 
-    assert diagram, "the README has no architecture diagram"
+    assert diagram, "the development plan has no architecture diagram"
     assert missing == []
+
+
+@pytest.mark.parametrize("document", ["README.md", "docs/development_plan.md"])
+def test_every_relative_link_points_at_a_file(document: str) -> None:
+    """A figure or a page moved without its links is a broken page on GitHub, and nothing
+    else would notice."""
+    path = DOCS.parent / document
+    links = re.findall(r"\]\(([^)#]+)(?:#[^)]*)?\)", path.read_text(encoding="utf-8"))
+    local = [link for link in links if not link.startswith(("http://", "https://"))]
+
+    assert local  # the documents link to each other and to their figures
+    assert [link for link in local if not (path.parent / link).exists()] == []
