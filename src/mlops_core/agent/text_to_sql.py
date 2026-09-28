@@ -12,7 +12,14 @@ import duckdb
 from pydantic import BaseModel
 
 from mlops_core.agent.prompts import REPAIR, SQL, SqlReply
-from mlops_core.agent.sql import MAX_ROWS, QueryResult, Refused, run_select
+from mlops_core.agent.sql import (
+    MAX_ROWS,
+    QueryResult,
+    Refused,
+    run_select,
+    unquoted_views,
+    views,
+)
 
 MAX_ATTEMPTS = 3  # the first query and two repairs
 
@@ -38,12 +45,14 @@ def write_sql(
     question: str,
     max_rows: int = MAX_ROWS,
 ) -> SqlAnswer:
-    """Ask for a query, run it, and hand an error back for repair until one runs."""
+    """Ask for a query, run it, and hand an error back for repair until one runs. A view's
+    whole name quoted as one identifier is unquoted first (`sql.unquoted_views`)."""
     prompt = SQL.format(schema=schema, question=question)
+    names = views(con)
     sql, error = "", ""
     for attempt in range(1, MAX_ATTEMPTS + 1):
         repair = REPAIR.format(sql=sql, error=error) if attempt > 1 else ""
-        sql = generator.ask(prompt + repair, SqlReply).sql.strip()
+        sql = unquoted_views(generator.ask(prompt + repair, SqlReply).sql.strip(), names)
         try:
             return SqlAnswer(sql, run_select(con, sql, max_rows), None, attempt)
         except (Refused, duckdb.Error) as failed:

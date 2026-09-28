@@ -21,12 +21,18 @@ from typing import Any, Literal
 import polars as pl
 from pydantic import BaseModel, Field
 
+from mlops_core.explore.style import SEQUENTIAL
+
 MAX_SERIES = 12  # values a colour can tell apart; with more, the colour says nothing
 LATITUDE = ("latitude", "lat")
 LONGITUDE = ("longitude", "lon", "lng")
 VEGA_LITE = "https://vega.github.io/schema/vega-lite/v5.json"
 HEIGHT = 340
 MAP_HEIGHT = 460  # a city is taller than a bar chart
+LONG_LABEL = 10  # characters a name under an upright bar can have before it is cut
+MANY_BARS = 12  # upright bars side by side before their names start to be skipped
+BAR_STEP = 24  # pixels per lying bar: room for its name, which is never skipped
+LABEL_PIXELS = 220  # how much of a lying bar's name shows before it is cut
 
 ChartKind = Literal["bar", "line", "scatter", "points", "areas", "table"]
 
@@ -133,7 +139,9 @@ def vega_lite(
     spec: dict[str, Any] = {"$schema": VEGA_LITE, "width": "container", "height": HEIGHT}
     if chart.title:
         spec["title"] = chart.title
-    color = {"color": {"field": chart.color, "type": "nominal"}} if chart.color is not None else {}
+    color: dict[str, Any] = (
+        {"color": {"field": chart.color, "type": "nominal"}} if chart.color is not None else {}
+    )
     if chart.kind == "points":
         latitude, longitude = _coordinates(result)
         points = {
@@ -168,20 +176,52 @@ def vega_lite(
             "projection": {"type": "mercator"},
             "mark": {"type": "geoshape", "stroke": "white", "strokeWidth": 0.6},
             "encoding": {
-                "color": {"field": chart.y, "type": "quantitative", "scale": {"scheme": "blues"}},
+                "color": {
+                    "field": chart.y,
+                    "type": "quantitative",
+                    "scale": {"range": SEQUENTIAL},
+                    "title": _title(chart.y),
+                },
                 "tooltip": [
                     {"field": "properties.name", "type": "nominal", "title": "area"},
                     {"field": chart.y, "type": "quantitative"},
                 ],
             },
         }
+    if color:
+        color["color"]["title"] = _title(chart.color)
+    if chart.kind == "bar" and chart.x is not None and _long_labels(result, chart.x):
+        # Names too long to stand under a bar: the bars lie down, one row per name, and
+        # the chart grows with them instead of skipping and cutting labels.
+        assert chart.y is not None  # check_chart's to say
+        series = result[chart.color].n_unique() if chart.color else 1
+        return spec | {
+            "height": {"step": BAR_STEP * series},
+            "data": {"values": records},
+            "mark": {"type": "bar"},
+            "encoding": {
+                "y": {
+                    "field": chart.x,
+                    "type": "nominal",
+                    "sort": "-x",
+                    "title": None,
+                    "axis": {"labelOverlap": False, "labelLimit": LABEL_PIXELS},
+                },
+                "x": {"field": chart.y, "type": "quantitative", "title": _title(chart.y)},
+                "tooltip": tooltip,
+                **color,
+                **({"yOffset": {"field": chart.color}} if chart.color else {}),
+            },
+        }
     x_type = "quantitative" if chart.kind == "scatter" else _type(result, chart.x)
     if chart.kind == "bar":
         x_type = "nominal"
     encoding: dict[str, Any] = {
-        "x": {"field": chart.x, "type": x_type}
+        "x": {"field": chart.x, "type": x_type, "title": _title(chart.x)}
         | ({"sort": "-y", "axis": {"labelAngle": -35}} if chart.kind == "bar" else {}),
-        "y": {"field": chart.y, "type": "quantitative"},
+        "y": {"field": chart.y, "type": "quantitative", "title": _title(chart.y)}
+        # A line's change is the story; from zero, a 15% rise is a flat line.
+        | ({"scale": {"zero": False}} if chart.kind in ("line", "scatter") else {}),
         "tooltip": tooltip,
         **color,
     }
@@ -200,6 +240,18 @@ def png(spec: dict[str, Any], width: int = 720) -> bytes:
     fixed = spec | {"width": width} if spec.get("width") == "container" else spec
     image: bytes = vl_convert.vegalite_to_png(fixed, scale=2)
     return image
+
+
+def _title(column: str | None) -> str | None:
+    """An axis says "price per kg", not "price_per_kg"."""
+    return column.replace("_", " ") if column else None
+
+
+def _long_labels(result: pl.DataFrame, column: str) -> bool:
+    """Whether a category's names are too long to stand under a bar: longer than
+    LONG_LABEL characters, or too many to stand side by side."""
+    names = [str(value) for value in result[column].unique().to_list()]
+    return max((len(name) for name in names), default=0) > LONG_LABEL or len(names) > MANY_BARS
 
 
 def _outline(areas: Areas) -> dict[str, Any]:

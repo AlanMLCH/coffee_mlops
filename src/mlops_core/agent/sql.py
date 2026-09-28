@@ -14,7 +14,9 @@ can carry instructions of its own. Verified on DuckDB 1.5.5 (2026-09-25):
   usable. Results stream, so fetching a few rows of a huge result costs a few rows.
 """
 
+import re
 import threading
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -87,6 +89,21 @@ def run_select(
         timer.cancel()
     columns = [column[0] for column in cursor.description or []]
     return QueryResult(query, columns, rows[:max_rows], len(rows) > max_rows)
+
+
+_QUOTED = re.compile(r'"(\w+\.\w+)"')
+
+
+def unquoted_views(sql: str, names: Collection[str]) -> str:
+    """`"clean.shops"` -> `clean.shops`, for the views the session has.
+
+    A small model often quotes a view's whole name as one identifier, which DuckDB reads
+    as a table called "clean.shops" in no schema, and its repairs keep the quotes (seen
+    2026-09-28: the same question failed that way on one run and with a parser error on
+    the next). Only a quoted name that is exactly one of `names` is touched, so a quoted
+    column or alias with a dot in it is left alone.
+    """
+    return _QUOTED.sub(lambda m: m.group(1) if m.group(1) in names else m.group(0), sql)
 
 
 def views(con: duckdb.DuckDBPyConnection) -> set[str]:

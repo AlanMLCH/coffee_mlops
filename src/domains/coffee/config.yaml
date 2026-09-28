@@ -991,19 +991,53 @@ consumer_prices:
 # chart of each answer. Each layer is one SELECT, run in the agent's locked session.
 explore:
   title: Coffee in Mexico City
+  intro: >-
+    From the farm to the cup: where the city drinks its coffee, what a kilogram costs from
+    the grower to the shelf, what the roasters say their coffees taste of - and a local
+    agent that answers questions about all of it from the tables, the models and 17
+    documents, and shows the query behind every number.
   view: {latitude: 19.39, longitude: -99.14, zoom: 10.2, pitch: 40}
   areas: {table: clean.boroughs, id: borough_id, name: borough, boundary: boundary}
+  # The headline numbers: a kilogram of coffee, step by step up the ladder.
+  metrics:
+    - label: Cherry at the farm gate
+      sql: SELECT mxn_per_kg FROM analysis.price_ladder WHERE step = 'cherry at the farm gate'
+      unit: MXN/kg
+      help: What a Mexican grower was paid for a kilogram of coffee cherry in 2025 (SIAP), all states together
+    - label: Green coffee at the port
+      sql: SELECT mxn_per_kg FROM analysis.price_ladder WHERE step = 'green coffee at the port'
+      unit: MXN/kg
+      help: The ICO's other mild Arabicas (World Bank, monthly) in pesos at the month's exchange rate (FRED); the line is the last two years
+      trend: >-
+        SELECT mxn_per_kg FROM (SELECT period, mxn_per_kg FROM analysis.green_coffee_in_pesos
+        WHERE indicator = 'other_milds' ORDER BY period DESC LIMIT 24) ORDER BY period
+    - label: Ground coffee on a shelf
+      sql: SELECT mxn_per_kg FROM analysis.price_ladder WHERE step = 'supermarket, ground'
+      unit: MXN/kg
+      help: Median shelf price of plain ground coffee across Mexico, January to July 2026 (PROFECO); the line is fortnight by fortnight
+      trend: >-
+        SELECT median_mxn_per_kg FROM analysis.consumer_prices_by_fortnight
+        WHERE scope = 'national' AND line = 'ground' ORDER BY fortnight
+    - label: A specialty roaster's coffee
+      sql: SELECT mxn_per_kg FROM analysis.price_ladder WHERE step = 'specialty roaster'
+      unit: MXN/kg
+      help: Median price per kilogram of the bags four Mexico City roasters sell online
+    - label: Coffee shops in the city
+      sql: SELECT count(*) FROM clean.coffee_shops WHERE kind = 'coffee' AND source = 'denue'
+      help: Places INEGI's business register names as coffee shops; its class also holds juice stands and ice-cream parlours, left out here
   layers:
     - name: Coffee shops per km² (DENUE)
       kind: areas
-      description: Places the official register names as coffee, per square kilometre of borough
+      unit: places per km²
+      description: Places the official register names as coffee shops, per square kilometre of borough
       sql: >-
         SELECT b.borough_id, count(*) / any_value(b.area_km2) AS coffee_shops_per_km2
         FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
         WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
     - name: Median shelf price of ground coffee
       kind: areas
-      description: PROFECO, plain ground coffee, pesos per kilogram, January to July 2026
+      unit: MXN/kg
+      description: PROFECO, plain ground coffee, pesos per kilogram, January to July 2026; 13 of the 16 boroughs have shelves in the survey
       sql: >-
         SELECT borough_id, median(price_mxn_per_kg) AS median_mxn_per_kg, count(*) AS prices
         FROM clean.consumer_prices
@@ -1011,7 +1045,7 @@ explore:
         GROUP BY borough_id
     - name: Coffee shops
       kind: points
-      description: DENUE and OpenStreetMap, side by side
+      description: Coffee shops from INEGI's register (DENUE) and OpenStreetMap, side by side
       sql: >-
         SELECT name, source, borough, latitude, longitude
         FROM clean.coffee_shops WHERE kind = 'coffee'
@@ -1022,11 +1056,175 @@ explore:
         SELECT store, chain, borough, latitude, longitude, count(*) AS prices
         FROM clean.consumer_prices WHERE borough_id IS NOT NULL
         GROUP BY store, chain, borough, latitude, longitude
+  # Tables to slice by hand: every name here is a column of the table.
+  datasets:
+    - name: Coffee shops and what else the register calls a cafeteria
+      description: >-
+        DENUE (INEGI's register, class 722515) and OpenStreetMap, each place classified by
+        its name: coffee, juice, ice cream, and the rest.
+      table: clean.coffee_shops
+      measures: {places: count(*)}
+      dimensions: [borough, kind, source]
+      filters: [kind, source]
+    - name: Shelf prices of packaged coffee (PROFECO)
+      description: >-
+        Every price PROFECO's staff recorded for ground and instant coffee across Mexico,
+        January to July 2026, per kilogram of what the jar or bag holds.
+      table: clean.consumer_prices
+      measures:
+        median_mxn_per_kg: median(price_mxn_per_kg)
+        prices: count(*)
+        stores: count(DISTINCT store)
+      dimensions: [product, fortnight, state, borough, chain, store_type, brand, sweetened, decaf]
+      filters: [product, sweetened, decaf, state, chain]
+    - name: Specialty roasters' bags
+      description: >-
+        The four roasters' offers - a coffee in one size - with what their sheets say about
+        its origin, as of the latest read of their shops.
+      table: features.offer_features
+      where: snapshot = (SELECT max(snapshot) FROM features.offer_features)
+      measures:
+        median_mxn_per_kg: median(price_mxn_per_kg)
+        offers: count(*)
+        coffees: count(DISTINCT coffee_id)
+      dimensions: [shop, country, state, processing_method, variety, bag_grams]
+      filters: [shop, country, processing_method]
+    - name: What the roasters say their coffees taste of
+      description: >-
+        Tasting notes read from the shops' descriptions into the SCA's flavour categories;
+        94 of the 167 coffees name at least one.
+      table: clean.roaster_flavors
+      measures:
+        coffees: count(DISTINCT coffee_id)
+        notes: count(*)
+      dimensions: [category, subcategory, note_en, shop]
+      filters: [shop, category]
+    - name: Graded lots (CQI, 2010-2023)
+      description: >-
+        The Coffee Quality Institute's cupping scores. Frozen in May 2023: no newer public
+        version exists.
+      table: clean.coffee_reviews
+      measures:
+        mean_cup_points: avg(total_cup_points)
+        lots: count(*)
+        mean_altitude_m: avg(altitude_m)
+      dimensions: [country, processing_method, variety, snapshot, color]
+      filters: [snapshot, processing_method, country]
+    - name: Mexico's harvest (SIAP, 2025)
+      description: Coffee cherry by state and municipality, the closing figures of the year.
+      table: clean.mexico_production
+      measures:
+        production_t: sum(production_t)
+        value_mxn: sum(value_mxn)
+        rural_mxn_per_t: sum(value_mxn) / sum(production_t)
+        municipalities: count(DISTINCT municipality_id)
+      dimensions: [state, municipality, year]
+      filters: [state]
+    - name: The world market (USDA PSD)
+      description: Production, exports and consumption by country and market year, thousands of 60 kg bags.
+      table: clean.market_context
+      measures:
+        production: sum(production)
+        exports: sum(exports)
+        domestic_consumption: sum(domestic_consumption)
+      dimensions: [market_year, country]
+      filters: [country]
+  # What the data says, opened without a question.
+  findings:
+    - title: A kilogram, from the farm to the shelf
+      text: >-
+        Each step is its own product - cherry, green coffee, a supermarket's ground coffee,
+        a roaster's bag - so the gaps are not margins; they are the ladder a kilogram of
+        coffee climbs on its way to a cup in the city.
+      sql: SELECT step, mxn_per_kg FROM analysis.price_ladder
+      kind: bar
+      x: step
+      y: mxn_per_kg
+    - title: What the roasters say their coffees taste of
+      text: >-
+        Share of the single-origin coffees whose description names each SCA flavour
+        category: Mexican coffees are called floral half as often as imported ones, and
+        spiced a third as often.
+      sql: >-
+        SELECT "group" AS origin, category, share_pct FROM analysis.flavor_profiles
+        WHERE dimension = 'origin'
+      kind: bar
+      x: category
+      y: share_pct
+      color: origin
+    - title: Packaged coffee on the shelf, fortnight by fortnight
+      text: >-
+        Median price per kilogram across Mexico. Instant coffee rose through 2026; plain
+        ground coffee barely moved.
+      sql: >-
+        SELECT fortnight, line, median_mxn_per_kg FROM analysis.consumer_prices_by_fortnight
+        WHERE scope = 'national' AND line IN ('ground', 'instant', 'ground, sweetened')
+      kind: line
+      x: fortnight
+      y: median_mxn_per_kg
+      color: line
+    - title: Green coffee, in pesos
+      text: >-
+        The ICO's other mild Arabicas, the price group Mexico's coffee trades in, at each
+        month's exchange rate: for a Mexican roaster, the peso moved the cost as much as
+        the market did.
+      sql: >-
+        SELECT period, mxn_per_kg FROM analysis.green_coffee_in_pesos
+        WHERE indicator = 'other_milds' AND period >= DATE '2020-01-01'
+      kind: line
+      x: period
+      y: mxn_per_kg
+    - title: Where the city's coffee shops crowd
+      text: >-
+        Coffee shops per square kilometre in each borough, from INEGI's register: the
+        centre, Cuauhtémoc and Benito Juárez, far above the rest.
+      sql: >-
+        SELECT b.borough_id, count(*) / any_value(b.area_km2) AS coffee_shops_per_km2
+        FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
+        WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
+      kind: areas
+      y: coffee_shops_per_km2
+    - title: Who grows Mexico's coffee
+      text: >-
+        Share of the 2025 harvest of coffee cherry by state: Chiapas, Veracruz, Puebla and
+        Oaxaca grow nine kilograms in ten.
+      sql: SELECT state, share_pct FROM analysis.production_by_state
+      kind: bar
+      x: state
+      y: share_pct
+  about: |
+    **The sources.** Every number comes from a public source, downloaded untouched and
+    kept for good, then cleaned against a contract:
+
+    - **INEGI's business register (DENUE)**: the city's places in class 722515 -
+      coffee shops, but also juice stands and ice-cream parlours; each is classified by
+      its name.
+    - **OpenStreetMap**: coffee shops mapped by volunteers (ODbL). Thorough in the centre,
+      thin in the east: a map of OSM alone measures where mappers live.
+    - **PROFECO's "Quién es Quién en los Precios"**: supermarket and market shelf prices,
+      every fortnight since January 2026.
+    - **Four specialty roasters' online shops** (Almanegra, Buna, Café con Jiribilla,
+      Cucurucho), read politely: what they sell, at what price, and what they say it
+      tastes of.
+    - **SIAP** (Mexico's harvest), **USDA PSD** (the world market), the **World Bank**
+      and the **ICO** (the price of green coffee), **FRED** (pesos per dollar).
+    - **The Coffee Quality Institute's cupping scores**, frozen in May 2023 - the only
+      source here that is not current.
+    - **17 documents** the agent reads: World Coffee Research's variety catalogues, the
+      SCA's cupping standards, FAO's arabica manual, the ICO's reports and five reviews.
+
+    **The limits.** The roasters' notes are their own claims, written to sell, not a
+    cupper's. The price model learns mostly from one shop. The agent's model is small
+    and local: its query is always shown, because a query can run and answer a slightly
+    different question.
   examples:
     - Which boroughs have the most coffee shops per square kilometre, according to DENUE?
     - What is the median price per kilogram of ground coffee, neither sweetened nor decaf, on the shelves of each borough?
     - Across the country, what was the median price per kilogram of instant coffee, neither sweetened nor decaf, in each fortnight of 2026?
     - How did the monthly price of other mild Arabicas change in 2026, in US cents per pound?
+    - Which flavour categories do the roasters name most often in their tasting notes?
+    - What would a 250 g bag of washed Gesha from Chiapas cost at Almanegra?
+    - Why does altitude change how a coffee tastes?
 
 # Coffee's own studies: which slice of the world market to summarise.
 market_analysis:

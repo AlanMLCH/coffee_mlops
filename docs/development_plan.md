@@ -165,7 +165,7 @@ flowchart TD
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
         mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents · draw<br/>dictionary://tables · guardrails server-side"]
-        explorer["mlops explore: Streamlit + deck.gl<br/>the YAML's map layers · a chat to the agent<br/>each answer's rows as a chart you can change"]
+        explorer["mlops explore: Streamlit + deck.gl<br/>headline numbers · map · ask · segments · findings<br/>each answer's rows as a chart you can change"]
         agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
         agent_answers[("evaluations/agent_answers<br/>per question · one MLflow run, a trace each")]
     end
@@ -1063,34 +1063,79 @@ a project's `.mcp.json`):
 
 ### The explorer: a map, questions and charts
 
-`make explore` opens the project as a person would use it, at http://localhost:8502: a
-map of Mexico City's coffee, a chat to the agent, and a chart of every answer.
+`make explore` opens the project as a person would use it, at http://localhost:8502. The
+first version (a map beside a chat) was, as the user found it, poor and too simple: no
+chart unless the agent's query returned rows, a failed query shown as nothing but the
+agent saying so, and a question box that sat under a growing column. It was rebuilt as a
+band of headline numbers over five tabs; everything drawn is still a SELECT in the
+agent's locked session, so the app can show nothing a question could not ask for.
 
-- **The map** is deck.gl (through Streamlit's pydeck): tilted, with the boroughs raised
-  as columns by a number - coffee shops per km² from DENUE, the median shelf price of
-  ground coffee - and places as points: the coffee shops of both registers, coloured by
-  register, and the shelves PROFECO priced. The layers are the domain's, declared in its
-  YAML (`explore:`) as SQL, and each one runs in the agent's locked session, so the map
-  can show nothing a question could not ask for. The core draws whatever the YAML
-  declares: it knows areas and points, not boroughs and coffee shops.
-- **The chat** is the agent of `make ask`, with its citations, its unverified figures
-  flagged, and the query behind every answer in plain sight.
-- **Every answer is drawn.** Its query is run again for the chart (up to 20,000 rows: the
-  model reads 50, a chart can show them all), and the result's shape picks the chart:
-  a column naming a borough makes a map, a date a line, a label bars, coordinates points.
-  Among the numbers, the one the rows are sorted by is drawn - a query orders by what the
-  question asked, and a count beside it is context. Kind, x, y and colour (the
-  segmentation) can then be changed; each choice is checked against the columns before
-  it is drawn, and bars whose height is a name are refused with the reason. An answer
-  about places can be put on the map beside the layers.
-- **The same chart for MCP clients**: `draw` returns the spec the explorer shows, as a
-  PNG. The app asks the agent in process, as `make ask` does; MCP stays the interface for
-  clients this project does not write.
-- **What it showed about the agent.** Asked for the median price of plain ground coffee
-  by borough, the model left decaf in (Tlalpan at 447.5 instead of 422.5); asked for a
-  fortnightly series, it grouped by month. The first was a word the data dictionary never
-  defined - it now says what plain means, and the evaluation is unchanged at 80% correct;
-  the second is the 4B model, and the page shows the query that did it.
+![The explorer: headline numbers, the map, the ranking](figures/explorer_map.png)
+
+- **The headline numbers** are the price ladder - a kilogram of cherry at the farm gate,
+  green coffee at the port, ground coffee on a shelf, a roaster's bag - and the city's
+  coffee shops, with a sparkline where there is a series (`explore.metrics`: one SELECT
+  for the value, one for its history).
+- **Map.** deck.gl through Streamlit's pydeck, on Carto's light basemap (left to
+  Streamlit, a custom theme got the dark one and the ramp's dark end vanished into it).
+  The areas are coloured and raised by the layer the viewer picks - coffee shops per km²,
+  the median shelf price of ground coffee - and lie flat when places are drawn over them.
+  Places are dots coloured by register, or counted in 400 m hexagons, raised and darkened
+  by count. The hexagons are binned in Python (axial coordinates on a local flat
+  projection, rounded in cube space), not by deck.gl's HexagonLayer: the map has one
+  tooltip template, and HexagonLayer's objects cannot carry a `tooltip` line. Beside the
+  map: what each layer is, its legend with the range and unit, and the areas ranked.
+- **Ask the agent.** The question box stays at the top, the newest answer under it, and
+  every answer is a card: how it was answered (the tables, a model, the documents), how
+  long it took, whether every figure was checked; its rows drawn as a chart (one value as
+  a number, a prediction with the item it was made for); a query that did not run shown
+  with its error, the query, and where the same numbers are a few clicks away; sources;
+  and the query itself. Kind, x, y and colour can be changed, each choice checked against
+  the columns before it is drawn, and places or areas can be put on the map. The
+  examples are pills that ask once and can be asked again.
+- **Explore by segment** is the same numbers without a model: a table, a measure, what
+  to split it by, what to colour it by, and filters, each picked from the domain's lists
+  (`explore.datasets`: seven tables, from the coffee shops to the world market). The
+  query is assembled from those names (`explore.segments`), a picked value goes in only
+  as a quoted literal, and it is shown under the chart with the rows to download. A split
+  by time is a line; the 25 largest of more segments are shown, and one sentence says
+  what the chart shows ("Highest places: Cuauhtémoc (2,019); lowest: Milpa Alta (75)").
+- **Findings**: six results the domain wants seen unasked (`explore.findings`, each a
+  title, a sentence and a query), drawn live from the analysis layer - the price ladder,
+  the flavour profiles, shelf prices through 2026, green coffee in pesos, the density of
+  coffee shops, who grows Mexico's coffee.
+- **About**: the sources and their limits, in the domain's words, the models' own
+  descriptions, and how an answer is made.
+
+![The findings tab](figures/explorer_findings.png)
+
+Charts are the core's `explore.charts`, shared with MCP's `draw`: bars lie down when
+their names are long or many (the upright ones skipped every other borough and cut the
+rest), axes read "price per kg", not `price_per_kg`, and a line's axis starts near its
+data - from zero, instant coffee's 15% rise in 2026 was a flat line. The theme - warm,
+caramel to dark roast, serif headings - is one file (`explore.style`) that `mlops
+explore` writes and hands Streamlit as `--theme.base <path>`: on the command line a
+list option arrives as a string (checked with `streamlit config show`), and the series
+colours are lists.
+
+![An answer in the explorer](figures/explorer_ask.png)
+
+Checked in a real browser (headless Chromium through Playwright, run from outside the
+project) as well as by AppTest: three questions in a row, each answered below the box
+that stays open. The failure the user saw - "a parser error regarding the column
+'price_mxn_per_kg'" for the fortnightly price of instant coffee - came from the model's
+SQL, which varied between runs; one run quoted the whole view name as one identifier,
+`"clean.consumer_prices"`, which DuckDB reads as a table of that name in no schema, and
+both repairs kept the quotes. `write_sql` now unquotes a quoted name that is exactly one
+of the session's views before running it (`sql.unquoted_views`); a quoted alias with a
+dot stays as written. The same question then answered 833 to 958 MXN/kg, fortnight by
+fortnight - the figures the analysis already had.
+
+What it still shows about the agent: asked for the densest boroughs, the model counted
+every place in DENUE's class, juice stands included (48.8 per km² for Cuauhtémoc against
+21.2 for coffee shops), and cited a column instead of its evidence; the answer carries
+"not fully verified", and the query is there to read. The 4B model's limits are shown,
+not hidden.
 
 ## The price of green coffee (stage 4)
 

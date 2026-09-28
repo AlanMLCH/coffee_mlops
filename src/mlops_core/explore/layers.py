@@ -47,3 +47,18 @@ def run_layer(
 
 def layer_frame(con: duckdb.DuckDBPyConnection, layer: MapLayer) -> pl.DataFrame:
     return run_layer(con, layer.sql)[0]
+
+
+def ranked(rows: pl.DataFrame, areas: Areas, value: str) -> pl.DataFrame:
+    """A layer of areas as a ranking: each area's name and its number, largest first. A
+    layer may name its areas by key; a ranking is read by name."""
+    if areas.name in rows.columns:
+        named = rows
+    else:
+        names = pl.DataFrame(
+            [(f["properties"]["id"], f["properties"]["name"]) for f in areas.shapes["features"]],
+            schema=[areas.id, areas.name],
+            orient="row",
+        )
+        named = rows.join(names, on=areas.id, how="left")
+    return named.select(areas.name, value).drop_nulls(value).sort(value, descending=True)

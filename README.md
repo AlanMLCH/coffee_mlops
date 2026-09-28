@@ -35,8 +35,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   locked-down text-to-SQL, the prediction API, and dense retrieval in Qdrant. Every
   figure in an answer is checked against its evidence before it is shown.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
-  Desktop, Claude Code or an IDE, and an explorer app - a deck.gl map of the city, a chat
-  to the agent, and a chart of every answer.
+  Desktop, Claude Code or an IDE, and an explorer app - the price ladder at a glance, a
+  deck.gl map of the city, questions to the agent with a chart of every answer, the
+  tables sliced by hand, and the findings.
 
 ## Results
 
@@ -68,6 +69,15 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
+
+## The explorer
+
+`make explore` opens it at http://localhost:8502. Everything it draws is a read-only
+query; every answer shows the query behind it.
+
+![The explorer: the price ladder, the map, the boroughs ranked](docs/figures/explorer_map.png)
+
+![An answer: checked against its evidence, drawn from its rows](docs/figures/explorer_ask.png)
 
 ## Architecture
 

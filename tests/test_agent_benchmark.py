@@ -121,6 +121,18 @@ def test_a_failed_query_goes_back_with_its_error_until_one_runs(
     assert 'Referenced column "nope" not found' in model.prompts[1]
 
 
+def test_a_view_quoted_whole_is_read_as_the_view(session: duckdb.DuckDBPyConnection) -> None:
+    """The small model's habit: "clean.lots" as one identifier. Unquoted before it runs,
+    and only when it is a view: a quoted alias with a dot stays as written."""
+    model = Scripted(lambda prompt: {"sql": 'SELECT count(*) AS "n.lots" FROM "clean.lots"'})
+
+    answer = write_sql(model, session, "", "How many lots?")
+
+    assert answer.attempts == 1
+    assert answer.sql == 'SELECT count(*) AS "n.lots" FROM clean.lots'
+    assert answer.result is not None and answer.result.rows == [(3,)]
+
+
 def test_a_model_that_never_writes_a_query_that_runs_gives_up_with_the_error(
     session: duckdb.DuckDBPyConnection,
 ) -> None:

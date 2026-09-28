@@ -231,6 +231,27 @@ def test_bars_are_sorted_and_segments_stand_side_by_side() -> None:
         "field": "product"
     }
     assert spec["data"]["values"][0]["price"] == 1.5  # a decimal, as JSON carries it
+    assert spec["encoding"]["color"]["title"] == "product"
+
+
+def test_long_names_lie_the_bars_down_and_axes_read_as_words() -> None:
+    """A borough's name would be cut under an upright bar and every other one skipped."""
+    boroughs = pl.DataFrame(
+        {"borough": ["Gustavo A. Madero", "Cuauhtémoc"], "shops_per_km2": [5.0, 21.2]}
+    )
+    many = pl.DataFrame({"note": [f"n{i}" for i in range(13)], "coffees": list(range(13))})
+
+    lying = vega_lite(Chart(kind="bar", x="borough", y="shops_per_km2", color="borough"), boroughs)
+    upright = vega_lite(Chart(kind="bar", x="note", y="coffees"), many.head(3))
+    crowded = vega_lite(Chart(kind="bar", x="note", y="coffees"), many)
+
+    assert lying is not None and upright is not None and crowded is not None
+    assert lying["encoding"]["y"]["sort"] == "-x" and lying["encoding"]["y"]["title"] is None
+    assert lying["encoding"]["y"]["axis"]["labelOverlap"] is False  # every name is shown
+    assert lying["encoding"]["x"]["title"] == "shops per km2"
+    assert lying["height"] == {"step": 48} and lying["encoding"]["yOffset"] == {"field": "borough"}
+    assert upright["encoding"]["x"]["field"] == "note" and "yOffset" not in upright["encoding"]
+    assert crowded["encoding"]["y"]["field"] == "note"
 
 
 def test_a_line_over_dates_is_temporal_and_over_years_ordinal() -> None:
@@ -244,6 +265,7 @@ def test_a_line_over_dates_is_temporal_and_over_years_ordinal() -> None:
     assert by_date["encoding"]["x"]["type"] == "temporal"
     assert by_date["data"]["values"][0]["month"] == "2026-07-01"
     assert by_year["encoding"]["x"]["type"] == "ordinal"
+    assert by_date["encoding"]["y"]["scale"] == {"zero": False}
     assert by_date["mark"] == {"type": "line", "point": True} and "title" not in by_date
 
 

@@ -11,6 +11,7 @@ steps also take `--model`; without it they run every model the domain declares.
 import logging
 import os
 import sys
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
@@ -286,11 +287,14 @@ def explore(domain: Domain = None, port: int = 8502) -> None:
         from streamlit.web import cli as streamlit_cli
 
         import mlops_core.explore.maps  # noqa: F401 - pydeck: the extra is really there
+    from mlops_core.explore.style import write_theme
 
     app_path = Path(__file__).resolve().parent / "explore" / "app.py"
     os.environ["MLOPS_DOMAIN"] = _adapter(domain).config.name
+    # Outside the repo: the theme is rewritten on every launch, from the code.
+    theme = write_theme(Path(tempfile.gettempdir()) / "mlops-explore-theme.toml")
     sys.argv = ["streamlit", "run", str(app_path), "--server.port", str(port),
-                "--server.headless", "true"]  # fmt: skip
+                "--server.headless", "true", "--theme.base", str(theme)]  # fmt: skip
     streamlit_cli.main()
 
 

@@ -22,6 +22,7 @@ from mlops_core import cli
 from mlops_core.data.extract import http_client
 from mlops_core.ml.registry import NoChampion, ServedModel
 from mlops_core.ml.train import TrainResult
+from mlops_core.provenance import REPO_ROOT
 from mlops_core.storage import write_table
 from tests.fakes import ConstantModel, RecordedServer, without_rate_limits
 
@@ -381,6 +382,10 @@ def test_the_explore_command_launches_the_explorer_headless(
     argv = launched["argv"]
     assert str(argv[2]).endswith("app.py") and "9998" in argv  # type: ignore[index, operator]
     assert os.environ["MLOPS_DOMAIN"] == "coffee"
+    # The theme travels as a file, written outside the repository.
+    theme = Path(argv[argv.index("--theme.base") + 1])  # type: ignore[attr-defined, index]
+    assert theme.read_text(encoding="utf-8").startswith("[theme]")
+    assert REPO_ROOT not in theme.parents
 
 
 def test_secrets_reports_what_is_configured_without_printing_it(

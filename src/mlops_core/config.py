@@ -497,17 +497,83 @@ class MapLayer(BaseModel):
     kind: Literal["points", "areas"]  # points: latitude and longitude; areas: a key and a number
     sql: str
     description: str = ""
+    unit: str = ""  # of an area's number, for the legend: "places per km²"
 
 
-class ExploreConfig(BaseModel):
-    """The explorer app (`mlops explore`): its map, its layers, and questions to start with."""
+class ExploreMetric(BaseModel):
+    """A headline number over the explorer: one SELECT whose first value is shown, and
+    optionally one whose first column is its recent history, oldest first (a sparkline)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    sql: str
+    unit: str = ""
+    decimals: int = Field(0, ge=0, le=4)
+    help: str = ""
+    trend: str | None = None
+
+
+# A column or table name as a query writes it bare: the explorer builds its SQL from these.
+_IDENTIFIER = r"^[A-Za-z_]\w*$"
+
+
+class ExploreDataset(BaseModel):
+    """A table a person can slice in the explorer without the agent: a measure, a column to
+    segment it by, another to colour it by, and filters. Every piece is a name from this
+    list, so the query is assembled from the YAML, never written by a person or a model;
+    it still runs in the agent's locked session."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    description: str = ""
+    table: str = Field(pattern=r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")  # layer.table
+    where: str | None = None  # a condition every query of it keeps: "NOT price_outlier"
+    # Column alias -> an aggregate over the table: `median_mxn_per_kg: median(price_mxn_per_kg)`.
+    measures: dict[str, str] = Field(min_length=1)
+    dimensions: list[str] = Field(min_length=1)  # what it can be segmented and coloured by
+    filters: list[str] = []  # columns a person can restrict to some of their values
+
+    @model_validator(mode="after")
+    def _names_are_bare_identifiers(self) -> Self:
+        names = [*self.measures, *self.dimensions, *self.filters]
+        odd = [name for name in names if not re.match(_IDENTIFIER, name)]
+        if odd:
+            raise ValueError(f"{self.name}: not bare column names: {odd}")
+        return self
+
+
+class ExploreFinding(BaseModel):
+    """A result worth showing without being asked: a title, a sentence on what it means,
+    and the query behind its chart. Kind and columns may be left to the result's shape."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     title: str
+    text: str
+    sql: str
+    kind: Literal["bar", "line", "scatter", "areas", "table"] | None = None
+    x: str | None = None
+    y: str | None = None
+    color: str | None = None
+
+
+class ExploreConfig(BaseModel):
+    """The explorer app (`mlops explore`): its map and layers, the numbers over it, the
+    tables a person can slice, the findings it opens with, and questions to start with."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: str
+    intro: str = ""  # a paragraph under the title: what the app is about
+    about: str = ""  # Markdown: the sources and their limits, in the domain's words
     view: MapView
     areas: AreasConfig | None = None
     layers: list[MapLayer] = []
+    metrics: list[ExploreMetric] = []
+    datasets: list[ExploreDataset] = []
+    findings: list[ExploreFinding] = []
     examples: list[str] = []
 
     @model_validator(mode="after")
