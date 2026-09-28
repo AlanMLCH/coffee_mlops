@@ -605,6 +605,120 @@ cleaning:
     # different lots one product sells as variants stays within 0.5-1.7x.
     price_outlier_ratio: 3.0
 
+  # The tasting notes in a roaster's description, read into the flavour categories of
+  # the SCA's descriptive assessment (SCA-103, the CATA form; in the corpus): Floral;
+  # Fruity (Berry, Dried Fruit, Citrus Fruit); Sour/Fermented; Green/Vegetative; Other
+  # (Musty/Earthy, Woody); Roasted (Cereal, Burnt, Tobacco); Nutty/Cocoa; Spice; Sweet
+  # (Vanilla, Brown Sugar). A note the form has no subcategory for gets none. Where the
+  # form is silent, the SCA's flavour wheel places it: black tea is floral, leather is
+  # musty. Words are written as the shops write them; matching drops accents and case,
+  # and accepts the plural and the other gender.
+  tasting_notes:
+    cues: [notas, nota, sabe, saben, sabor, sabores, aroma, aromas, fragancia, fragancias,
+      recuerda, recuerdan, recordando, matices, toque, toques, dejos, tonos, posgusto,
+      regusto, retrogusto, final, perfil, evoca, evocan, "en taza", "en boca", "en nariz"]
+    negations: [sin, ni, "no", nunca]
+    title_notes: [cucurucho]
+    other_meanings:
+      - 'cerezas? (?:de cafe|maduras)' # the fruit that is picked
+      - 'de (?:la|las) cerezas?'
+      - 'seleccion de (?:las )?cerezas'
+      - 'con (?:toda )?(?:su|la) fruta' # dried with its fruit on: a natural process
+      - 'proceso (?:de )?miel' # the honey process
+    groups:
+      - category: floral
+        notes: {floral: floral, flor: flowers, jazmín: jasmine,
+          azahar: orange blossom, rosa: rose, lavanda: lavender, hibisco: hibiscus,
+          jamaica: hibiscus, manzanilla: chamomile, bergamota: bergamot,
+          madreselva: honeysuckle, fresia: freesia, "té negro": black tea,
+          "té de jazmín": jasmine tea, rooibos: rooibos, verbena: verbena}
+      - category: fruity
+        subcategory: berry
+        notes: {fruto rojo: red berries, fruto del bosque: forest berries,
+          fruto negro: black berries, baya: berries, frambuesa: raspberry,
+          "tarta de frambuesa": raspberry tart, fresa: strawberry, zarzamora: blackberry,
+          mora: blackberry, arándano: blueberry, grosella: currant}
+      - category: fruity
+        subcategory: dried_fruit
+        notes: {pasas: raisins, "uva pasa": raisin, "ciruela pasa": prune, dátil: date,
+          higo: fig, orejón: dried apricot, fruta deshidratada: dried fruit,
+          fruta seca: dried fruit, durazno seco: dried peach, durazno deshidratado: dried peach}
+      - category: fruity
+        subcategory: citrus_fruit
+        notes: {cítrico: citrus, limón: lemon, lima: lime, naranja: orange,
+          "naranja roja": blood orange, "cáscara de naranja": orange peel,
+          "cáscara de cítricos": citrus peel, mandarina: tangerine, toronja: grapefruit,
+          pomelo: grapefruit, yuzu: yuzu, kumquat: kumquat}
+      - category: fruity
+        notes: {fruta: fruit, frutal: fruity, afrutado: fruity, "fruta madura": ripe fruit,
+          "fruta cocida": cooked fruit, tropical: tropical fruit, fruto amarillo: yellow fruit,
+          fruta amarilla: yellow fruit, fruta de hueso: stone fruit,
+          fruta con hueso: stone fruit, fruto de hueso: stone fruit, durazno: peach,
+          melocotón: peach, nectarina: nectarine, chabacano: apricot, albaricoque: apricot,
+          ciruela: plum, cereza: cherry, manzana: apple, pera: pear, uva: grape,
+          moscatel: muscat grape, piña: pineapple, mango: mango, papaya: papaya,
+          guanábana: soursop, chirimoya: cherimoya, maracuyá: passion fruit, guayaba: guava,
+          carambolo: star fruit, melón: melon, sandía: watermelon, kiwi: kiwi, lichi: lychee,
+          granada: pomegranate, tamarindo: tamarind, plátano: banana, coco: coconut,
+          mermelada: jam}
+      - category: sour_fermented
+        notes: {fermentado: fermented, vinoso: winey, vino: wine, "vino tinto": red wine,
+          "vino blanco": white wine, licor: liquor, licoroso: boozy, whisky: whisky, ron: rum,
+          brandy: brandy, mezcal: mezcal, sidra: cider, kombucha: kombucha, acético: acetic}
+      - category: green_vegetative
+        notes: {herbal: herbal, hierba: herbs, vegetal: vegetal, pasto: grass,
+          "té verde": green tea, matcha: matcha, "hoja de naranja": orange leaf,
+          hierbabuena: spearmint, menta: mint, eucalipto: eucalyptus, ruda: rue}
+      - category: other
+        subcategory: musty_earthy
+        notes: {terroso: earthy, "tierra mojada": wet earth, cuero: leather}
+      - category: other
+        subcategory: woody
+        notes: {madera: wood, amaderado: woody, cedro: cedar, roble: oak, sándalo: sandalwood,
+          incienso: incense}
+      - category: roasted
+        subcategory: cereal
+        notes: {cereal: cereal, malta: malt, cebada: barley, pan: bread,
+          "pan tostado": toast, galleta: biscuit}
+      - category: roasted
+        subcategory: burnt
+        notes: {tostado: roasted, ahumado: smoky}
+      - category: roasted
+        subcategory: tobacco
+        notes: {tabaco: tobacco}
+      - category: nutty_cocoa
+        subcategory: nutty
+        notes: {nuez: walnut, nueces: walnut, "nuez de castilla": walnut,
+          "nuez pecana": pecan, almendra: almond, avellana: hazelnut, cacahuate: peanut,
+          fruto seco: nuts, pistache: pistachio, macadamia: macadamia, sésamo: sesame,
+          ajonjolí: sesame, praliné: praline}
+      - category: nutty_cocoa
+        subcategory: cocoa
+        notes: {chocolate: chocolate, "chocolate oscuro": dark chocolate,
+          "chocolate amargo": dark chocolate, "chocolate semi-amargo": dark chocolate,
+          "chocolate con leche": milk chocolate, "chocolate blanco": white chocolate,
+          chocolatoso: chocolatey, cacao: cocoa, cocoa: cocoa, "nibs de cacao": cacao nibs,
+          brownie: brownie}
+      - category: spice
+        notes: {especia: spices, especiado: spiced, canela: cinnamon,
+          clavo: clove, pimienta: pepper, cardamomo: cardamom, anís: anise, hinojo: fennel,
+          jengibre: ginger, "nuez moscada": nutmeg, macis: mace, regaliz: liquorice,
+          comino: cumin, azafrán: saffron}
+      - category: sweet
+        subcategory: vanilla
+        notes: {vainilla: vanilla}
+      - category: sweet
+        subcategory: brown_sugar
+        notes: {azúcar: sugar, "azúcar morena": brown sugar, "azúcar mascabado": muscovado,
+          "azúcar de caña": cane sugar, "azúcar cruda": raw sugar,
+          "azúcar rústico": raw sugar, "azúcar quemado": burnt sugar, panela: panela,
+          piloncillo: piloncillo, melaza: molasses, caramelo: caramel,
+          caramelizado: caramelised, acaramelado: caramelised, miel: honey, maple: maple,
+          toffee: toffee, butterscotch: butterscotch}
+      - category: sweet
+        notes: {jarabe: syrup, almíbar: syrup, "dulce de leche": dulce de leche,
+          cajeta: cajeta, mazapán: marzipan}
+
 # The questions the domain asks of its data, one model each. Each gets its own tables
 # (<name>_features, <name>_predictions), MLflow experiment, registered model, API route
 # and studies. `spec` is what the model sees; fitted transforms (encoding, rare-category
@@ -850,6 +964,7 @@ analysis:
     - shop_kinds
     - mexico_production
     - roaster_coverage
+    - flavor_profiles
     - price_ladder
     - consumer_prices
     - green_coffee_pesos

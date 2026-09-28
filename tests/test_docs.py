@@ -21,6 +21,7 @@ from domains.coffee.schemas import (
     ROASTER_OFFERS,
     coffee_reviews_schema,
     coffee_shops_schema,
+    roaster_flavors_schema,
     roaster_origins_schema,
 )
 from mlops_core.adapter import available_domains, domain_dir, load_adapter
@@ -51,6 +52,7 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "consumer_prices": list(CONSUMER_PRICES.columns),
         "exchange_rates": list(EXCHANGE_RATES.columns),
         "roaster_offer_history": list(ROASTER_OFFER_HISTORY.columns),
+        "roaster_flavors": list(roaster_flavors_schema(coffee_config.cleaning).columns),
         **{
             model.features_table: list(features_schema(model).columns)
             for model in coffee_config.models
@@ -89,6 +91,7 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "exchange_rates",
         "roaster_offer_history",
         "roaster_origin_history",
+        "roaster_flavors",
         "review_features",
         "offer_features",
         "green_price_features",

@@ -208,6 +208,7 @@ def test_build_clean_writes_every_table_with_lineage(
         "roaster_offers",
         "roaster_offer_history",
         "roaster_origin_history",
+        "roaster_flavors",
         "price_indicators",
         "consumer_prices",
         "exchange_rates",

@@ -1,12 +1,15 @@
 """The roasters' shops, clean: their coffees, the origins each names, and its offers.
 
-Three tables, because a shop describes three different things:
+Three tables, because a shop describes three different things, and a fourth for what
+its words say the coffee tastes of:
 
 - `roaster_coffees`: one row per product a shop sells as coffee - the catalog's item.
 - `roaster_origins`: one row per origin a product's sheet describes. Most name one; a
   blend lists each component in turn (Buna's Guarumbo: two arabicas and a robusta).
 - `roaster_offers`: one row per product in one size, with its price per kilogram and
   the day it was observed: when the shops' catalogues were read.
+- `roaster_flavors`: one row per coffee and tasting note its description names; see
+  `domains.coffee.flavors`.
 
 `coffee_id` ("<shop>-<product id>") joins the three, and `offer_id` names an offer; a
 platform's own ids are only unique within a shop.
@@ -34,6 +37,7 @@ from typing import Any
 import polars as pl
 
 from domains.coffee.config import OTHER, UNCLASSIFIED, CleaningConfig, RoasterSheetRules
+from domains.coffee.flavors import tasting_notes
 from mlops_core.data.sheets import headed_paragraphs, html_text, labelled_lines, records
 
 logger = logging.getLogger(__name__)
@@ -178,8 +182,8 @@ def clean_roasters(
     offers: pl.DataFrame | None, rules: CleaningConfig, read_at: datetime | None = None
 ) -> dict[str, pl.DataFrame]:
     """The raw offers -> the catalogue as it is now (`roaster_coffees`, `roaster_origins`,
-    `roaster_offers`) and as it was at every read (`roaster_offer_history`,
-    `roaster_origin_history`).
+    `roaster_offers`, and the tasting notes its descriptions name, `roaster_flavors`) and
+    as it was at every read (`roaster_offer_history`, `roaster_origin_history`).
 
     The source keeps every read of the shops, each with its `ingested_at`; the newest is
     the catalogue now, read at `read_at`. A day read twice is its later read. `offers` is
@@ -198,6 +202,7 @@ def clean_roasters(
     now = tables[-1][1]
     snapshot = pl.col("snapshot")
     return now | {
+        "roaster_flavors": tasting_notes(now["roaster_coffees"], rules.tasting_notes),
         "roaster_offer_history": pl.concat([read["roaster_offers"] for _, read in tables])
         .with_columns(observation_id=pl.concat_str("offer_id", snapshot, separator="@"))
         .select(HISTORY_OFFERS),

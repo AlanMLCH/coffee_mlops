@@ -74,9 +74,11 @@ not offers, or four sizes of one mistake would count as four.
 | The 75 offers whose coffee has no sheet | 186.4 | 186.1 |
 
 The model earns its place on coffees that say where they grew, and matches the baseline
-exactly where there is nothing to know. Altitude is what it leans on most, then the shop
-and the size; shuffling `processing_method` or the summarised `variety` makes it slightly
-*better*, which is why the per-variety columns exist.
+exactly where there is nothing to know. Altitude is what it leans on, by far: shuffled,
+the error grows by 45 MXN/kg, against about 7 for the bag's size and 7 for the shop
+(permutation importance on the champion, redrawn 2026-09-28). The per-variety columns add
+little (Gesha 0.7), and shuffling `processing_method` or the summarised `variety` makes
+it slightly *better*.
 
 ## Limitations and bias
 

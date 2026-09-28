@@ -157,6 +157,41 @@ states as SIAP does, processing methods and varieties as the CQI spells them.
 | `observed_on` | Date | When the catalogue was read: the first ingestion of this exact content, from the raw manifest (an unchanged catalogue read again keeps its date) |
 | `snapshot` | String | That read, as the period the offer model's studies compare; stage 4's re-reads add more |
 
+## `clean.roaster_flavors` — one tasting note a coffee's description names
+
+What the shops say their coffees taste of, read from their own words ("Un café con notas
+a chocolate y frambuesa") into the flavour categories of the SCA's descriptive
+assessment (SCA-103). Read only after a cue ("notas a", "sabe a", "aroma", "en taza") and
+before the end of its sentence, never from a producer's story; Cucurucho's titles are
+read after the hyphen ("Chiapas- Caramelo, avellana y chocolate"). 94 of the 167 coffees
+name at least one note; a coffee with none has no rows. The shops' claims, not a cupper's.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `coffee_id`, `shop` | String | The coffee, as in `roaster_coffees` |
+| `note` | String | The note as the shop wrote it, in Spanish, lower case: `frambuesa`, `piloncillo`, `té negro` |
+| `note_en` | String | The note in English: `raspberry`, `piloncillo`, `black tea`. One row per coffee and `note_en`: "jamaica" and "hibisco" are both `hibiscus` |
+| `category` | String | `floral`, `fruity`, `sour_fermented`, `green_vegetative`, `other`, `roasted`, `nutty_cocoa`, `spice`, `sweet` (the form's Floral, Fruity, Sour/Fermented, Green/Vegetative, Other, Roasted, Nutty/Cocoa, Spice, Sweet) |
+| `subcategory` | String? | Where the form has one: `berry`, `dried_fruit`, `citrus_fruit` (fruity); `musty_earthy`, `woody` (other); `cereal`, `burnt`, `tobacco` (roasted); `nutty`, `cocoa` (nutty_cocoa); `vanilla`, `brown_sugar` (sweet) |
+| `source` | String | Where the shop wrote it: `title` or `description` |
+
+Coffees that taste of a category: `COUNT(DISTINCT coffee_id)` filtered on `category`; its
+share is over the coffees with any note, not over all 167. Join `roaster_origins` on
+`coffee_id` for the origin or the process - only single-origin coffees (one row there)
+have one - and `roaster_offers` for the price. The share of a group's coffees with notes
+that name a category, here Mexico's and `floral`:
+
+```sql
+WITH single AS (
+    SELECT coffee_id, any_value(country) AS country, any_value(processing_method) AS method
+    FROM clean.roaster_origins GROUP BY coffee_id HAVING count(*) = 1
+)
+SELECT count(DISTINCT CASE WHEN f.category = 'floral' THEN f.coffee_id END)::DOUBLE
+       / count(DISTINCT f.coffee_id) AS share
+FROM clean.roaster_flavors f JOIN single s USING (coffee_id)
+WHERE s.country = 'Mexico'
+```
+
 ## `clean.price_indicators` — one indicator, one day or month
 
 The international price of green coffee (stage 4). The ICO's daily indicator prices

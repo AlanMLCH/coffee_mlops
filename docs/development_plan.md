@@ -126,6 +126,7 @@ flowchart TD
         roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
         roaster_offer_history["roaster_offer_history<br/>every read of the shops: offer × read"]
         roaster_origin_history["roaster_origin_history<br/>every read's sheets"]
+        roaster_flavors["roaster_flavors<br/>tasting notes from the shops' words<br/>SCA-103 flavour categories"]
         price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
         exchange_rates["exchange_rates<br/>pesos per dollar × business day"]
         consumer_prices["consumer_prices<br/>a shelf price · per kg · sweetened · decaf<br/>the city's in the borough they declare"]
@@ -191,6 +192,7 @@ flowchart TD
     mlflow --> api
     market_context --> api
     review_predictions --> analysis --> dashboard
+    roaster_flavors -- "profiles · price · clusters" --> analysis
     CLEAN & review_features & review_predictions & analysis -.-> catalog
     offer_features & offer_predictions -.-> catalog
 
@@ -214,7 +216,7 @@ flowchart TD
     class extract_apis,review_features,offer_features,green_price_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
     class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
-    class roaster_offer_history,roaster_origin_history domain
+    class roaster_offer_history,roaster_origin_history,roaster_flavors domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
@@ -231,7 +233,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
-| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.documents`, `clean.document_chunks` |
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.roaster_flavors`, `clean.documents`, `clean.document_chunks` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
@@ -470,12 +472,14 @@ the factor the two would need for both to be right; it is shown, not assumed.
 The CQI stops in 2023. Four Mexico City roasters - Almanegra, Buna, Café con Jiribilla
 and Cucurucho - sell the same kind of item today, and their shops describe it: where it
 grew, at what altitude, which varieties, how it was processed, and what a kilogram costs.
-Three clean tables hold it, because a shop describes three different things:
+Three clean tables hold it, because a shop describes three different things - and a
+fourth, [what they say it tastes of](#what-they-say-it-tastes-of-stage-3b):
 
 - `clean.roaster_coffees`: 167 coffees, one per product, with the shop's own text.
 - `clean.roaster_origins`: 142 origins. Most coffees name one; a blend lists each
   component, and gets a row for each (Buna's Guarumbo: two arabicas and a robusta).
 - `clean.roaster_offers`: 527 offers, a coffee in one size, with its price per kilogram.
+- `clean.roaster_flavors`: 557 tasting notes of 94 coffees, in the SCA's categories.
 
 Every canonical value speaks the vocabulary of a table that already exists: countries
 as PSD names them, Mexican states as SIAP does, processing methods and varieties as the
@@ -516,6 +520,77 @@ Unlike the CQI's frozen labels, these shops change weekly, so these rules are op
 new country or process does not stop the pipeline. It is logged by name, left empty in
 the canonical column (a process keeps its label as written beside it), and it shows up
 in the coverage table.
+
+### What they say it tastes of (stage 3b)
+
+A shop's description tells a story - the producer, the farm, the harvest - and, in a
+sentence or two, what the cup tastes of: *"Un café con notas a chocolate y frambuesa"*.
+`clean.roaster_flavors` keeps one row per coffee and note, each placed in a flavour
+category of the SCA's descriptive assessment (SCA-103, in the corpus): floral, fruity
+(berry, dried fruit, citrus fruit), sour/fermented, green/vegetative, other (musty/earthy,
+woody), roasted (cereal, burnt, tobacco), nutty/cocoa, spice, sweet (vanilla, brown
+sugar). Where the form is silent, the SCA's flavour wheel places a note: black tea is
+floral, leather is musty.
+
+A lexicon, not a model, on purpose: 192 notes in the domain's YAML, each with its English
+name, so every row traces back to the word that put it there and the rules can be read
+aloud - and there are 167 coffees, not a corpus. The reading is narrow, because a wrong
+note is worse than a missing one:
+
+- A note counts only after a cue ("notas a", "sabe a", "aroma", "en taza") and before the
+  end of its sentence. *"Este compromiso con la tierra"* is not earthy.
+- A cue right after a negation opens nothing (*"sin llegar a los sabores fermentados"*),
+  and a negation inside a list of notes ends it.
+- A capitalised word mid-sentence is a name: Juan Carlos Flores is not floral.
+- A word used in another sense is excluded by pattern: in coffee, "cereza" is also the
+  fruit that is picked (*"la selección de cerezas maduras"*).
+- Only Cucurucho writes its notes in the title, after a hyphen (*"Chiapas- Caramelo,
+  avellana y chocolate"*), so only its titles are read.
+- A word matches in its plural and its other gender, word by word ("fruto rojo" is
+  "frutos rojos"; "caramelizado" is "caramelizada").
+
+How right it is, judged by the assistant, not a person: a random 60 of the prototype's
+notes were all correct. A look at the risky words found the misreadings the rules now
+exclude - "te" (you) read as "té" (tea), the picked cherries, the land, and "dulce" as an
+adjective of anything ("especias dulces"). Words were then added for notes the prototype
+missed after "notas a" (star fruit, freesia, rue, cherimoya, muscat, fennel).
+
+![What the roasters say their coffees taste of](figures/flavor_profiles.png)
+
+**94 of the 167 coffees name at least one note** (557 notes): Cucurucho 10 of 11,
+Almanegra 71 of 130, Buna 13 of 23, Café con Jiribilla none. Fruity 81%, sweet 65%,
+nutty/cocoa 44%, floral 39%, spice 32%. What sets the groups apart (`analysis.flavor_profiles`):
+
+- **The extraction finds what cuppers already know**: the experimental fermentations
+  (the process `other`) are described as fermented or boozy 40% of the time, the washed
+  coffees 2%, the naturals never; washed coffees are floral 56% of the time, naturals 33%.
+- **Mexican coffees are described differently**: floral 26% against 53% for the
+  single-origin coffees from elsewhere, spice 13% against 43%, and never roasted, green or
+  earthy; nutty/cocoa 48% against 29%.
+- **Shops have a house voice**: every Buna coffee with notes is sweet, 77% nutty/cocoa,
+  none floral or spiced; Cucurucho calls 70% of its coffees spiced.
+
+**The words do not price the bag** (`analysis.flavor_prices`). Within a shop and a bag
+size - each offer against the median of its shop's bags of that size - no category's
+coffees cost more than the others by more than noise: nine comparisons, so each interval
+is family-wise (Bonferroni, 99.4% each), and all nine include zero. Spice comes closest,
++12% (-0.3% to +26%), and it is a stand-in for origin: its coffees come from Yemen,
+Rwanda, Kenya, Burundi and Indonesia. The price model's finding, from another angle:
+altitude and origin price a bag, the adjectives do not.
+
+**No clean flavour types** (`analysis.flavor_clusters`). Each coffee as the set of
+categories it names, clustered with k-means for k = 2-6 and judged by the Jaccard
+silhouette (presence data: two coffees that both lack roasted notes are not alike for
+that). The best is k = 3 at 0.31 - *weak* on Kaufman and Rousseeuw's scale: floral and
+fruity (37 coffees), nutty/cocoa and sweet (32), fruity and sweet (25). The fruit-or-
+chocolate split every coffee menu makes is there, but as a continuum, not as types.
+Clustering on the Jaccard distance itself was tried: average linkage peeled outliers off
+two at a time (92 coffees and 2 at k = 2), complete linkage held together worse (0.22).
+
+What it is not: a cupper's judgement. These are the shops' own claims, written to sell.
+A next step, if it earns it through the gate: the categories as features of the price
+model - which needs the notes per read of the catalogue, not only today's, to stay
+point-in-time correct.
 
 ## What the agent will read (stage 3)
 
@@ -1392,8 +1467,10 @@ not the only place it appears:
 
 ![What the price model relies on](figures/offer_feature_importance.png)
 
-Altitude carries it, then the shop, then the bag's size - and the Gesha column earns its
-place, which is what the variety features were added for.
+Altitude carries it, by far (shuffled, the error grows by 45 MXN/kg), then the bag's size
+and the shop (about 7 each). The per-variety columns add little - Gesha 0.7 - which is
+less than they seemed to when they were added (redrawn 2026-09-28, on the history of the
+catalogues).
 
 ## Results (stage 1)
 

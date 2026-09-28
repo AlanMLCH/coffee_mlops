@@ -454,6 +454,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "roaster_offers": ROASTER_OFFERS,
         "roaster_offer_history": ROASTER_OFFER_HISTORY,
         "roaster_origin_history": roaster_origin_history_schema(rules),
+        "roaster_flavors": roaster_flavors_schema(rules),
         "price_indicators": PRICE_INDICATORS,
         "consumer_prices": CONSUMER_PRICES,
         "exchange_rates": EXCHANGE_RATES,
@@ -555,6 +556,28 @@ ROASTER_OFFER_HISTORY = pa.DataFrameSchema(
         "offer_id": pa.Column(pl.String),  # the same offer, read again: not unique here
     },
 )
+
+
+def roaster_flavors_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """Contract of `roaster_flavors`: every note is one the lexicon holds, in its own
+    category, and a coffee tastes of each note once."""
+    groups = rules.tasting_notes.groups
+    notes = sorted({note for group in groups for note in group.notes})
+    subcategories = sorted({group.subcategory for group in groups if group.subcategory})
+    return pa.DataFrameSchema(
+        name="roaster_flavors",
+        strict=True,
+        unique=["coffee_id", "note_en"],
+        columns={
+            "coffee_id": pa.Column(pl.String),
+            "shop": pa.Column(pl.String),
+            "note": pa.Column(pl.String, pa.Check.isin(notes)),
+            "note_en": pa.Column(pl.String),
+            "category": pa.Column(pl.String, pa.Check.isin(rules.tasting_notes.categories)),
+            "subcategory": pa.Column(pl.String, pa.Check.isin(subcategories), nullable=True),
+            "source": pa.Column(pl.String, pa.Check.isin(["title", "description"])),
+        },
+    )
 
 
 def roaster_origin_history_schema(rules: CleaningConfig) -> pa.DataFrameSchema:

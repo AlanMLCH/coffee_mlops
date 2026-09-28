@@ -4,17 +4,21 @@ Every domain gets the core's analyses (profiles, drift, feature evidence, residu
 These only make sense for coffee: who grows it and who imports what they drink, what
 the places in DENUE's broad "cafeterias" class actually are, how far the rule that
 says so can be trusted, how much the roasters' sheets actually say about each
-coffee, and what a kilogram costs from the farm gate and the port to a supermarket's
-shelf and a roaster's shop. Pure functions of clean tables, drawn in the core's house
-style.
+coffee and what they say it tastes of, and what a kilogram costs from the farm gate
+and the port to a supermarket's shelf and a roaster's shop. Pure functions of clean
+tables, drawn in the core's house style.
 """
 
 from collections.abc import Mapping
 from datetime import timedelta
 
+import numpy as np
 import polars as pl
+from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances, silhouette_score
 
 from domains.coffee.config import (
     UNCLASSIFIED,
@@ -33,6 +37,7 @@ from mlops_core.analysis.figures import (
     canvas,
     value_grid,
 )
+from mlops_core.stats import bootstrap_means
 
 COFFEE = "coffee"  # the kind the whole thesis is about
 # PSD counts thousands of 60 kg bags: one thousand bags is 60 tonnes.
@@ -52,8 +57,14 @@ SHEET_FIELDS = {
     "species": "species",
     "sca_score": "SCA score",
 }
-COVERAGE_FIELDS = ["sheet", *SHEET_FIELDS.values(), "price per kg"]
+TASTING_NOTES = "tasting notes"
+COVERAGE_FIELDS = ["sheet", *SHEET_FIELDS.values(), TASTING_NOTES, "price per kg"]
 ALL_SHOPS = "all"
+# The numbers of clusters the flavour profiles are tried with.
+CLUSTER_COUNTS = range(2, 7)
+CLUSTER_SEED = 0
+PRICE_RESAMPLES = 5000
+PRICE_SEED = 7
 NATIONAL, CITY = "national", "city"  # the two scopes of the shelf prices
 # The shelf lines drawn through time: the plain and the sweetened of each product.
 DRAWN_LINES = ["ground", "ground, sweetened", "instant", "instant, sweetened"]
@@ -68,12 +79,17 @@ def studies(
     crop: ProductionConfig,
     shelves: ConsumerPricesConfig,
     states: Mapping[str, str],
+    home_country: str,
+    min_rows: int,
 ) -> dict[str, pl.DataFrame]:
-    """The domain's studies: the world market, the city's places, and the price of a
-    kilogram from the farm to the shelf. `states` maps the domain's spelling of a state
-    (folded) to SIAP's."""
+    """The domain's studies: the world market, the city's places, what the roasters say
+    their coffees taste of, and the price of a kilogram from the farm to the shelf.
+    `states` maps the domain's spelling of a state (folded) to SIAP's; `home_country` is
+    the one the roasters' own coffees are profiled against the rest of the world; a group
+    of fewer than `min_rows` coffees is not reported."""
     context, shops = clean["market_context"], clean["coffee_shops"]
     prices, production = clean["consumer_prices"], clean["mexico_production"]
+    flavors, origins = clean["roaster_flavors"], clean["roaster_origins"]
     agreement = kind_agreement(shops)
     green = green_coffee_in_pesos(clean["price_indicators"], clean["exchange_rates"])
     return {
@@ -87,8 +103,11 @@ def studies(
             clean["mexico_production"], context, crop.country
         ),
         "roaster_coverage": roaster_coverage(
-            clean["roaster_coffees"], clean["roaster_origins"], clean["roaster_offers"]
+            clean["roaster_coffees"], origins, clean["roaster_offers"], flavors
         ),
+        "flavor_profiles": flavor_profiles(flavors, origins, home_country, min_rows),
+        "flavor_prices": flavor_prices(flavors, clean["roaster_offers"], min_rows),
+        "flavor_clusters": flavor_clusters(flavors),
         "consumer_prices_by_fortnight": consumer_prices_by_fortnight(prices, shelves.city),
         "consumer_prices_by_borough": consumer_prices_by_borough(prices),
         "consumer_prices_by_state": consumer_prices_by_state(prices, production, states),
@@ -115,6 +134,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
         drawn["shop_kinds"] = shop_kinds_figure(denue)
     if not tables["roaster_coverage"].is_empty():
         drawn["roaster_coverage"] = roaster_coverage_figure(tables["roaster_coverage"])
+    if not tables["flavor_profiles"].is_empty():
+        drawn["flavor_profiles"] = flavor_profiles_figure(tables["flavor_profiles"])
     if not tables["price_ladder"].is_empty():
         drawn["price_ladder"] = price_ladder_figure(tables["price_ladder"])
     national = tables["consumer_prices_by_fortnight"].filter(pl.col("scope") == NATIONAL)
@@ -383,14 +404,15 @@ def production_figure(by_state: pl.DataFrame) -> Figure:
 
 
 def roaster_coverage(
-    coffees: pl.DataFrame, origins: pl.DataFrame, offers: pl.DataFrame
+    coffees: pl.DataFrame, origins: pl.DataFrame, offers: pl.DataFrame, flavors: pl.DataFrame
 ) -> pl.DataFrame:
     """How much each shop's sheets say: per shop and field, the share of its coffees that
     give it, plus a row for all shops together.
 
     "sheet" is having one at all. A coffee gives a field if any of its origins does, so
-    a blend counts once. The price per kilogram is counted over offers, not coffees.
-    It says where the stage-3 price model can learn, and from how few shops.
+    a blend counts once; it gives tasting notes if its description names one. The price
+    per kilogram is counted over offers, not coffees. It says where the stage-3 price
+    model can learn, and from how few shops.
     """
     understood = pl.col("processing_method").is_not_null() & (
         pl.col("processing_method") != UNCLASSIFIED
@@ -403,9 +425,12 @@ def roaster_coverage(
             for column, field in SHEET_FIELDS.items()
         ]
     )
+    noted = flavors.select("coffee_id").unique().with_columns(pl.lit(True).alias(TASTING_NOTES))
     per_coffee = (
-        coffees.select("shop", "product_id", (pl.col("origins") > 0).alias("sheet"))
+        coffees.select("shop", "product_id", "coffee_id", (pl.col("origins") > 0).alias("sheet"))
         .join(given, on=["shop", "product_id"], how="left")
+        .join(noted, on="coffee_id", how="left")
+        .drop("coffee_id")
         .fill_null(False)
         .unpivot(index=["shop", "product_id"], variable_name="field", value_name="given")
         .drop("product_id")
@@ -439,6 +464,18 @@ def roaster_coverage_figure(coverage: pl.DataFrame) -> Figure:
         "What the roasters' sheets say about each coffee",
         "Share of each shop's coffees whose sheet gives the field (price: of its offers)",
     )
+    _share_grid(
+        ax,
+        shares,
+        [f"{shop}\n{coffees[shop]} coffees" for shop in shops],
+        grid["field"].to_list(),
+    )
+    figure.tight_layout()
+    return figure
+
+
+def _share_grid(ax: Axes, shares: np.ndarray, columns: list[str], rows: list[str]) -> None:
+    """Percentages as a grid of cells, one hue from empty to full, each one labelled."""
     ax.imshow(
         shares,
         cmap=LinearSegmentedColormap.from_list("share", [SURFACE, SERIES[0]]),
@@ -446,8 +483,8 @@ def roaster_coverage_figure(coverage: pl.DataFrame) -> Figure:
         vmax=100,
         aspect="auto",
     )
-    for row in range(grid.height):
-        for column in range(len(shops)):
+    for row in range(len(rows)):
+        for column in range(len(columns)):
             share = shares[row, column]
             ax.text(
                 column,
@@ -458,13 +495,264 @@ def roaster_coverage_figure(coverage: pl.DataFrame) -> Figure:
                 fontsize=7.5,
                 color=SURFACE if share >= 60 else INK,
             )
-    ax.set_xticks(range(len(shops)), [f"{shop}\n{coffees[shop]} coffees" for shop in shops])
-    ax.set_yticks(range(grid.height), grid["field"].to_list())
+    ax.set_xticks(range(len(columns)), columns)
+    ax.set_yticks(range(len(rows)), rows)
     ax.tick_params(length=0)
     for side in ("left", "bottom"):
         ax.spines[side].set_visible(False)
+
+
+def flavor_profiles(
+    flavors: pl.DataFrame, origins: pl.DataFrame, home_country: str, min_rows: int
+) -> pl.DataFrame:
+    """What each group of coffees tastes of, as its roasters describe it: per group, the
+    share of its coffees whose description names a note of each flavour category.
+
+    Only coffees with notes count, so a shop that writes few does not look bland. The
+    groups: every coffee; the single-origin coffees from `home_country` and from
+    elsewhere, and by processing method (a blend has no one origin or method); and each
+    shop. A group of fewer than `min_rows` coffees is left out.
+    """
+    tasted = flavors.select("coffee_id", "category").unique()
+    single = (
+        origins.group_by("coffee_id")
+        .agg(pl.len().alias("origins"), pl.col("country", "processing_method").first())
+        .filter(pl.col("origins") == 1)
+    )
+    coffees = flavors.select("coffee_id", "shop").unique().join(single, on="coffee_id", how="left")
+    method = pl.col("processing_method")
+
+    def dimension(name: str, group: pl.Expr, rows: pl.Expr) -> pl.DataFrame:
+        return coffees.filter(rows).select(
+            "coffee_id", pl.lit(name).alias("dimension"), group.alias("group")
+        )
+
+    home = pl.col("country") == home_country
+    everyone = pl.lit(True)
+    groups = pl.concat(
+        [
+            dimension("all", pl.lit("every coffee"), everyone),
+            dimension(
+                "origin",
+                pl.when(home).then(pl.lit(home_country)).otherwise(pl.lit("elsewhere")),
+                pl.col("country").is_not_null(),
+            ),
+            dimension("process", method, method.is_not_null() & (method != UNCLASSIFIED)),
+            dimension("shop", pl.col("shop"), everyone),
+        ]
+    )
+    sizes = (
+        groups.group_by("dimension", "group")
+        .agg(pl.len().alias("coffees"))
+        .filter(pl.col("coffees") >= min_rows)
+    )
+    named = (
+        groups.join(tasted, on="coffee_id")
+        .group_by("dimension", "group", "category")
+        .agg(pl.len().alias("named"))
+    )
+    return (
+        sizes.join(tasted.select("category").unique(), how="cross")
+        .join(named, on=["dimension", "group", "category"], how="left")
+        .with_columns((100 * pl.col("named").fill_null(0) / pl.col("coffees")).alias("share_pct"))
+        .drop("named")
+        .sort(
+            pl.col("dimension").cast(pl.Enum(["all", "origin", "process", "shop"])),
+            pl.col("coffees"),
+            "group",
+            "category",
+            descending=[False, True, False, False],
+        )
+    )
+
+
+def flavor_profiles_figure(profiles: pl.DataFrame) -> Figure:
+    """One row per group, one column per category, ordered by how often every coffee
+    names it: what sets a group apart is where its row departs from the first."""
+    everyone = profiles.filter(pl.col("dimension") == "all").sort("share_pct", descending=True)
+    categories = everyone["category"].to_list()
+    grid = profiles.pivot(
+        on="category", index=["dimension", "group", "coffees"], values="share_pct"
+    )
+    figure, ax = canvas(
+        "What the roasters say their coffees taste of",
+        "Share of each group's coffees naming a note of the SCA flavour category",
+    )
+    _share_grid(
+        ax,
+        grid.select(categories).to_numpy(),
+        [category.replace("_", "/\n") for category in categories],  # "nutty/\ncocoa"
+        [_group_label(row) for row in grid.iter_rows(named=True)],
+    )
+    # A gap between the kinds of group: origin, process, shop.
+    starts = [
+        i for i, kind in enumerate(grid["dimension"]) if i and kind != grid["dimension"][i - 1]
+    ]
+    for start in starts:
+        ax.axhline(start - 0.5, color=SURFACE, linewidth=4)
+    ax.tick_params(axis="x", labelsize=8)
     figure.tight_layout()
     return figure
+
+
+def _group_label(row: Mapping[str, object]) -> str:
+    """ "from Mexico (23)", "washed process (43)": a process called `other` must not read
+    as the flavour category of the same name."""
+    group = {"origin": "from {}", "process": "{} process"}.get(str(row["dimension"]), "{}")
+    return f"{group.format(row['group'])} ({row['coffees']})"
+
+
+def flavor_prices(flavors: pl.DataFrame, offers: pl.DataFrame, min_rows: int) -> pl.DataFrame:
+    """Whether coffees said to taste of a category cost more: per category, how much
+    dearer its coffees are than the other coffees with notes, with an interval.
+
+    Prices are compared within a shop and a bag size - each offer's price per kilogram
+    over the median of its shop's offers of that size - because the shop and the size
+    set most of a price, and a category common in one shop would otherwise carry that
+    shop's prices. A coffee's price is the geometric mean of its offers' ratios, and the
+    premium the ratio of the two groups' geometric means, minus one. (Not medians: most
+    of a shop's coffees sit exactly at its median, and every difference came out 0%.)
+
+    Nine categories are nine comparisons: at 95% each, one would clear the bar by chance
+    about half the time. So the interval is family-wise - 95% for all of them together
+    (Bonferroni) - and a category with fewer than `min_rows` coffees on either
+    side is not compared. Descriptive, not causal: a category is also a stand-in for the
+    origins it is used to describe.
+    """
+    priced = offers.filter(
+        pl.col("price_mxn_per_kg").is_not_null() & ~pl.col("price_outlier").fill_null(False)
+    )
+    per_kg = pl.col("price_mxn_per_kg")
+    relative = (
+        priced.with_columns((per_kg / per_kg.median().over("shop", "bag_grams")).log().alias("log"))
+        .group_by("coffee_id")
+        .agg(pl.col("log").mean())
+    )
+    tasted = flavors.select("coffee_id", "category").unique()
+    described = relative.join(tasted.select("coffee_id").unique(), on="coffee_id")
+    sides = {}
+    for category in sorted(tasted["category"].unique()):
+        named = tasted.filter(pl.col("category") == category).select("coffee_id")
+        inside = described.join(named, on="coffee_id")["log"].to_numpy()
+        outside = described.join(named, on="coffee_id", how="anti")["log"].to_numpy()
+        if min(len(inside), len(outside)) >= min_rows:
+            sides[category] = inside, outside
+    tail = 0.05 / max(len(sides), 1) / 2
+    rows = []
+    for number, (category, (inside, outside)) in enumerate(sides.items()):
+        seed = PRICE_SEED + 2 * number
+        differences = bootstrap_means(inside, PRICE_RESAMPLES, seed) - bootstrap_means(
+            outside, PRICE_RESAMPLES, seed + 1
+        )
+        rows.append(
+            {
+                "category": category,
+                "coffees": len(inside),
+                "others": len(outside),
+                "premium_pct": 100 * (np.exp(inside.mean() - outside.mean()) - 1),
+                "ci_low_pct": 100 * (np.exp(np.quantile(differences, tail)) - 1),
+                "ci_high_pct": 100 * (np.exp(np.quantile(differences, 1 - tail)) - 1),
+                "probability_dearer": float((differences > 0).mean()),
+                "family_level": 1 - 2 * tail,
+            }
+        )
+    return pl.DataFrame(rows, schema=FLAVOR_PRICES).sort("premium_pct", descending=True)
+
+
+FLAVOR_PRICES = pl.Schema(
+    {
+        "category": pl.String,
+        "coffees": pl.Int64,  # coffees with a note of the category
+        "others": pl.Int64,  # coffees with notes, none of the category
+        "premium_pct": pl.Float64,
+        "ci_low_pct": pl.Float64,
+        "ci_high_pct": pl.Float64,
+        "probability_dearer": pl.Float64,
+        "family_level": pl.Float64,  # the confidence of each interval, after Bonferroni
+    }
+)
+FLAVOR_CLUSTERS = pl.Schema(
+    {
+        "k": pl.Int64,
+        "silhouette": pl.Float64,
+        "structure": pl.String,
+        "chosen": pl.Boolean,  # the k with the highest silhouette
+        "cluster": pl.Int64,  # 1 is the largest
+        "coffees": pl.Int64,
+        "profile": pl.String,  # the categories at least half its coffees name
+    }
+)
+# Kaufman and Rousseeuw (1990), Finding Groups in Data: what a mean silhouette means.
+STRUCTURE = [(0.25, "none"), (0.50, "weak"), (0.70, "reasonable"), (1.0, "strong")]
+
+
+def flavor_clusters(flavors: pl.DataFrame) -> pl.DataFrame:
+    """Whether the coffees fall into flavour types: each coffee as the set of categories
+    its notes belong to, clustered with each number of clusters in CLUSTER_COUNTS, and
+    how well each clustering holds together (its mean silhouette).
+
+    The silhouette is measured with the Jaccard distance, because the data is presence
+    and absence: two coffees that both lack roasted notes are not alike for that. The
+    clusters are k-means', seeded: clustering on the Jaccard distance itself was tried
+    (2026-09-28) and average linkage peeled the outliers off one or two at a time (92
+    coffees and 2 at k=2), complete linkage held together worse (0.22 at best against
+    0.31). A cluster is described by the categories at least half of its coffees name,
+    and numbered from the largest; `structure` reads the silhouette on Kaufman and
+    Rousseeuw's scale, so a table of weak clusters says it is one.
+    """
+    wide = (
+        flavors.select("coffee_id", "category")
+        .unique()
+        .with_columns(pl.lit(True).alias("named"))
+        .pivot(on="category", index="coffee_id", values="named")
+        .fill_null(False)
+        .sort("coffee_id")
+    )
+    categories = sorted(column for column in wide.columns if column != "coffee_id")
+    presence = wide.select(categories).to_numpy().astype(bool)
+    # Never more clusters than there are distinct sets of categories to put in them.
+    distinct = len(np.unique(presence, axis=0)) if len(presence) else 0
+    counts = [k for k in CLUSTER_COUNTS if k <= distinct and k < len(presence)]
+    if not counts:
+        return pl.DataFrame(schema=FLAVOR_CLUSTERS)
+    distances = pairwise_distances(presence, metric="jaccard")
+    runs = []
+    for k in counts:
+        labels = KMeans(n_clusters=k, n_init=20, random_state=CLUSTER_SEED).fit_predict(
+            presence.astype(float)
+        )
+        runs.append((k, float(silhouette_score(distances, labels, metric="precomputed")), labels))
+    best = max(score for _, score, _ in runs)
+    rows = []
+    for k, score, labels in runs:
+        clusters = sorted(
+            (_profile(presence[labels == label], categories) for label in range(k)),
+            key=lambda cluster: (-cluster[0], cluster[1]),  # the largest first
+        )
+        rows += [
+            {
+                "k": k,
+                "silhouette": score,
+                "structure": next(name for top, name in STRUCTURE if score <= top),
+                "chosen": score == best,
+                "cluster": number,
+                "coffees": size,
+                "profile": profile,
+            }
+            for number, (size, profile) in enumerate(clusters, start=1)
+        ]
+    return pl.DataFrame(rows, schema=FLAVOR_CLUSTERS)
+
+
+def _profile(members: np.ndarray, categories: list[str]) -> tuple[int, str]:
+    """A cluster's size, and the categories at least half of its coffees name, the most
+    named first."""
+    shares = members.mean(axis=0)
+    held = sorted(
+        (-share, name) for share, name in zip(shares, categories, strict=True) if share >= 0.5
+    )
+    profile = ", ".join(f"{name} {-100 * share:.0f}%" for share, name in held)
+    return len(members), profile or "no category in half of them"
 
 
 def shelf_line() -> pl.Expr:

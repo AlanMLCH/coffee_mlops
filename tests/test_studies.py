@@ -1,3 +1,4 @@
+import math
 from datetime import date
 
 import polars as pl
@@ -7,6 +8,10 @@ from domains.coffee.analysis import (
     consumer_prices_by_borough,
     consumer_prices_by_fortnight,
     consumer_prices_by_state,
+    flavor_clusters,
+    flavor_prices,
+    flavor_profiles,
+    flavor_profiles_figure,
     green_coffee_figure,
     green_coffee_in_pesos,
     kind_agreement,
@@ -332,7 +337,7 @@ def test_roaster_coverage_counts_coffees_not_origins() -> None:
     per kilogram is counted over offers."""
     coffees = pl.DataFrame(
         {"shop": ["a", "a", "b"], "product_id": ["blend", "bare", "one"], "origins": [2, 0, 1]}
-    )
+    ).with_columns(coffee_id=pl.concat_str("shop", "product_id", separator="-"))
     origins = pl.DataFrame(
         {
             "shop": ["a", "a", "b"],
@@ -350,8 +355,10 @@ def test_roaster_coverage_counts_coffees_not_origins() -> None:
         pl.lit(None, dtype=pl.List(pl.String)).alias("varieties"),
     )
     offers = pl.DataFrame({"shop": ["a", "a", "b"], "price_mxn_per_kg": [900.0, None, 700.0]})
+    # Two notes of one coffee: it gives tasting notes once.
+    flavors = pl.DataFrame({"coffee_id": ["a-bare", "a-bare"], "note_en": ["peach", "honey"]})
 
-    table = roaster_coverage(coffees, origins, offers)
+    table = roaster_coverage(coffees, origins, offers, flavors)
 
     def given(shop: str, field: str) -> tuple[int, int]:
         row = table.filter((pl.col("shop") == shop) & (pl.col("field") == field))
@@ -363,8 +370,165 @@ def test_roaster_coverage_counts_coffees_not_origins() -> None:
     assert given("all", "processing method") == (1, 3)
     assert given("a", "price per kg") == (1, 2)
     assert given("all", "price per kg") == (2, 3)
+    assert given("a", "tasting notes") == (1, 2)  # the one without a sheet still has notes
+    assert given("all", "tasting notes") == (1, 3)
     assert table["shop"].unique(maintain_order=True).to_list() == ["a", "b", "all"]
     assert table.filter(pl.col("shop") == "a")["field"].to_list()[:2] == ["sheet", "country"]
+
+
+def tasted() -> pl.DataFrame:
+    """Twelve coffees: five Mexican washed ones taste of chocolate and caramel (one also
+    of fruit), five natural ones from elsewhere of fruit and flowers (two also of spice),
+    a blend of fruit and a coffee without a sheet of sugar. Shop b has four."""
+    categories = {
+        **{f"c{i}": ["nutty_cocoa", "sweet"] for i in range(1, 6)},
+        **{f"c{i}": ["fruity", "floral"] for i in range(6, 11)},
+        "c11": ["fruity"],
+        "c12": ["sweet"],
+    }
+    categories["c1"] = [*categories["c1"], "fruity"]
+    categories["c6"] = categories["c7"] = ["fruity", "floral", "spice"]
+    return pl.DataFrame(
+        [
+            {"coffee_id": coffee, "shop": "a" if int(coffee[1:]) <= 8 else "b", "category": name}
+            for coffee, names in categories.items()
+            for name in names
+        ]
+    )
+
+
+def sheets() -> pl.DataFrame:
+    rows = [
+        *[(f"c{i}", "Mexico", "washed") for i in range(1, 6)],
+        *[(f"c{i}", "Ethiopia", "natural") for i in range(6, 11)],
+        ("c11", "Brazil", "natural"),  # a blend: two origins, so neither counts
+        ("c11", "Mexico", "washed"),
+    ]
+    return pl.DataFrame(rows, schema=["coffee_id", "country", "processing_method"], orient="row")
+
+
+def test_flavor_profiles_share_each_group_by_category() -> None:
+    table = flavor_profiles(tasted(), sheets(), "Mexico", min_rows=5)
+
+    def share(dimension: str, group: str, category: str) -> float:
+        row = table.filter(
+            (pl.col("dimension") == dimension)
+            & (pl.col("group") == group)
+            & (pl.col("category") == category)
+        )
+        return float(row["share_pct"].item())
+
+    groups = table.select("dimension", "group", "coffees").unique(maintain_order=True).rows()
+    # The blend and the sheetless coffee count for everyone and their shop only; shop b
+    # has four coffees, too few to speak for it.
+    assert groups == [
+        ("all", "every coffee", 12),
+        ("origin", "Mexico", 5),
+        ("origin", "elsewhere", 5),
+        ("process", "natural", 5),
+        ("process", "washed", 5),
+        ("shop", "a", 8),
+    ]
+    assert share("all", "every coffee", "fruity") == pytest.approx(100 * 7 / 12)
+    assert share("origin", "Mexico", "nutty_cocoa") == 100.0
+    assert share("origin", "Mexico", "floral") == 0.0  # not named: zero, not missing
+    assert share("process", "natural", "spice") == 40.0
+
+
+def test_flavor_profiles_are_drawn_one_row_per_group() -> None:
+    figure = flavor_profiles_figure(flavor_profiles(tasted(), sheets(), "Mexico", min_rows=5))
+
+    rows = [label.get_text() for label in figure.axes[0].get_yticklabels()]
+    columns = [label.get_text() for label in figure.axes[0].get_xticklabels()]
+    assert rows[:2] == ["every coffee (12)", "from Mexico (5)"]
+    assert "natural process (5)" in rows
+    assert columns[0] == "fruity" and "nutty/\ncocoa" in columns
+
+
+def priced(
+    coffee: str, per_kg: float, grams: float = 250.0, outlier: bool = False
+) -> dict[str, object]:
+    return {
+        "coffee_id": coffee,
+        "shop": "a" if int(coffee[1:]) <= 8 else "b",
+        "bag_grams": grams,
+        "price_mxn_per_kg": per_kg,
+        "price_outlier": outlier,
+    }
+
+
+def test_flavor_prices_compare_within_a_shop_and_a_size_with_a_family_wise_interval() -> None:
+    offers = pl.DataFrame(
+        [
+            *[priced(f"c{i}", 1000.0) for i in range(1, 6)],
+            *[priced(f"c{i}", 1200.0) for i in range(6, 9)],
+            priced("c9", 1200.0),
+            priced("c10", 1200.0),
+            priced("c11", 1000.0),
+            priced("c12", 1000.0),
+            priced("c1", 5000.0, outlier=True),  # a price copied from another size: out
+            priced("c1", 800.0, grams=1000.0),  # alone in its size: at its own median
+        ]
+    )
+
+    table = flavor_prices(tasted(), offers, min_rows=5)
+
+    # Spice has two coffees: too few to compare. Four comparisons, so each interval is
+    # at 1 - 0.05/4.
+    assert set(table["category"]) == {"floral", "fruity", "nutty_cocoa", "sweet"}
+    assert table["family_level"].unique().to_list() == [pytest.approx(0.9875)]
+    floral = table.filter(pl.col("category") == "floral").row(0, named=True)
+    # Shop a's median is 1,000 and shop b's 1,100: the floral coffees sit at 1.2 and
+    # 12/11 of theirs, the others at 1 (c1's two sizes) and 10/11.
+    inside = (3 * math.log(1.2) + 2 * math.log(12 / 11)) / 5
+    outside = 2 * math.log(10 / 11) / 7
+    assert (floral["coffees"], floral["others"]) == (5, 7)
+    assert floral["premium_pct"] == pytest.approx(100 * (math.exp(inside - outside) - 1))
+    assert floral["ci_low_pct"] < floral["premium_pct"] < floral["ci_high_pct"]
+    assert floral["probability_dearer"] == 1.0
+    assert table["premium_pct"].to_list() == sorted(table["premium_pct"], reverse=True)
+
+
+def test_flavor_clusters_find_two_clear_types_and_say_how_clear() -> None:
+    two_types = pl.DataFrame(
+        [
+            {"coffee_id": f"{kind}{i}", "category": category}
+            for kind, categories in (("x", ["fruity", "floral"]), ("y", ["nutty_cocoa", "sweet"]))
+            for i in range(5)
+            for category in categories
+        ]
+    )
+
+    table = flavor_clusters(two_types)
+
+    # Two distinct sets of categories: no more than two clusters can be formed.
+    assert table.select("k", "cluster", "coffees", "profile").rows() == [
+        (2, 1, 5, "floral 100%, fruity 100%"),  # as large as the other: by its profile
+        (2, 2, 5, "nutty_cocoa 100%, sweet 100%"),
+    ]
+    assert table["silhouette"].to_list() == [1.0, 1.0]
+    assert table["structure"].to_list() == ["strong", "strong"]
+    assert table["chosen"].all()
+
+
+def test_flavor_clusters_read_a_weak_structure_as_weak() -> None:
+    table = flavor_clusters(tasted())
+
+    assert table["k"].unique().to_list() == list(range(2, 7))
+    assert table.filter(pl.col("chosen"))["k"].n_unique() == 1
+    assert set(table["structure"]) <= {"none", "weak", "reasonable", "strong"}
+    for k, clusters in table.group_by("k"):
+        assert clusters["coffees"].sum() == 12 and clusters["cluster"].to_list() == list(
+            range(1, k[0] + 1)
+        )
+
+
+def test_no_notes_no_flavor_studies() -> None:
+    empty = tasted().clear()
+
+    assert flavor_profiles(empty, sheets(), "Mexico", min_rows=5).is_empty()
+    assert flavor_prices(empty, pl.DataFrame([priced("c1", 1.0)]), min_rows=5).is_empty()
+    assert flavor_clusters(empty).is_empty()
 
 
 CITY = "Ciudad de México"

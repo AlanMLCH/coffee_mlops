@@ -22,7 +22,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   coffee balance, SIAP's harvests, INEGI's borough polygons, World Bank and ICO prices,
   PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
-  politely (robots.txt first), and 17 documents for the agent to read.
+  politely (robots.txt first) - their tasting notes read into the SCA's flavour
+  categories - and 17 documents for the agent to read.
 - **Keeps every download untouched and forever** in a content-addressed raw layer:
   running again only adds what is new, never overwrites. Every source and every clean
   table is held to a Pandera contract that stops the pipeline when broken.
@@ -64,6 +65,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
   for a Mexican roaster, the exchange rate moved the cost more than the market did.
 - Of the 9,860 places INEGI registers as "cafeterías" in Mexico City, 38% are named as
   coffee shops; a quarter sell juice.
+- Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
+  coffees floral half as often as imported ones (26% against 53%) - and no flavour word
+  makes a bag dearer once its shop and size are accounted for.
 
 ## Architecture
 

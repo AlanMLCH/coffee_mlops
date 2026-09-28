@@ -179,6 +179,68 @@ class RoasterSheetRules(BaseModel):
     price_outlier_ratio: float
 
 
+class FlavorGroup(BaseModel):
+    """The notes of one category of the SCA's descriptive form - or of one of its
+    subcategories, such as the fruity category's berries."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    category: str
+    subcategory: str | None = None
+    # As a shop writes it, in Spanish -> in English, for the questions and the charts.
+    notes: dict[str, str] = Field(min_length=1)
+
+
+class TastingNotesConfig(BaseModel):
+    """How to read the tasting notes in a roaster's description: which words open a list
+    of notes, and which category of the SCA's descriptive form each note belongs to.
+
+    A note counts only after a cue ("notas a", "sabe a", "aroma") and before the end of
+    its sentence: a producer's story mentions the land and the cherries without tasting
+    of either. Words are matched lower-case, accents dropped, in their plural and their
+    other gender ("caramelizada" is "caramelizado").
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    cues: list[str] = Field(min_length=1)
+    # A cue within three words after one of these opens nothing ("sin llegar a los
+    # sabores fermentados"), and one inside a list of notes ends the list.
+    negations: list[str]
+    # Shops that write the notes in the title, after a hyphen: "Chiapas- Caramelo,
+    # avellana y chocolate".
+    title_notes: list[str] = []
+    # Patterns for a note's word used in another sense, such as "cereza", which in coffee
+    # is also the fruit that is picked: a note inside one of them is not a note.
+    other_meanings: list[str] = []
+    groups: list[FlavorGroup] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _one_group_per_note(self) -> Self:
+        seen: dict[str, str] = {}
+        for group in self.groups:
+            for note in group.notes:
+                key = note.casefold()
+                if key in seen:
+                    raise ValueError(
+                        f"tasting note {note!r} is in {seen[key]} and {group.category}"
+                    )
+                seen[key] = group.category
+        for pattern in self.other_meanings:
+            try:
+                re.compile(pattern)
+            except re.error as broken:
+                raise ValueError(
+                    f"other_meanings: {pattern!r} is not a pattern: {broken}"
+                ) from broken
+        return self
+
+    @property
+    def categories(self) -> list[str]:
+        """Every category, in the order the config lists them."""
+        return [*dict.fromkeys(group.category for group in self.groups)]
+
+
 class CleaningConfig(BaseModel):
     """Rules for the clean layer. Vocabularies are closed: an unseen label stops the run."""
 
@@ -194,6 +256,7 @@ class CleaningConfig(BaseModel):
     osm_kinds: dict[str, str]
     register_match: RegisterMatchConfig
     roaster_sheets: RoasterSheetRules
+    tasting_notes: TastingNotesConfig
 
     @model_validator(mode="after")
     def _one_process_vocabulary(self) -> Self:
@@ -275,6 +338,17 @@ class CoffeeConfig(DomainConfig):
     production: ProductionConfig
     market_analysis: MarketAnalysisConfig
     consumer_prices: ConsumerPricesConfig
+
+    @model_validator(mode="after")
+    def _title_notes_name_shops(self) -> Self:
+        # A misspelt shop would read no titles, and nothing would say so.
+        shops = {shop.shop for shop in self.roasters.shops} if self.roasters else set()
+        unknown = set(self.cleaning.tasting_notes.title_notes) - shops
+        if unknown:
+            raise ValueError(
+                f"`tasting_notes.title_notes` names shops not in `roasters`: {unknown}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _shelf_prices_are_downloaded(self) -> Self:

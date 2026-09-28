@@ -108,6 +108,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "roaster_offers",
         "roaster_offer_history",
         "roaster_origin_history",
+        "roaster_flavors",
         "price_indicators",
         "consumer_prices",
         "exchange_rates",
@@ -142,6 +143,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "roaster_offers",
         "roaster_offer_history",
         "roaster_origin_history",
+        "roaster_flavors",
         "price_indicators",
         "consumer_prices",
         "exchange_rates",
@@ -334,6 +336,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "market_history.png",
         "mexico_production.png",  # review_residual_bias needs predictions; this run has none
         "roaster_coverage.png",
+        "flavor_profiles.png",
         "offer_feature_importance.png",
         "price_ladder.png",
         "consumer_prices.png",

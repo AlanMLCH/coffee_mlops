@@ -167,6 +167,8 @@ class CoffeeAdapter:
             config.production,
             config.consumer_prices,
             config.cleaning.roaster_sheets.states,
+            config.cleaning.roaster_sheets.home_country,
+            config.analysis.min_rows,
         )
 
     def figures(self, tables: Mapping[str, pl.DataFrame]) -> Mapping[str, Figure]:
