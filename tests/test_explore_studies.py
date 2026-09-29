@@ -39,7 +39,8 @@ def test_the_domains_studies_and_figures_are_what_the_core_did_not_compute(
 
 def test_a_models_studies_are_stamped_with_what_they_read(tmp_path: Path) -> None:
     inputs = {"review_features": "built_at=20260928T000000Z"}
-    partition(tmp_path / "analysis" / "review_target_distribution", "20260929T000000Z", (), inputs)
+    read = inputs | {"coffee_shops": "built_at=20260927T000000Z"}  # the domain's, not the model's
+    partition(tmp_path / "analysis" / "review_target_distribution", "20260929T000000Z", (), read)
 
     assert lineage(tmp_path, "review") == {"built_at": "20260929T000000Z", **inputs}
     assert lineage(tmp_path, "offer") == {}

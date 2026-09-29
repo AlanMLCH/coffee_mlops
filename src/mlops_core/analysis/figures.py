@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use("Agg")  # no display in a container or in CI
 
 from collections.abc import Callable
+from itertools import cycle
 from typing import Literal
 
 import matplotlib.pyplot as plt
@@ -79,9 +80,10 @@ def target_distribution_figure(table: pl.DataFrame, period: str, target: str) ->
         for row in table.rows(named=True)
     ]
     boxes = ax.bxp(stats, showfliers=False, patch_artist=True, widths=0.45)
-    for patch, colour in zip(boxes["boxes"], SERIES, strict=False):
+    # The palette cycles: a fifth read of a catalogue is still a box in the house style.
+    for patch, colour in zip(boxes["boxes"], cycle(SERIES), strict=False):
         patch.set(facecolor=colour, edgecolor=colour, alpha=0.35, linewidth=1.5)
-    for median, colour in zip(boxes["medians"], SERIES, strict=False):
+    for median, colour in zip(boxes["medians"], cycle(SERIES), strict=False):
         median.set(color=colour, linewidth=2)
     for part in ("whiskers", "caps"):
         for artist in boxes[part]:

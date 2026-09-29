@@ -32,12 +32,15 @@ def figure(data_dir: Path, name: str) -> Path | None:
 
 
 def lineage(data_dir: Path, model: str) -> dict[str, str]:
-    """When a model's studies were built, and which partition of each input they read."""
+    """When a model's studies were built, and which partition of the model's own tables -
+    its features and its predictions - they read. The analysis reads every clean table as
+    well; those belong to the domain's studies, not to one model's."""
     partition = latest_partition(data_dir / ANALYSIS / f"{model}_target_distribution")
     if partition is None:
         return {}
     manifest = json.loads((partition / MANIFEST_NAME).read_text(encoding="utf-8"))
-    return {"built_at": str(manifest["built_at"]), **manifest["inputs"]}
+    own = {k: v for k, v in manifest["inputs"].items() if k.startswith(f"{model}_")}
+    return {"built_at": str(manifest["built_at"]), **own}
 
 
 def domain_studies(data_dir: Path, models: list[str]) -> list[str]:

@@ -619,7 +619,11 @@ def models_tab() -> None:
     if found is None:
         st.caption("The monitor has not compared its periods yet (`make monitor`).")
     elif found.retrain:
-        st.warning(f"The monitor asks for retraining ({found.current}): {'; '.join(found.reasons)}")
+        st.warning(
+            f"The monitor flags {found.current} against the periods before: "
+            f"{'; '.join(found.reasons)}. A retraining on these rows runs once (`make "
+            "retrain`), and the champion stays unless a candidate beats it."
+        )
     else:
         st.success(f"The monitor compared {found.current} with the periods before: nothing due.")
     named = model.name + "_{}"
