@@ -329,6 +329,8 @@ name = "coffee-mlops"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
+    { name = "numpy" },
     { name = "pandera", extra = ["polars"] },
     { name = "polars" },
     { name = "pydantic" },
@@ -376,6 +378,7 @@ explore = [
     { name = "matplotlib" },
     { name = "mlflow" },
     { name = "optuna" },
+    { name = "pydeck" },
     { name = "pypdf" },
     { name = "qdrant-client" },
     { name = "scikit-learn" },
@@ -460,6 +463,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = ">=8.5.0" },
     { name = "coffee-mlops", extras = ["agent", "analysis"], marker = "extra == 'explore'" },
     { name = "coffee-mlops", extras = ["data"], marker = "extra == 'rag'" },
     { name = "coffee-mlops", extras = ["data", "ml", "monitoring"], marker = "extra == 'orchestration'" },
@@ -485,12 +489,14 @@ requires-dist = [
     { name = "mlflow", marker = "extra == 'ml'", specifier = ">=3.16.1" },
     { name = "mlflow", marker = "extra == 'rag'", specifier = ">=3.16.1" },
     { name = "mlflow-skinny", marker = "extra == 'serving'", specifier = ">=3.16.1" },
+    { name = "numpy", specifier = ">=2.5.3" },
     { name = "optuna", marker = "extra == 'ml'", specifier = ">=5.0.0" },
     { name = "pandas", marker = "extra == 'serving'", specifier = ">=3.0.6" },
     { name = "pandera", extras = ["polars"], specifier = ">=0.33.1" },
     { name = "polars", specifier = ">=1.44.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "pydeck", marker = "extra == 'explore'", specifier = ">=0.9.3" },
     { name = "pypdf", marker = "extra == 'data'", specifier = ">=6.19.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qdrant-client", marker = "extra == 'rag'", specifier = ">=1.19.1" },

@@ -6,6 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 # Shared foundation only: config, storage layout, contracts and SQL access.
 dependencies = [
+    # Imported directly (the CLI's own option types; the shared bootstrap in `stats.py`),
+    # so declared, not borrowed from typer and polars.
+    "click>=8.5.0",
+    "numpy>=2.5.3",
     "pandera[polars]>=0.33.1",
     "polars>=1.44.2",
     "pydantic>=2.13.5",
@@ -93,9 +97,10 @@ mcp = [
     "vl-convert-python>=1.9.0",
 ]
 # The explorer app: a map (deck.gl, through pydeck), questions to the agent, and a chart of
-# each answer (Vega-Lite). Streamlit brings pydeck and altair; nothing else is new.
+# each answer (Vega-Lite).
 explore = [
     "coffee-mlops[agent,analysis]",
+    "pydeck>=0.9.3",  # imported directly, though Streamlit brings it too
 ]
 # Drift between periods, and whether a model's error left the interval it was accepted
 # with. Evidently's statistical tests (K-S, chi-squared, Wasserstein, ...) and its HTML

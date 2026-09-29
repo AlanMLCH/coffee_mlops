@@ -1338,9 +1338,16 @@ by one, or all with the variable):
   content-addressed: a download identical to the last one stores nothing. Training runs
   record the version they learned from (`data_version` tag), drift reports the version
   they compared, and the sensors key their runs by it: one change, one run.
-- **Retraining happens once per data version.** A frozen source keeps drifting in the
-  monitor's eyes; retraining it again on the same data would give the same candidate and
-  the same verdict from the gate. `make retrain` follows the same rule.
+- **Retraining happens once per version of the rows a model learns from.** A frozen
+  source keeps drifting in the monitor's eyes; retraining it again on the same data would
+  give the same candidate and the same verdict from the gate. `make retrain` follows the
+  same rule. The version a training run records, and a drift report compares, is a hash
+  of the model's feature rows (`storage.rows_version`, in any order they were written),
+  not of the raw data behind its tables. It was the raw version until 29 September, when
+  a day of the ICO's prices - read into the same table as the World Bank's months, which
+  are all `green_price` learns from - retrained `green_price` on rows it had already
+  learned from (v5, rejected like v4). Which tables to rebuild still follows the raw
+  data: rebuilding is cheap, retraining is not.
 - **Sources have a pace.** A daily run should not fetch the 83 MB boundary file that
   last changed in 2020, nor the 62 MB corpus: `refresh_hours` on a source (and on the
   corpus) skips it until due. When a source was last *checked* is kept beside its
@@ -1598,6 +1605,16 @@ The evaluation is built to survive a small test set:
   chunks on disk, and the local models pulled. It exists because the explorer and the
   agent stand on all of them at once, and a missing one used to surface elsewhere as an
   unrelated error. A service that is down is a finding, not a crash (`mlops_core/status.py`).
+- **The upstream sources are checked every Monday** (`.github/workflows/sources.yml`,
+  `uv run pytest -m network`): every file source, Overpass's selectors, every document a
+  publisher serves, and each roaster's catalogue - one request a shop, checking the
+  catalogue still has the key it is read from. On 29 September SIAP's server did not
+  accept connections (the 2025 figures were already kept) and everything else answered.
+- **Dependencies are declared where they are imported**: `numpy` (the shared bootstrap)
+  and `click` in the base, `pydeck` in `explore` - found by `deptry`, since each was only
+  there as another package's dependency. Its other findings are packages used without an
+  import (`skops` saves the models, `uvicorn` serves the API, `cryptography` opens the
+  SCA's encrypted PDFs, `vl-convert-python` is imported as `vl_convert`).
 - Python 3.12, dependencies managed with `uv` (`uv.lock` is committed).
 - Every MLflow run is tagged with the git commit that produced it, and whether the tree
   was dirty: a run from uncommitted code is not reproducible and should not pretend to be.
