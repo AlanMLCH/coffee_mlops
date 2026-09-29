@@ -2,7 +2,8 @@
 
 - Both CQI snapshots -> one canonical `coffee_reviews` table (one row per graded lot).
 - USDA PSD (long format) -> `market_context` (one row per country and market year).
-- INEGI's borough polygons -> `boroughs` (one row per alcaldia, geometry as WKB).
+- INEGI's borough polygons and its 2020 Census -> `boroughs` (one row per alcaldia,
+  geometry as WKB, with who lives there).
 - DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough).
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
 - The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
@@ -226,11 +227,54 @@ def reconcile_market_sources(file: pl.DataFrame, api: pl.DataFrame) -> Reconcili
     return result
 
 
-def clean_boroughs(areas: pl.DataFrame) -> pl.DataFrame:
-    """The boundary layer as the domain's own table: alcaldias, with their polygons."""
-    return areas.rename({"area_id": "borough_id", "area_name": "borough"}).select(
+# The 2020 Census' column -> the borough's, and whether it is a count (added up to the
+# state's total) or an average.
+CENSUS = {
+    "POBTOT": ("population", pl.Int64),
+    "P_18YMAS": ("adults", pl.Int64),
+    "TVIVHAB": ("households", pl.Int64),
+    "GRAPROES": ("schooling_years", pl.Float64),
+    "PEA": ("economically_active", pl.Int64),
+}
+STATE, TOTAL = "000", "0000"  # the census' municipality code for the state; its total rows
+
+
+def clean_boroughs(areas: pl.DataFrame, census: pl.DataFrame | None = None) -> pl.DataFrame:
+    """The boundary layer as the domain's own table: alcaldias, with their polygons and,
+    once the census is downloaded, who lives in them."""
+    boroughs = areas.rename({"area_id": "borough_id", "area_name": "borough"}).select(
         "borough_id", "borough", "area_km2", "boundary"
     )
+    if census is None:
+        logger.info("census_2020 was never ingested: the boroughs have no population yet")
+        return boroughs.with_columns(
+            pl.lit(None, dtype).alias(name) for name, dtype in CENSUS.values()
+        )
+    return boroughs.join(borough_census(census), on="borough_id", how="left")
+
+
+def borough_census(census: pl.DataFrame) -> pl.DataFrame:
+    """Each alcaldia's totals, keyed like its polygon (state + municipality = CVEGEO).
+
+    Checked, not trusted: the census prints the state's own total, and every count summed
+    over the alcaldias must come to it - a row misread, or one missing, would not.
+    """
+    totals = census.filter(pl.col("LOC") == TOTAL)
+    state = totals.filter(pl.col("MUN") == STATE)
+    boroughs = totals.filter(pl.col("MUN") != STATE).select(
+        pl.concat_str("ENTIDAD", "MUN").alias("borough_id"),
+        *[pl.col(column).cast(dtype).alias(name) for column, (name, dtype) in CENSUS.items()],
+    )
+    for column, (name, dtype) in CENSUS.items():
+        if dtype != pl.Int64:  # an average does not add up
+            continue
+        stated, summed = int(state[column].cast(pl.Int64).item()), boroughs[name].sum()
+        if stated != summed:
+            raise ValueError(
+                f"census_2020: the alcaldias' {name} add up to {summed:,}, the state's total "
+                f"says {stated:,}: a row was misread or is missing"
+            )
+    return boroughs
 
 
 def _blank_to_null(column: pl.Expr) -> pl.Expr:
@@ -464,7 +508,10 @@ def clean_tables(
     return {
         "coffee_reviews": CleanTable(clean_reviews(frames, rules), ("cqi_2018", "cqi_2023")),
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),
-        "boroughs": CleanTable(clean_boroughs(areas), ("cdmx_boroughs",)),
+        "boroughs": CleanTable(
+            clean_boroughs(areas, frames.get("census_2020")),
+            tuple(name for name in ("cdmx_boroughs", "census_2020") if name in frames),
+        ),
         "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
         "mexico_production": CleanTable(
             clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)

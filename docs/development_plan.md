@@ -85,6 +85,7 @@ flowchart TD
             psd_coffee["psd_coffee<br/>USDA PSD · ZIP"]
             siap_agricola["siap_agricola<br/>SIAP · CSV in Latin-1"]
             cdmx_boroughs["cdmx_boroughs<br/>INEGI · shapefile ZIP"]
+            census_2020["census_2020<br/>INEGI · 2020 Census, CSV in a ZIP"]
         end
         subgraph APIS["APIs, which need code"]
             direction TB
@@ -217,7 +218,7 @@ flowchart TD
     class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
     class roaster_offer_history,roaster_origin_history,roaster_flavors domain
-    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
+    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,census_2020,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp,explorer core
@@ -448,6 +449,31 @@ parlours are in both registers (3) to score that rule at all.
 
 Nothing is dropped: filter `kind = 'coffee'` for the coffee view, and use
 `matched_shop_id` to count a place both registers list only once.
+
+### Who lives there (2020 Census)
+
+Coffee shops per square kilometre measure where they are; per resident, how many each
+borough has for the people who live in it. `census_2020` is INEGI's 2020 Census,
+principal results by locality (ITER) for Mexico City: a total row per alcaldia, keyed
+like the polygons (state + municipality = CVEGEO), so `clean.boroughs` gains its
+population, adults, households, average years of schooling and economically active
+people. Verified on 29 September with the real file (175 KB ZIP, UTF-8 with a BOM, small
+localities' figures withheld as `*`): **the 16 alcaldias add up exactly to the state's
+own total row**, 9,209,944 people, and the build checks it - a misread or missing row
+would not add up, and is refused rather than stored.
+
+![Coffee shops follow schooling](figures/coffee_and_schooling.png)
+
+- **The city has 4.0 of DENUE's coffee shops per 10,000 residents**, from 12.5 in
+  Cuauhtémoc and 10.9 in Benito Juárez to 1.9 in La Magdalena Contreras - a factor of
+  six, where per km² the range is two hundredfold (Milpa Alta is mostly forest).
+- **They follow schooling**: Spearman 0.93 between coffee shops per resident and the
+  average years of schooling (0.76 per km²), across the 16 boroughs. Schooling stands in
+  for income here; sixteen points are sixteen points, and it is a correlation.
+- Read it as where coffee shops are, per resident, not as demand: the centre serves far
+  more people than live there, since it is where people commute to work.
+- In the explorer: a layer of coffee shops per 10,000 residents and a finding with the
+  scatter (`analysis.borough_coffee_shops`).
 
 ## Where Mexico grows it (stage 2)
 

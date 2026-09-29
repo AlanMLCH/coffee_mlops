@@ -48,7 +48,9 @@ null means "not reported", never zero.
 
 ## `clean.boroughs` — one alcaldia of Mexico City
 
-INEGI's 2020 geostatistical framework, layer `09mun`, reprojected to WGS84. 16 rows.
+INEGI's 2020 geostatistical framework, layer `09mun`, reprojected to WGS84, with who
+lives there from INEGI's 2020 Census (a total row per alcaldia; the 16 add up exactly to
+the state's own total, which the build checks). 16 rows.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -56,6 +58,13 @@ INEGI's 2020 geostatistical framework, layer `09mun`, reprojected to WGS84. 16 r
 | `borough` | String | Name as INEGI spells it |
 | `area_km2` | Float | Area in the layer's own projection (conformal, so ~0.6% out: the 16 sum to 1,486 km² against the published 1,495) |
 | `boundary` | Binary | The polygon as WKB in WGS84. Readable with `ST_GeomFromWKB`, or any GIS |
+| `population` | Int? | People living there, 15 March 2020 (the census' day) |
+| `adults` | Int? | People aged 18 and over |
+| `households` | Int? | Inhabited private dwellings |
+| `schooling_years` | Float? | Average years of schooling of people aged 15 and over |
+| `economically_active` | Int? | People aged 12 and over working or looking for work |
+
+Per inhabitant: divide by `population` (per 10,000: `* 10000.0 / population`).
 
 ## `clean.coffee_shops` — one place that sells coffee
 

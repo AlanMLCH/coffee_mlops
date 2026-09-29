@@ -313,6 +313,28 @@ FRED_USD_MXN = pa.DataFrameSchema(
     },
 )
 
+# INEGI withholds a small locality's figures to protect its people, and writes an asterisk.
+_CENSUS_FIGURE = pa.Column(pl.String, pa.Check.str_matches(r"^(\d+(\.\d+)?|\*)$"))
+
+# The 2020 Census, principal results by locality (ITER): only the columns read. A total
+# row per alcaldia (LOC 0000) and one for the state (MUN 000).
+CENSUS_2020 = pa.DataFrameSchema(
+    name="census_2020",
+    coerce=True,
+    unique=["ENTIDAD", "MUN", "LOC"],
+    columns={
+        "ENTIDAD": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2}$")),
+        "MUN": pa.Column(pl.String, pa.Check.str_matches(r"^\d{3}$")),
+        "NOM_MUN": _text(),
+        "LOC": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}$")),
+        "POBTOT": pa.Column(pl.Int64, pa.Check.ge(0)),  # never withheld
+        "P_18YMAS": _CENSUS_FIGURE,
+        "TVIVHAB": _CENSUS_FIGURE,
+        "GRAPROES": _CENSUS_FIGURE,
+        "PEA": _CENSUS_FIGURE,
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -328,6 +350,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "ico_prices": ICO_PRICES,
     "profeco_prices": PROFECO_PRICES,
     "fred_usd_mxn": FRED_USD_MXN,
+    "census_2020": CENSUS_2020,
 }
 
 
@@ -388,6 +411,12 @@ BOROUGHS = pa.DataFrameSchema(
         "borough": pa.Column(pl.String),
         "area_km2": pa.Column(pl.Float64, pa.Check.gt(0)),
         "boundary": pa.Column(pl.Binary),
+        # The 2020 Census; null until it is downloaded.
+        "population": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
+        "adults": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
+        "households": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
+        "schooling_years": pa.Column(pl.Float64, pa.Check.in_range(0, 25), nullable=True),
+        "economically_active": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
     },
 )
 

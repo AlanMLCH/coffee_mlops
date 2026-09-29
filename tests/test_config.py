@@ -23,6 +23,7 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "ico_prices",
         "profeco_prices",
         "fred_usd_mxn",
+        "census_2020",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]

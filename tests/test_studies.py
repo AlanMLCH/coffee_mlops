@@ -5,6 +5,8 @@ import polars as pl
 import pytest
 
 from domains.coffee.analysis import (
+    borough_coffee_shops,
+    coffee_and_schooling_figure,
     consumer_prices_by_borough,
     consumer_prices_by_fortnight,
     consumer_prices_by_state,
@@ -261,6 +263,51 @@ def shops_frame() -> pl.DataFrame:
             "matched_shop_id": ["osm-a", "osm-b", None, "denue-1", "denue-2"],
         }
     )
+
+
+def test_coffee_shops_are_counted_per_borough_against_area_and_residents() -> None:
+    """The official register's coffee shops only; a borough without census figures keeps
+    its count, without a rate per resident."""
+    shops = pl.DataFrame(
+        {
+            "borough_id": ["b1", "b1", "b1", "b2", "b3"],
+            "kind": ["coffee", "coffee", "juice", "coffee", "coffee"],
+            "source": ["denue", "denue", "denue", "osm", "denue"],
+        }
+    )
+    boroughs = pl.DataFrame(
+        {
+            "borough_id": ["b1", "b2", "b3"],
+            "borough": ["Centro", "Norte", "Sur"],
+            "area_km2": [2.0, 4.0, 10.0],
+            "population": [20_000, 40_000, None],
+            "schooling_years": [13.0, 11.0, None],
+        }
+    )
+
+    table = borough_coffee_shops(shops, boroughs)
+
+    centro = table.row(0, named=True)
+    assert (centro["borough"], centro["coffee_shops"], centro["per_km2"]) == ("Centro", 2, 1.0)
+    assert centro["per_10k_people"] == 1.0
+    assert table.filter(pl.col("borough") == "Norte")["coffee_shops"].item() == 0  # OSM's
+    assert table.row(-1, named=True)["per_10k_people"] is None
+
+
+def test_coffee_and_schooling_is_drawn_with_its_rank_correlation() -> None:
+    table = pl.DataFrame(
+        {
+            "borough": ["A", "B", "C", "D"],
+            "schooling_years": [10.0, 11.0, 12.0, None],
+            "per_10k_people": [2.0, 3.0, 9.0, None],
+        }
+    )
+
+    figure = coffee_and_schooling_figure(table)
+
+    subtitle = figure.axes[0].texts[0].get_text()
+    assert "3 boroughs" in subtitle and "Spearman 1.00" in subtitle
+    assert {t.get_text() for t in figure.axes[0].texts[1:]} == {"A", "B", "C"}
 
 
 def test_shop_kinds_share_each_register_by_kind() -> None:

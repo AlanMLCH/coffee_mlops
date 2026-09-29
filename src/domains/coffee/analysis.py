@@ -96,6 +96,7 @@ def studies(
         "market_summary": market_summary(context, market.market_year, market.top_countries),
         "market_history": market_history(context, market.spotlight_country, market.history_since),
         "shop_kinds": shop_kinds(shops),
+        "borough_coffee_shops": borough_coffee_shops(shops, clean["boroughs"]),
         "kind_agreement": agreement,
         "kind_scores": kind_scores(agreement),
         "production_by_state": production_by_state(clean["mexico_production"]),
@@ -132,6 +133,9 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     denue = tables["shop_kinds"].filter(pl.col("source") == "denue")
     if not denue.is_empty():
         drawn["shop_kinds"] = shop_kinds_figure(denue)
+    people = tables["borough_coffee_shops"].drop_nulls(["per_10k_people", "schooling_years"])
+    if people.height >= 3:  # a correlation of fewer points says nothing
+        drawn["coffee_and_schooling"] = coffee_and_schooling_figure(tables["borough_coffee_shops"])
     if not tables["roaster_coverage"].is_empty():
         drawn["roaster_coverage"] = roaster_coverage_figure(tables["roaster_coverage"])
     if not tables["flavor_profiles"].is_empty():
@@ -144,6 +148,55 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     if not tables["green_coffee_in_pesos"].is_empty():
         drawn["green_coffee_pesos"] = green_coffee_figure(tables["green_coffee_in_pesos"])
     return drawn
+
+
+def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.DataFrame:
+    """Each borough's coffee shops against its area and the people who live there.
+
+    The official register's (DENUE): OpenStreetMap's count where its volunteers map. Per
+    10,000 inhabitants counts residents, so a borough people commute into - the centre -
+    serves many more than it houses; read it as where coffee shops are, per resident, not
+    as demand. A borough the census has not reached yet has no rate.
+    """
+    counted = (
+        shops.filter((pl.col("kind") == COFFEE) & (pl.col("source") == "denue"))
+        .group_by("borough_id")
+        .agg(pl.len().alias("coffee_shops"))
+    )
+    return (
+        boroughs.select("borough_id", "borough", "area_km2", "population", "schooling_years")
+        .join(counted, on="borough_id", how="left")
+        .with_columns(pl.col("coffee_shops").fill_null(0))
+        .with_columns(
+            (pl.col("coffee_shops") / pl.col("area_km2")).alias("per_km2"),
+            (pl.col("coffee_shops") * 10_000 / pl.col("population")).alias("per_10k_people"),
+        )
+        .sort("per_10k_people", "per_km2", descending=True, nulls_last=True)
+    )
+
+
+def coffee_and_schooling_figure(table: pl.DataFrame) -> Figure:
+    """Coffee shops per resident against years of schooling, a point per borough."""
+    known = table.drop_nulls(["per_10k_people", "schooling_years"])
+    rho = known.select(pl.corr("schooling_years", "per_10k_people", method="spearman")).item()
+    figure, ax = canvas(
+        "Coffee shops follow schooling",
+        f"{known.height} boroughs: DENUE's coffee shops per resident, 2020 Census; "
+        f"Spearman {rho:.2f}",
+    )
+    ax.scatter(known["schooling_years"], known["per_10k_people"], s=46, color=SERIES[0], zorder=3)
+    # Named where a name can be read: the crowd at the bottom left would bury them all.
+    named = {*known.top_k(5, by="per_10k_people")["borough"],
+             *known.bottom_k(2, by="schooling_years")["borough"]}  # fmt: skip
+    for row in known.filter(pl.col("borough").is_in(list(named))).iter_rows(named=True):
+        point = (row["schooling_years"], row["per_10k_people"])
+        ax.annotate(row["borough"], point, xytext=(5, 3), textcoords="offset points",
+                    fontsize=7.5, color=SECONDARY)  # fmt: skip
+    ax.set_xlabel("average years of schooling, people 15 and over", color=MUTED)
+    ax.set_ylabel("coffee shops per 10,000 residents", color=MUTED)
+    value_grid(ax, "y")
+    figure.tight_layout()
+    return figure
 
 
 def shop_kinds(shops: pl.DataFrame) -> pl.DataFrame:

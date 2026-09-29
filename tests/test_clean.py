@@ -10,6 +10,7 @@ import domains.coffee
 from domains.coffee.adapter import CoffeeAdapter
 from domains.coffee.clean import (
     altitude_from_text,
+    borough_census,
     clean_boroughs,
     clean_coffee_shops,
     clean_market_context,
@@ -317,6 +318,25 @@ def test_boroughs_keep_their_polygon_and_their_official_key(frames: Frames) -> N
     assert "Cuauhtémoc" in table["borough"].to_list()
     # The geometry travels as WKB, so reading the table needs no spatial extension.
     assert table["boundary"].dtype == pl.Binary
+    assert table["population"].null_count() == 16  # no census handed over: no population
+
+
+def test_boroughs_know_who_lives_in_them_from_the_census(frames: Frames) -> None:
+    table = check_contract(BOROUGHS, clean_boroughs(frames["cdmx_boroughs"], frames["census_2020"]))
+
+    hidalgo = table.filter(pl.col("borough_id") == "09016").row(0, named=True)
+    assert (hidalgo["population"], hidalgo["households"]) == (414470, 146828)
+    assert hidalgo["schooling_years"] == pytest.approx(14.2)
+    # A borough the census rows do not name keeps its polygon, without people.
+    assert table.filter(pl.col("population").is_null()).height == 13
+
+
+def test_a_census_whose_boroughs_do_not_add_up_to_the_state_is_refused(frames: Frames) -> None:
+    """A row misread, or missing, and the counts no longer come to the state's own total."""
+    short = frames["census_2020"].filter(pl.col("MUN") != "016")
+
+    with pytest.raises(ValueError, match="population add up to 793,506, the state's total says"):
+        borough_census(short)
 
 
 def test_the_api_and_the_file_agree_on_every_row(frames: Frames) -> None:

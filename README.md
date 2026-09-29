@@ -18,8 +18,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 13 sources of four kinds** - static files (CQI cupping scores, USDA's world
-  coffee balance, SIAP's harvests, INEGI's borough polygons, World Bank and ICO prices,
+- **Reads 14 sources of four kinds** - static files (CQI cupping scores, USDA's world
+  coffee balance, SIAP's harvests, INEGI's borough polygons and 2020 Census, World Bank and ICO prices,
   PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first) - their tasting notes read into the SCA's flavour
@@ -65,7 +65,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Green coffee fell 27% in pesos from its February 2025 peak, but only 12% in dollars:
   for a Mexican roaster, the exchange rate moved the cost more than the market did.
 - Of the 9,860 places INEGI registers as "cafeterías" in Mexico City, 38% are named as
-  coffee shops; a quarter sell juice.
+  coffee shops; a quarter sell juice. Per resident, they follow schooling: 12.5 per
+  10,000 people in Cuauhtémoc, 1.9 in La Magdalena Contreras (Spearman 0.93 with the
+  average years of schooling, 16 boroughs).
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
@@ -83,7 +85,7 @@ query; every answer shows the query behind it.
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["13 sources + 17 documents"]
+    subgraph SOURCES["14 sources + 17 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]

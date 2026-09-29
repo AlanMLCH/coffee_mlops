@@ -67,6 +67,7 @@ def test_extract_writes_raw_layer_under_the_domain(
         "ico_prices",
         "profeco_prices",
         "fred_usd_mxn",
+        "census_2020",
         *served,
     }
 
@@ -336,6 +337,7 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "review_feature_importance.png",
         "market_history.png",
         "mexico_production.png",  # review_residual_bias needs predictions; this run has none
+        "coffee_and_schooling.png",
         "roaster_coverage.png",
         "flavor_profiles.png",
         "offer_feature_importance.png",

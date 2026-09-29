@@ -110,6 +110,19 @@ sources:
     member: QQP_2026 # the folder of fortnights: the domain's reader reads them all
     refresh_hours: 168 # a monthly release of 195 MB, not fetched every day
 
+  # INEGI's 2020 Census, principal results by locality (ITER), for Mexico City: who lives
+  # in each alcaldia, to set the coffee shops against people as well as square
+  # kilometres. A row per locality and a total row per alcaldia (LOC 0000) and for the
+  # state (MUN 000); state + municipality is the polygons' CVEGEO. Verified 2026-09-29:
+  # 175 KB ZIP, 666 rows by 286 columns, UTF-8 with a BOM; the state's 9,209,944 people
+  # are exactly the alcaldias' sum; small localities' figures withheld as "*". robots.txt
+  # allows /contenidos/programas. Licence: INEGI's terms (free use, citing it). Decennial.
+  census_2020:
+    url: https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/iter/iter_09_cpv2020_csv.zip
+    filename: iter_09_cpv2020_csv.zip
+    member: iter_09_cpv2020/conjunto_de_datos/conjunto_de_datos_iter_09CSV20.csv
+    refresh_hours: 8760 # the next census is 2030
+
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
 # shows only the current month, each read of the roasters' catalogues is an observation
 # of what they sold then, and PROFECO's archive holds only the current year - when 2027's
@@ -962,6 +975,7 @@ analysis:
     - offer_feature_importance
     - market_history
     - shop_kinds
+    - coffee_and_schooling
     - mexico_production
     - roaster_coverage
     - flavor_profiles
@@ -1032,6 +1046,14 @@ explore:
       description: Places the official register names as coffee shops, per square kilometre of borough
       sql: >-
         SELECT b.borough_id, count(*) / any_value(b.area_km2) AS coffee_shops_per_km2
+        FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
+        WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
+    - name: Coffee shops per 10,000 residents (DENUE)
+      kind: areas
+      unit: per 10,000 residents
+      description: The same coffee shops, per resident (2020 Census). The centre serves many more people than it houses
+      sql: >-
+        SELECT b.borough_id, count(*) * 10000.0 / any_value(b.population) AS coffee_shops_per_10k
         FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
         WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
     - name: Median shelf price of ground coffee
@@ -1184,6 +1206,17 @@ explore:
         WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
       kind: areas
       y: coffee_shops_per_km2
+    - title: Coffee shops follow schooling
+      text: >-
+        Coffee shops per 10,000 residents against the average years of schooling of each
+        borough: the order of the two is nearly the same (Spearman 0.93). The centre
+        serves many more people than live there, so read it as where cafes are.
+      sql: >-
+        SELECT borough, schooling_years, per_10k_people FROM analysis.borough_coffee_shops
+        WHERE per_10k_people IS NOT NULL
+      kind: scatter
+      x: schooling_years
+      y: per_10k_people
     - title: Who grows Mexico's coffee
       text: >-
         Share of the 2025 harvest of coffee cherry by state: Chiapas, Veracruz, Puebla and

@@ -158,6 +158,30 @@ def qqp_archive(fortnights: dict[str, tuple[str, list[str], list[list[str]]]]) -
     return buffer.getvalue()
 
 
+# INEGI's census shaped as it downloads: a BOM, a ZIP, a folder. Three of the boundary
+# fixture's boroughs, the state's total as their sum, and a small locality whose figures
+# are withheld.
+CENSUS_MEMBER = "iter_09_cpv2020/conjunto_de_datos/conjunto_de_datos_iter_09CSV20.csv"
+CENSUS_ROWS = [
+    "ENTIDAD,NOM_ENT,MUN,NOM_MUN,LOC,NOM_LOC,POBTOT,P_18YMAS,TVIVHAB,GRAPROES,PEA",
+    "09,Ciudad de México,000,Total de la entidad Ciudad de México,0000,Total de la Entidad,"
+    "1207976,979460,411528,12.70,678601",
+    "09,Ciudad de México,008,La Magdalena Contreras,0000,Total del Municipio,"
+    "247622,190500,68107,11.20,137000",
+    "09,Ciudad de México,008,La Magdalena Contreras,0021,Tierra Colorada,12,*,4,*,*",
+    "09,Ciudad de México,015,Cuauhtémoc,0000,Total del Municipio,545884,452000,196593,12.41,300000",
+    "09,Ciudad de México,016,Miguel Hidalgo,0000,Total del Municipio,"
+    "414470,336960,146828,14.20,241601",
+]
+
+
+def census_archive(rows: list[str] = CENSUS_ROWS) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(CENSUS_MEMBER, "﻿" + "\r\n".join(rows) + "\r\n")
+    return buffer.getvalue()
+
+
 def zip_fixture(fixture: str, member: str) -> bytes:
     """Rebuild the upstream ZIP envelope around a recorded CSV excerpt."""
     buffer = io.BytesIO()
@@ -217,6 +241,7 @@ def recorded() -> dict[str, bytes]:
         # months have rates; September has none yet.
         "fred_usd_mxn": b"observation_date,DEXMXUS\n2026-07-01,17.4000\n2026-07-02,17.5000\n"
         b"2026-07-03,\n2026-08-03,17.0000\n2026-08-04,17.1000\n",
+        "census_2020": census_archive(),
     }
 
 
