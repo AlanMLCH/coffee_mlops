@@ -8,7 +8,8 @@ Each shop is read the way its platform publishes the catalog (`mlops_core.data.s
 after its robots.txt allows it. A shop whose catalog JSON leaves the attributes out
 (Buna keeps them only on the product page) also has its coffee product pages read. What
 is stored is what the shops answered - the products as their platform returned them and
-the pages as served - so the parsing can change without asking the shops again.
+the pages as served, less their layout whitespace (`steady`) - so the parsing can change
+without asking the shops again.
 """
 
 import json
@@ -45,6 +46,19 @@ def is_coffee(product: dict[str, Any], shop: ShopConfig) -> bool:
     return product.get("product_type") in shop.product_types or bool(tags & set(shop.tags))
 
 
+def steady(page: str) -> str:
+    """A page as served, less the whitespace its template renders differently each time:
+    every line trimmed, blank lines dropped.
+
+    Buna's product pages came back with other blank lines and indentation two minutes
+    apart and nothing else changed, so every read stored a new 6 MB partition of the same
+    catalogue - the de-duplication by content saw a change that is not one. Whitespace
+    between tags is layout; the words and the markup are kept as served (the same reason
+    OSM's answer is stored without its per-minute timestamp).
+    """
+    return "\n".join(line.strip() for line in page.splitlines() if line.strip())
+
+
 def product_url(product: dict[str, Any], shop: ShopConfig) -> str:
     if shop.platform == "shopify":
         return f"{shop.base_url}/products/{product['handle']}"
@@ -64,7 +78,7 @@ def read_shop(client: ApiClient, robots: RobotsPolicy, shop: ShopConfig) -> dict
     if shop.product_pages:
         for product_id, url in urls.items():
             robots.check(url)
-            pages[product_id] = client.get_text(url, cache_key=f"page:{url}")
+            pages[product_id] = steady(client.get_text(url, cache_key=f"page:{url}"))
     logger.info(
         "%s: %d coffee listings of %d, %d pages read",
         shop.shop,

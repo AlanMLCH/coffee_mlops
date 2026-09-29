@@ -29,9 +29,12 @@ NOW = datetime(2026, 9, 21, tzinfo=UTC)
 class Shops:
     """The recorded shops, optionally with one robots.txt replaced."""
 
-    def __init__(self, robots: dict[str, str] | None = None, reverse: bool = False) -> None:
+    def __init__(
+        self, robots: dict[str, str] | None = None, reverse: bool = False, relaid: bool = False
+    ) -> None:
         self.robots = robots or {}
         self.reverse = reverse  # list every catalog backwards, as a shop is free to
+        self.relaid = relaid  # render each page's whitespace anew, as Buna's template does
         self.asked: list[str] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -46,6 +49,9 @@ class Shops:
                 if listing in payload:
                     payload[listing].reverse()
             return httpx.Response(200, json=payload)
+        if self.relaid and request.url.path.startswith("/products/"):
+            lines = response.text.splitlines()
+            return httpx.Response(200, text="\n\n".join(f"    {line}  " for line in lines))
         return response
 
 
@@ -137,6 +143,17 @@ def test_the_same_catalog_in_another_order_is_not_new_data(
     ingest(Shops(reverse=True), roasters, tmp_path, cache="second")  # asked afresh, backwards
 
     assert len(list((tmp_path / "raw" / "roaster_catalogs").glob("*=*"))) == 1
+
+
+def test_a_page_laid_out_anew_is_not_new_data(roasters: RoastersConfig, tmp_path: Path) -> None:
+    """Buna's pages came back with other blank lines and indentation minutes apart; the
+    words and the markup are what is kept, so the same page is the same data."""
+    first, _ = ingest(Shops(), roasters, tmp_path, cache="first")
+    ingest(Shops(relaid=True), roasters, tmp_path, cache="second")
+
+    assert len(list((tmp_path / "raw" / "roaster_catalogs").glob("*=*"))) == 1
+    page = next(iter(first["shops"]["buna"]["pages"].values()))
+    assert "\n\n" not in page and page == page.strip()
 
 
 @pytest.fixture

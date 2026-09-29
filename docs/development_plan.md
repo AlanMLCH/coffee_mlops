@@ -1524,6 +1524,16 @@ ones read again are ones the model may have learned.
   builds of the derived layers, which are rebuilt from raw, and nothing else: a download
   cannot always be made again (a page that shows only this month, a catalogue that shows
   only today, a file its publisher has replaced).
+- **But a read of the shops was always "new"** (found 29 September, on a fresh clone that
+  read them twice two minutes apart and stored two 6 MB partitions). Buna's product pages
+  came back with other blank lines and indentation on every request and nothing else
+  different, so the content-addressed raw layer saw a change each time: 7 partitions in 8
+  days in the real data, some of them the same catalogue. The pages are now stored
+  without their layout whitespace (every line trimmed, blank lines dropped; `steady` in
+  `sources/roasters.py`), the precedent being OSM's answer stored without its per-minute
+  timestamp. Checked on the newest real read: the six clean tables built from the trimmed
+  pages are identical to those from the pages as served, and the document is 17% smaller.
+  The partitions already stored stay as they are; the next read starts the trimmed ones.
 
 ## What a kilogram costs on the shelf (stage 4)
 
