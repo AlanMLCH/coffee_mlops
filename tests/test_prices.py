@@ -65,6 +65,17 @@ def test_a_misread_page_is_refused_rather_than_stored() -> None:
         parse_indicator_prices(page(("Low 268.38 366.51 338.76 300.83 166.66", "")))
 
 
+def test_the_average_is_the_icos_mean_of_unrounded_prices() -> None:
+    """The days shown are rounded to the cent, the ICO averages the prices behind them: the
+    mean of what is shown can be up to a cent off the page's Average (robustas, 28 September
+    2026: 167.7547 against 167.76). Further than that, a figure was misread."""
+    days = parse_indicator_prices(page(("306.46 169.44", "306.46 169.45")))
+    assert days.height == 3  # 169.4433 shown against 169.45: within a cent
+
+    with pytest.raises(ValueError, match=r"robustas: the days read give Average 169.443"):
+        parse_indicator_prices(page(("306.46 169.44", "306.46 169.46")))
+
+
 def test_a_page_laid_out_otherwise_is_refused() -> None:
     with pytest.raises(ValueError, match="The columns changed"):
         parse_indicator_prices(page((" Naturals Robustas", " Naturals Robustas Excelsas")))

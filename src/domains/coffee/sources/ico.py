@@ -31,8 +31,12 @@ _NUMBER = r"(\d+(?:\.\d+)?)"
 _DAY = re.compile(rf"^(\d{{1,2}})-([A-Z][a-z]{{2}})\s+{r'\s+'.join([_NUMBER] * 5)}\s*$")
 _BLANK_DAY = re.compile(r"^\d{1,2}-[A-Z][a-z]{2}\s*$")
 _SUMMARY = re.compile(rf"^(Average|High|Low)\s+{r'\s+'.join([_NUMBER] * 5)}\s*$")
-# The page rounds its average to the cent; a mean within half a cent of it agrees.
-ROUNDING = 0.005 + 1e-9
+# How far what the days say may be from the page's own rows. High and low are a day's
+# price, rounded like the day: half a cent. The average is the ICO's mean of its unrounded
+# prices, rounded: the mean of the rounded days can be half a cent off that mean, and the
+# page's rounding half a cent more. Seen 2026-09-28: robustas' 19 days average 167.7547,
+# the page says 167.76.
+ROUNDING = {"Average": 0.01 + 1e-9, "High": 0.005 + 1e-9, "Low": 0.005 + 1e-9}
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
           "September", "October", "November", "December")  # fmt: skip
 
@@ -85,7 +89,7 @@ def _agrees_with_its_summary(frame: pl.DataFrame, summary: dict[str, list[float]
         read = {"Average": values.mean(), "High": values.max(), "Low": values.min()}
         for row, value in read.items():
             got = float(value)  # type: ignore[arg-type]
-            if abs(got - summary[row][n]) > ROUNDING:
+            if abs(got - summary[row][n]) > ROUNDING[row]:
                 raise ValueError(
                     f"{indicator}: the days read give {row} {got:.3f}, the page says "
                     f"{summary[row][n]:.2f}: the page was misread"
