@@ -41,9 +41,9 @@ from mlops_core.ml.train import (
     split_items,
     temporal_split,
     train_model,
-    trained_on,
     xy,
 )
+from mlops_core.provenance import trained_on
 from mlops_core.stats import Comparison
 from mlops_core.storage import content_version, write_table
 from tests.fakes import with_training

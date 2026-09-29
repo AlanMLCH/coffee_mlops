@@ -6,7 +6,13 @@ from pydantic import ValidationError
 import domains.coffee
 from domains.coffee.config import CleaningConfig, CoffeeConfig, CoffeeCredentials, ShopConfig
 from mlops_core.adapter import available_domains, load_adapter
-from mlops_core.config import ModelSpec, Settings, load_config
+from mlops_core.config import (
+    ModelSpec,
+    Settings,
+    env_file_names,
+    load_config,
+    unread_settings,
+)
 
 
 def test_coffee_config_declares_its_file_sources() -> None:
@@ -237,3 +243,22 @@ def test_a_schedule_is_a_cron_in_a_timezone() -> None:
     assert schedule == ScheduleConfig(data="0 7 * * *", timezone="America/Mexico_City")
     with pytest.raises(ValidationError, match="should match pattern"):
         ScheduleConfig(data="every morning", timezone="UTC")
+
+
+def test_a_setting_under_the_wrong_prefix_or_name_is_said_to_be_unread(tmp_path: Path) -> None:
+    """Pydantic ignores them in silence; the default then passes for the value."""
+    env = tmp_path / ".env"
+    env.write_text(
+        "# a comment = not a variable\nCOFFEE_DATA_DIR=data\nMLOPS_DATADIR=x\n"
+        "COFFEE_DENUE_TOKEN=secret\nMLOPS_DATA_DIR=data\n",
+        encoding="utf-8",
+    )
+
+    names = env_file_names(env)
+
+    assert names == ["COFFEE_DATA_DIR", "MLOPS_DATADIR", "COFFEE_DENUE_TOKEN", "MLOPS_DATA_DIR"]
+    assert unread_settings(names, "coffee") == {
+        "COFFEE_DATA_DIR": "not read: the setting is MLOPS_DATA_DIR",
+        "MLOPS_DATADIR": "no setting has this name",
+    }
+    assert env_file_names(tmp_path / "missing.env") == []

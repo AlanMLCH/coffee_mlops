@@ -618,6 +618,12 @@ def models_tab() -> None:
     found = latest_verdict(data_dir, model.name)
     if found is None:
         st.caption("The monitor has not compared its periods yet (`make monitor`).")
+    elif found.trained_run is not None and found.reasons:
+        st.info(
+            f"The monitor compared {found.current} with the periods before and found drift "
+            f"({'; '.join(found.reasons)}), but these are the rows a training run already "
+            "learned from: retraining on them would give the same model. Nothing is due."
+        )
     elif found.retrain:
         st.warning(
             f"The monitor flags {found.current} against the periods before: "

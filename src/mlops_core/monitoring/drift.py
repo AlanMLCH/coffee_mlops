@@ -7,16 +7,23 @@ Evidently's statistical tests, which it picks by column type and sample size (K-
 Wasserstein for numbers, chi-squared, Z or Jensen-Shannon for categories). A column has
 drifted when its test says so at Evidently's own threshold.
 
-A model is due for retraining when any of these holds:
+A retraining is decided in two steps, in this order:
 
-- the share of its features that drifted reaches `monitoring.drift_share`;
-- its target drifted: what it predicts is no longer distributed as it learned it;
-- its error on the newest period left the interval the gate accepted its champion with
-  (the upper end of the champion run's `test_mae` confidence interval).
+1. **Are these rows new?** If a training run of the model already learned from exactly
+   these feature rows (compared by content, `storage.rows_version`), nothing is due,
+   whatever drifted: the same rows give the same candidate, and the gate the same answer.
+   A frozen snapshot keeps its drift forever; it is retrained once, not on every run.
+2. **Did they drift?** On rows no run has learned from, a retraining is due when any of
+   these holds:
+   - the share of its features that drifted reaches `monitoring.drift_share`;
+   - its target drifted: what it predicts is no longer distributed as it learned it;
+   - its error on the newest period left the interval the gate accepted its champion
+     with (the upper end of the champion run's `test_mae` confidence interval).
 
-The monitor only says so, with its reasons. Retraining produces a candidate like any
-other, and the gate decides whether it is served: a monitor that promoted models by
-itself would be a gate that looks at no evidence.
+The drift is measured and recorded either way. The monitor only says what is due:
+retraining produces a candidate like any other, and the gate decides whether it is
+served - a monitor that promoted models by itself would be a gate that looks at no
+evidence.
 
 Every run writes the per-column table to the `monitoring` layer, keeps Evidently's HTML
 report beside it, and logs both to MLflow (experiment `<domain>-monitoring`).
@@ -35,7 +42,7 @@ from mlflow import MlflowClient
 from pydantic import BaseModel
 
 from mlops_core.config import DomainConfig, ModelConfig
-from mlops_core.provenance import code_version
+from mlops_core.provenance import code_version, trained_on
 from mlops_core.storage import content_version, latest_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
@@ -62,8 +69,11 @@ class Verdict(BaseModel):
     model: str
     current: str
     retrain: bool
-    reasons: list[str]
+    reasons: list[str]  # what drifted
     data_version: str
+    # The training run that already learned from these rows, if one did: then nothing is
+    # due, whatever drifted. None on a verdict written before this was recorded.
+    trained_run: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,13 +88,15 @@ class DriftResult:
     target_drifted: bool
     current_mae: float | None  # the champion's error on the newest period, if it has labels
     accepted_mae: float | None  # the upper end of the interval the gate accepted it with
-    reasons: list[str]  # why it should be retrained; empty when it should not
+    reasons: list[str]  # what drifted, each a reason to retrain on rows not yet learned from
     report_html: str
     data_version: str = ""  # the rows of the features compared (`storage.rows_version`)
+    trained_run: str | None = None  # a training run that already learned from these rows
 
     @property
     def retrain(self) -> bool:
-        return bool(self.reasons)
+        """Due only on rows no training run has learned from, and only if they drifted."""
+        return self.trained_run is None and bool(self.reasons)
 
 
 def periods_in_order(frame: pl.DataFrame, period: str, time: str) -> list[str]:
@@ -241,17 +253,20 @@ def monitor_model(
     """Compare one model's newest period with the earlier ones, write the table and the
     report to the monitoring layer, and log both to MLflow."""
     model = config.model_named(model_name)
-    features = read_table(data_dir / "features" / model.features_table)
+    features_dir = data_dir / "features" / model.features_table
+    features = read_table(features_dir)
     predictions_dir = data_dir / "predictions" / model.predictions_table
     predictions = read_table(predictions_dir) if predictions_dir.is_dir() else None
     mlflow.set_tracking_uri(tracking_uri)
+    # First, are these rows new? A run that already learned from them settles it.
+    data_version = content_version(features_dir) or ""
+    trained_run = trained_on(config, model_name, data_version) if data_version else None
     accepted = accepted_error(model.training.registered_model) if predictions is not None else None
     result = detect_drift(model, features, predictions, config.monitoring.drift_share, accepted)
     if result is None:
         logger.info("%s has one period only: nothing to compare yet", model_name)
         return None
-    features_dir = data_dir / "features" / model.features_table
-    result = replace(result, data_version=content_version(features_dir) or "")
+    result = replace(result, data_version=data_version, trained_run=trained_run)
 
     table = write_table(
         result.columns,
@@ -267,6 +282,7 @@ def monitor_model(
         retrain=result.retrain,
         reasons=result.reasons,
         data_version=result.data_version,
+        trained_run=result.trained_run,
     )
     (table.parent / VERDICT_FILE).write_text(verdict.model_dump_json(indent=2), encoding="utf-8")
 
@@ -279,6 +295,7 @@ def monitor_model(
                 "retrain": str(result.retrain),
                 "reasons": "; ".join(result.reasons),
                 "data_version": result.data_version,
+                "trained_run": result.trained_run or "",
             }
             | (version.as_tags() if version else {})
         )

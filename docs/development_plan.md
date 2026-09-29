@@ -1382,6 +1382,12 @@ indicator and day or month, in US cents per pound:
   what it could not reach; run again, it downloads only what is not fresh. A bug is not
   caught: it still stops the run where it happens. Dagster's `raw_sources` fails the same
   way, after the rest is stored.
+- **The World Bank is asked weekly, not daily** (`refresh_hours` 20 → 168). The file is
+  released monthly; a daily ask found nothing new. On 29 September its host began
+  resetting this client's TLS handshake after the fresh clone's burst of retries, while
+  curl with the same user agent still got the file: a refusal aimed at this client, which
+  is not worked around (no browser impersonation). The stored months stay the ones the
+  build reads, and the failure is named.
 
 **In pesos.** `clean.exchange_rates` holds the peso-dollar rate, the Federal Reserve's
 daily noon buying rate in New York through FRED (no key; Banxico's official FIX needs a
@@ -1527,6 +1533,16 @@ by one, or all with the variable):
   are all `green_price` learns from - retrained `green_price` on rows it had already
   learned from (v5, rejected like v4). Which tables to rebuild still follows the raw
   data: rebuilding is cheap, retraining is not.
+- **The verdict asks about the rows first, then about drift** (29 September). The
+  monitor's verdict used to say "due for retraining" whenever it saw drift, and `make
+  retrain` then declined for rows already learned from - so the monitor, the status and
+  the explorer went on asking for a retraining that would never happen. Now the monitor
+  first asks whether a training run already learned from exactly these rows
+  (`provenance.trained_on`, moved out of `ml` so the monitor can ask without importing
+  the trainer); only on new rows does drift make a retraining due. The drift is still
+  measured and recorded (`reasons`), and the verdict names the run (`trained_run`). Real
+  data, that day: review and green_price drifted as always, on the rows runs had learned
+  from, so nothing is due; offer's newest read has new rows and no drift.
 - **Sources have a pace.** A daily run should not fetch the 83 MB boundary file that
   last changed in 2020, nor the 62 MB corpus: `refresh_hours` on a source (and on the
   corpus) skips it until due. When a source was last *checked* is kept beside its
@@ -1832,6 +1848,11 @@ so nothing could lean on the working copy.
   publisher serves, and each roaster's catalogue - one request a shop, checking the
   catalogue still has the key it is read from. On 29 September SIAP's server did not
   accept connections (the 2025 figures were already kept) and everything else answered.
+- **A setting under the wrong name is said, not ignored.** Pydantic skips a variable no
+  setting reads, so a `.env` still carrying `COFFEE_DATA_DIR` from before the core had its
+  own prefix left the data dir at its default - which happened to be right. `mlops
+  secrets` now names every variable that looks like a setting and is read by nothing: an
+  `MLOPS_*` that is no setting, or a core setting under the domain's prefix.
 - **Dependencies are declared where they are imported**: `numpy` (the shared bootstrap)
   and `click` in the base, `pydeck` in `explore` - found by `deptry`, since each was only
   there as another package's dependency. Its other findings are packages used without an

@@ -72,7 +72,10 @@ sources:
     sheet: Monthly Prices
     header_row: 4 # four rows of title and notes above it
     skip_rows: 1 # the row of units under it
-    refresh_hours: 20 # released monthly; checked on each daily run, early or late
+    # Released monthly, so a week is soon enough to see a release. Daily asks gained
+    # nothing, and on 2026-09-29 the file's host began resetting this client's
+    # connections after a burst of retries (curl, same agent, still got it).
+    refresh_hours: 168
 
   # The ICO's daily indicator prices, in US cents/lb: the current month only, one PDF
   # page (the old coffee_prices.asp answers 500 since the site moved). Each download is

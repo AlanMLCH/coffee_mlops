@@ -9,6 +9,7 @@ nobody declared.
 """
 
 import re
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self
@@ -50,6 +51,38 @@ class Settings(BaseSettings):
     # by hand, and opening the orchestrator's UI starts nothing. A deployment meant to keep
     # its own history (the ICO's month, the shops' catalogues) sets MLOPS_AUTOMATE=true.
     automate: bool = False
+
+
+def unread_settings(names: Iterable[str], domain: str) -> dict[str, str]:
+    """Variables that look like settings but that no setting reads, each with why.
+
+    Pydantic ignores an unknown variable in silence, so a name that is off by a prefix
+    (`<DOMAIN>_DATA_DIR`, from before the core had its own) or by a letter leaves its
+    setting at the default - which can look like it worked. Two cases: an `MLOPS_*` name
+    that is no setting, and a core setting written under the domain's prefix.
+    """
+    fields = {name.upper() for name in Settings.model_fields}
+    prefix = f"{domain.upper()}_"
+    found = {}
+    for name in names:
+        upper = name.upper()
+        if upper.startswith("MLOPS_") and upper.removeprefix("MLOPS_") not in fields:
+            found[name] = "no setting has this name"
+        elif upper.startswith(prefix) and upper.removeprefix(prefix) in fields:
+            found[name] = f"not read: the setting is MLOPS_{upper.removeprefix(prefix)}"
+    return found
+
+
+def env_file_names(path: Path) -> list[str]:
+    """The variable names a `.env` file sets, values never read into anything."""
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [
+        line.split("=", 1)[0].strip()
+        for line in lines
+        if "=" in line and not line.lstrip().startswith("#")
+    ]
 
 
 class SpatialConfig(BaseModel):

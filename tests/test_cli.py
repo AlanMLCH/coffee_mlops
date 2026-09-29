@@ -404,6 +404,21 @@ def test_secrets_reports_what_is_configured_without_printing_it(
     assert "USDA FAS key (COFFEE_USDA_FAS_API_KEY): missing" in result.output
 
 
+def test_secrets_names_a_variable_that_nothing_reads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("COFFEE_MLFLOW_TRACKING_URI=http://x\n", encoding="utf-8")
+
+    result = CliRunner().invoke(cli.app, ["secrets"])
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "COFFEE_MLFLOW_TRACKING_URI: not read: the setting is MLOPS_MLFLOW_TRACKING_URI"
+        in result.output
+    )
+
+
 def test_secrets_says_so_when_a_domain_needs_none(monkeypatch: pytest.MonkeyPatch) -> None:
     open_domain = domains.coffee.adapter()
     monkeypatch.setattr(open_domain, "credentials", dict)
@@ -447,8 +462,9 @@ def test_a_model_that_did_not_drift_is_left_alone(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     steady = SimpleNamespace(
-        current="2026", reference=["2025"], drifted_share=0.1, reasons=[], retrain=False
-    )
+        current="2026", reference=["2025"], drifted_share=0.1, reasons=[], retrain=False,
+        trained_run=None,
+    )  # fmt: skip
     monkeypatch.setattr("mlops_core.monitoring.drift.monitor_model", lambda *args: steady)
     retrained: list[str | None] = []
     monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
@@ -463,21 +479,21 @@ def test_a_model_that_did_not_drift_is_left_alone(
     assert retrained == []
 
 
-def test_a_model_already_trained_on_the_data_is_not_retrained(
+def test_a_model_already_trained_on_the_rows_is_not_retrained_and_its_drift_is_recorded(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A frozen source keeps its drift; retraining on the same data again is pointless."""
+    """A frozen source keeps its drift; retraining on the same rows again is pointless."""
     drifted = SimpleNamespace(
         current="cqi_2023", reference=["cqi_2018"], drifted_share=1.0,
-        reasons=["the target drifted"], retrain=True, data_version="d1",
+        reasons=["the target drifted"], retrain=False, data_version="d1", trained_run="run-9",
     )  # fmt: skip
     monkeypatch.setattr("mlops_core.monitoring.drift.monitor_model", lambda *args: drifted)
-    monkeypatch.setattr("mlops_core.ml.train.trained_on", lambda *args: "run-9")
     retrained: list[str | None] = []
     monkeypatch.setattr(cli, "ml_run", lambda domain, model: retrained.append(model))
 
     result = CliRunner().invoke(cli.app, ["monitor", "--model", "review", "--retrain"])
 
     assert result.exit_code == 0, result.output
-    assert "review: already trained on this data (run run-9), not again" in result.output
+    assert "the same rows run run-9 learned from: no retraining due" in result.output
+    assert "drift, recorded: the target drifted" in result.output
     assert retrained == []

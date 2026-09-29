@@ -193,6 +193,31 @@ def test_the_monitor_writes_its_table_and_report_and_logs_a_run(
     assert run.data.metrics["accepted_mae"] == 2.0
 
 
+def test_rows_a_model_already_learned_from_are_not_retrained_on_whatever_drifted(
+    tmp_path: Path, coffee_config: DomainConfig
+) -> None:
+    """First the rows, then the drift: a frozen snapshot keeps drifting on every run, and
+    retraining on the same rows would give the same candidate."""
+    config = coffee_config.model_copy(update={"models": [model()]})
+    data_dir = tmp_path / "coffee"
+    table = features({"size": 1.0, "age": 1.0})
+    write_table(table, data_dir / "features" / "price_features", {})
+    uri = f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}"
+    mlflow.set_tracking_uri(uri)
+    rows = content_version(data_dir / "features" / "price_features")
+    mlflow.set_experiment("coffee-price")
+    with mlflow.start_run() as trained:
+        mlflow.set_tag("data_version", rows)
+
+    result = monitor_model(config, "price", data_dir, uri)
+
+    assert result is not None and result.reasons  # it drifted, and that is recorded
+    assert result.trained_run == trained.info.run_id and not result.retrain
+    verdict = latest_verdict(data_dir, "price")
+    assert verdict is not None and not verdict.retrain and verdict.reasons
+    assert verdict.trained_run == trained.info.run_id
+
+
 def test_a_model_with_one_period_leaves_no_record(
     tmp_path: Path, coffee_config: DomainConfig
 ) -> None:

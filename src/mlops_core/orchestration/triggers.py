@@ -17,8 +17,8 @@ from pathlib import Path
 
 from mlops_core.adapter import DomainAdapter
 from mlops_core.config import DomainConfig
-from mlops_core.ml.train import trained_on
 from mlops_core.monitoring.drift import latest_verdict
+from mlops_core.provenance import trained_on
 from mlops_core.storage import built_from, latest_data_version
 
 

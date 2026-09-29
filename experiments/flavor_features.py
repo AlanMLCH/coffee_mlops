@@ -31,7 +31,8 @@ import polars as pl
 from mlops_core.adapter import load_adapter
 from mlops_core.config import GroupSplit, Settings
 from mlops_core.ml.evaluation import absolute_errors
-from mlops_core.ml.train import experiment_name, out_of_fold, split_items, tune
+from mlops_core.ml.train import out_of_fold, split_items, tune
+from mlops_core.provenance import experiment_name
 from mlops_core.stats import compare
 from mlops_core.storage import read_table
 

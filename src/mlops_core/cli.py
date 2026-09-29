@@ -24,7 +24,15 @@ import polars as pl
 import typer
 
 from mlops_core.adapter import DomainAdapter, domain_dir, load_adapter
-from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, CorpusConfig, DomainConfig, Settings
+from mlops_core.config import (
+    CHUNKS_TABLE,
+    DOCUMENTS_TABLE,
+    CorpusConfig,
+    DomainConfig,
+    Settings,
+    env_file_names,
+    unread_settings,
+)
 from mlops_core.data.api import silence_request_urls
 from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
@@ -709,7 +717,7 @@ def monitor(
 
     config = _adapter(domain).config
     settings = Settings()
-    due: list[tuple[str, str]] = []
+    due: list[str] = []
     for name in _models(config, model):
         result = monitor_model(config, name, _data_dir(config), settings.mlflow_tracking_uri)
         if result is None:
@@ -719,23 +727,22 @@ def monitor(
             f"{name}: {result.current} against {', '.join(result.reference)} - "
             f"{result.drifted_share:.0%} of the features drifted"
         )
+        if result.trained_run is not None:
+            # A source that stopped changing keeps its drift: retraining on the same rows
+            # again would give the same candidate, and the gate the same answer.
+            typer.echo(f"  the same rows run {result.trained_run} learned from: no retraining due")
+            for reason in result.reasons:
+                typer.echo(f"  drift, recorded: {reason}")
+            continue
         for reason in result.reasons:
             typer.echo(f"  due for retraining: {reason}")
         if result.retrain:
-            due.append((name, result.data_version))
+            due.append(name)
         else:
             typer.echo("  no reason to retrain")
     if not retrain:
         return
-    from mlops_core.ml.train import trained_on
-
-    for name, version in due:
-        # A source that stopped changing keeps its drift: retraining on the same data
-        # again would give the same candidate, and the gate the same answer.
-        run = trained_on(config, name, version) if version else None
-        if run is not None:
-            typer.echo(f"{name}: already trained on this data (run {run}), not again")
-            continue
+    for name in due:
         typer.echo(f"retraining {name}")
         ml_run(domain, name)
 
@@ -937,14 +944,19 @@ def _echo_tally(questions: list[Question]) -> None:
 
 @app.command()
 def secrets(domain: Domain = None) -> None:
-    """Say which credentials the domain has configured, without revealing any of them."""
-    configured = _adapter(domain).credentials()
+    """Say which credentials the domain has configured, without revealing any of them, and
+    which variables look like settings but are read by nothing."""
+    adapter = _adapter(domain)
+    configured = adapter.credentials()
     if not configured:
         typer.echo("this domain needs no credentials")
     for label, secret in configured.items():
         # Length only: enough to confirm the right value was pasted, useless if seen.
         state = f"set ({len(secret.get_secret_value())} characters)" if secret else "missing"
         typer.echo(f"{label}: {state}")
+    names = {*env_file_names(Path(".env")), *os.environ}
+    for name, why in sorted(unread_settings(names, adapter.config.name).items()):
+        typer.echo(f"{name}: {why}", err=True)
 
 
 STATES = {True: "[ok]   ", False: "[to do]", None: "[note] "}

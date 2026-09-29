@@ -30,12 +30,12 @@ from mlops_core.ml.evaluation import absolute_errors
 from mlops_core.ml.train import (
     baseline_predictions,
     build_pipeline,
-    experiment_name,
     fit_params,
     split_items,
     tune,
     xy,
 )
+from mlops_core.provenance import experiment_name
 from mlops_core.stats import compare
 from mlops_core.storage import read_table
 
