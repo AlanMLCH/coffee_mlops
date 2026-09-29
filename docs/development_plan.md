@@ -1012,6 +1012,33 @@ With them the benchmark is 86% SQL (25 of 29, the five new ones right) and 93% r
 and the agent end to end **80% correct, 98% verified on 45 questions**, the five new ones
 answered right; on the 40 it shares with the run before, +0 [-8, +8].
 
+**The tasting notes get questions too, and they broke the router** (28 September). Three
+SQL questions on `roaster_flavors` (94 coffees with notes; fruity, for 76; 56% of the
+washed single-origin coffees floral), two of them also routing cases. The end-to-end
+run fell to **68% correct, routing 85%** - 11 points down, 99% sure - and five questions
+asking what a lot would score or a bag would cost went to the tables. Taken apart, three
+runs each of the 20 prediction and mixed questions:
+
+| The router's list of tables | Predictions routed right |
+|---|---|
+| as built, with `roaster_flavors` | 15 of 30 |
+| without `roaster_flavors` | 30 of 30 |
+| three other wordings of its heading | 14-15 of 30 |
+| `roaster_flavors` moved to the end of the list | 27 of 30 |
+| without `roaster_origin_history` instead | 22 of 30 |
+| without `exchange_rates` instead | 29 of 30 |
+
+Not a wording, then: the small model's routing moved with the length and order of the
+list, and choosing the words or the order that happened to work would have been fitting
+these ten questions. The router prompt listed the tables inline under `data`, before the
+definition of `prediction`; it now defines the four routes first and lists the tables
+last, as reference. Measured on all 47 routing questions, twice each, with three
+different lists of tables: 88-90 of 94 every time, against 85 with the old layout on
+today's list. End to end: **79% correct, 100% verified, routing 96%**, +11 [+2, +19] on
+the run before; the benchmark's routing 96%, SQL 84% (the washed-floral share is still
+answered from the wrong rows). As with every fix here, measured on the questions that
+found it, so optimistic.
+
 ### The same tools over MCP
 
 `mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for
@@ -1165,7 +1192,12 @@ indicator and day or month, in US cents per pound:
   answers how and why, never how much). This one is admitted because it checks itself:
   the page prints its own Average, High and Low, and a reading whose days do not average,
   top and bottom out to them is refused rather than stored - as is a page whose columns
-  are not the five the reader knows, in that order.
+  are not the five the reader knows, in that order. The check had one wrong assumption,
+  found on 28 September: that the ICO averages the prices it shows. It averages the
+  unrounded ones: robustas' 19 days, as printed, average 167.7547 and the page says
+  167.76. The mean of rounded days can be half a cent off, and the printed average half a
+  cent more, so the average now agrees within a cent; high and low, a day's own price,
+  still within half.
 - **The World Bank's file moves.** Its address carries an id per release, so the source
   names the page and a pattern for the link (`link:`), and the file is found on the
   page each time. The file's host also cut the connection twice in a row on the first

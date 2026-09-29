@@ -47,7 +47,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.608** (dense) | 0.468 (BM25); hybrid did not beat dense |
-| The agent, 45 questions end to end | **80%** correct, 98% verified | - |
+| The agent, 47 questions end to end | **79%** correct, 100% verified | - |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns

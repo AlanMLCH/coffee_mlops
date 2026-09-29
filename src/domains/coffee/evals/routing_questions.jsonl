@@ -43,3 +43,5 @@
 {"id": "mixed-08", "question": "What does the ICO say drove coffee prices in August 2026, and how did Brazil's production change from 2024 to 2025?", "route": "mixed", "tools": ["knowledge", "data"]}
 {"id": "mixed-09", "question": "Why is the Gesha variety prized, and what is the median price per kilogram of the roasters' Gesha coffees?", "route": "mixed", "tools": ["knowledge", "data"]}
 {"id": "mixed-10", "question": "What score would a natural Gesha from Panama grown at 1,700 m be expected to get, and what makes the Gesha variety distinctive?", "route": "mixed", "tools": ["prediction", "knowledge"], "model": "review", "item": {"country": "Panama", "processing_method": "natural", "variety": "gesha", "altitude_m": 1700}}
+{"id": "data-16", "question": "Which flavour category do the roasters' tasting notes name for the most coffees?", "route": "data"}
+{"id": "data-17", "question": "What share of the washed single-origin coffees with tasting notes name a floral note?", "route": "data"}

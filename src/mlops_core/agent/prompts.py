@@ -63,10 +63,15 @@ It failed with:
 Write a corrected query.
 """
 
+# The four routes are defined first and the tables listed last, as reference. With the
+# tables inline under `data` (the first version), the small model's routing moved with
+# the list: adding one table sent 5 of 10 prediction questions to the tables, and taking
+# out another brought them back (2026-09-28, three runs each). Laid out this way the
+# routing held within 2 of 94 across the three lists tried.
 ROUTER = """You route questions about {subject} to the tool that can answer them.
 
-- data: figures, counts, rankings and comparisons that can be read from these tables:
-{tables}
+- data: figures, counts, rankings and comparisons read from the domain's tables (listed
+  below).
 - prediction: what a model would predict for an item the question describes rather
   than one the tables list - what such an item would be, not what one was. The models:
 {models}
@@ -76,6 +81,9 @@ ROUTER = """You route questions about {subject} to the tool that can answer them
   prediction and a figure to compare it with.
 
 A question about what a model predicted for items already in the tables is data.
+
+The tables `data` reads:
+{tables}
 
 Question: {question}
 """
