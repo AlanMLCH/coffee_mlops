@@ -16,7 +16,6 @@ decides, and either way the chart is checked against the columns before it is dr
 """
 
 import json
-import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -60,14 +59,13 @@ def build_server(
             "units and what a null means."
         ),
     )
-    lock = threading.Lock()  # one DuckDB session, and a client may call tools concurrently
+    # A client may call tools at once: each query runs on its own cursor (`run_select`).
 
     def query_tables(sql: str) -> dict[str, Any]:
-        with lock:
-            try:
-                result = run_select(con, sql)
-            except (Refused, duckdb.Error) as failed:
-                raise ToolError(str(failed).strip().splitlines()[0]) from failed
+        try:
+            result = run_select(con, sql)
+        except (Refused, duckdb.Error) as failed:
+            raise ToolError(str(failed).strip().splitlines()[0]) from failed
         rows = [[_plain(value) for value in row] for row in result.rows]
         return {"columns": result.columns, "rows": rows, "truncated": result.truncated}
 
@@ -82,11 +80,10 @@ def build_server(
     )
 
     def draw(sql: str, chart: Chart | None = None) -> list[Image | str]:
-        with lock:
-            try:
-                result = run_select(con, sql, max_rows=MAP_ROWS)
-            except (Refused, duckdb.Error) as failed:
-                raise ToolError(str(failed).strip().splitlines()[0]) from failed
+        try:
+            result = run_select(con, sql, max_rows=MAP_ROWS)
+        except (Refused, duckdb.Error) as failed:
+            raise ToolError(str(failed).strip().splitlines()[0]) from failed
         rows = frame(result.columns, result.rows)
         chosen = chart or infer_chart(rows, areas)
         problems = check_chart(chosen, rows, areas)

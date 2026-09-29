@@ -5,6 +5,7 @@ access off still let `COPY ... TO` write inside an allowed directory, which is w
 parser check exists at all.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -91,6 +92,28 @@ def test_a_query_that_runs_too_long_is_interrupted_and_the_session_survives(
 
     assert run_select(session, "SELECT 1 AS one").rows == [(1,)]
     assert views(session) == {"clean.lots"}
+
+
+def test_queries_from_many_threads_run_at_once_and_keep_the_guards(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Every query takes a cursor of its own: one that runs too long is interrupted alone,
+    the others answer, and a cursor is as locked as the session it came from."""
+    slow = "SELECT count(*) FROM range(1000000000000) a"
+    tasks = [(slow, 0.3)] + [("SELECT count(*) AS n FROM clean.lots", 5.0)] * 6
+
+    def run(task: tuple[str, float]) -> object:
+        try:
+            return run_select(session, task[0], timeout=task[1]).rows
+        except duckdb.InterruptException:
+            return "interrupted"
+
+    with ThreadPoolExecutor(len(tasks)) as pool:
+        answers = list(pool.map(run, tasks))
+
+    assert answers[0] == "interrupted" and len({str(a) for a in answers[1:]}) == 1
+    with pytest.raises(duckdb.PermissionException):
+        run_select(session, "SELECT * FROM read_csv('https://example.com/x.csv')")
 
 
 # --- The schema the model is shown ---------------------------------------------------------

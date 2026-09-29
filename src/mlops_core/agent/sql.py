@@ -12,6 +12,11 @@ can carry instructions of its own. Verified on DuckDB 1.5.5 (2026-09-25):
   and anything but a single SELECT is refused before the engine sees it.
 - DuckDB has no statement timeout; a timer interrupts the query and the session stays
   usable. Results stream, so fetching a few rows of a huge result costs a few rows.
+- One connection runs one query at a time, and the explorer's tabs, the agent and the MCP
+  server's clients ask at once. Every query runs on its own cursor - another connection
+  to the same database - which keeps the session's settings: verified 2026-09-29, a
+  cursor refuses the raw layer, URLs, installs and setting changes like the session does,
+  four cursors run side by side, and interrupting one stops only its query. So no lock.
 """
 
 import re
@@ -72,22 +77,23 @@ def run_select(
     max_rows: int = MAX_ROWS,
     timeout: float = TIMEOUT_SECONDS,
 ) -> QueryResult:
-    """Run one SELECT and return at most `max_rows` rows. Raises `Refused` for anything
-    else, and DuckDB's own error - a wrong column, a timeout - for the model to read."""
-    statements = con.extract_statements(sql)
-    if len(statements) != 1:
-        raise Refused(f"Send exactly one statement; this is {len(statements)}")
-    if statements[0].type != duckdb.StatementType.SELECT:
-        raise Refused(f"Only SELECT may run; this is {statements[0].type.name}")
-    query = statements[0].query.strip()
-    timer = threading.Timer(timeout, con.interrupt)
-    timer.start()
-    try:
-        cursor = con.execute(query)
-        rows = cursor.fetchmany(max_rows + 1)
-    finally:
-        timer.cancel()
-    columns = [column[0] for column in cursor.description or []]
+    """Run one SELECT on a cursor of its own and return at most `max_rows` rows. Raises
+    `Refused` for anything else, and DuckDB's own error - a wrong column, a timeout - for
+    the model to read. Safe to call from several threads at once."""
+    with con.cursor() as cursor:
+        statements = cursor.extract_statements(sql)
+        if len(statements) != 1:
+            raise Refused(f"Send exactly one statement; this is {len(statements)}")
+        if statements[0].type != duckdb.StatementType.SELECT:
+            raise Refused(f"Only SELECT may run; this is {statements[0].type.name}")
+        query = statements[0].query.strip()
+        timer = threading.Timer(timeout, cursor.interrupt)
+        timer.start()
+        try:
+            rows = cursor.execute(query).fetchmany(max_rows + 1)
+        finally:
+            timer.cancel()
+        columns = [column[0] for column in cursor.description or []]
     return QueryResult(query, columns, rows[:max_rows], len(rows) > max_rows)
 
 
@@ -108,7 +114,8 @@ def unquoted_views(sql: str, names: Collection[str]) -> str:
 
 def views(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Every `layer.table` the session can query."""
-    found = con.execute(
-        "SELECT table_schema || '.' || table_name FROM information_schema.tables"
-    ).fetchall()
+    with con.cursor() as cursor:
+        found = cursor.execute(
+            "SELECT table_schema || '.' || table_name FROM information_schema.tables"
+        ).fetchall()
     return {str(name) for (name,) in found}

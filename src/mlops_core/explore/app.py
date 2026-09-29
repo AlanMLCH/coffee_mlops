@@ -25,7 +25,6 @@ what `mlops agent ask` needs: Ollama, Qdrant with an index, and the prediction A
 """
 
 import html
-import threading
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -101,16 +100,14 @@ explore = config.explore
 
 
 @st.cache_resource
-def session() -> tuple[duckdb.DuckDBPyConnection, threading.Lock]:
-    """One locked, read-only session for the page, and a lock: a DuckDB connection serves
-    one query at a time, and every browser tab shares it."""
-    return read_only(data_dir), threading.Lock()
+def session() -> duckdb.DuckDBPyConnection:
+    """One locked, read-only session for the page. Every browser tab shares it, and each
+    query runs on a cursor of its own (`sql.run_select`), so they do not wait in line."""
+    return read_only(data_dir)
 
 
 def query(sql: str) -> tuple[pl.DataFrame, bool]:
-    con, lock = session()
-    with lock:
-        return run_layer(con, sql)
+    return run_layer(session(), sql)
 
 
 @st.cache_data(show_spinner=False)
@@ -142,9 +139,7 @@ def built(sql: str) -> pl.DataFrame | None:
 
 @st.cache_resource
 def areas() -> Areas | None:
-    con, lock = session()
-    with lock:
-        return areas_if_built(con, explore)
+    return areas_if_built(session(), explore)
 
 
 @st.cache_resource(show_spinner="Starting the agent: Ollama, the index, the prediction API")
