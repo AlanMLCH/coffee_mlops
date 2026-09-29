@@ -43,6 +43,7 @@ from mlops_core.rag.llm import ollama_client
 from mlops_core.storage import read_table, write_table
 
 OLLAMA = Path(__file__).parent / "fixtures" / "ollama"
+READS = "SELECT x FROM clean.coffee_reviews"  # a query must read a table to be an answer
 
 
 class Scripted:
@@ -235,15 +236,15 @@ def test_the_committed_cases_are_one_select_each_and_route_somewhere_known() -> 
 def test_the_command_runs_each_generator_and_reports_the_bar(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """With an Ollama that answers every SQL question "SELECT 1" and every question
-    "data": the plumbing, not a model, is under test."""
+    """With an Ollama that answers every SQL question with the reference and every
+    question "data": the plumbing, not a model, is under test."""
     clean = tmp_path / "data" / "coffee" / "clean"
     write_table(pl.DataFrame({"x": [1]}), clean / "coffee_reviews", {})
     home = tmp_path / "domain"
     (home / "evals").mkdir(parents=True)
     (home / "data_dictionary.md").write_text("## `clean.coffee_reviews` — lots\n", "utf-8")
     (home / SQL_CASES_FILE).write_text(
-        SqlCase(id="one", question="One?", sql="SELECT 1").model_dump_json() + "\n", "utf-8"
+        SqlCase(id="one", question="One?", sql=READS).model_dump_json() + "\n", "utf-8"
     )
     (home / ROUTE_CASES_FILE).write_text(
         RouteCase(id="d", question="Data?", route="data").model_dump_json() + "\n", "utf-8"
@@ -257,7 +258,7 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
         if request.url.path == "/api/tags":
             return httpx.Response(200, json=tags)
         shape = json.loads(request.content)["format"]["properties"]
-        reply = SqlReply(sql="SELECT 1") if "sql" in shape else RouteReply(route="data")
+        reply = SqlReply(sql=READS) if "sql" in shape else RouteReply(route="data")
         return httpx.Response(200, json={"message": {"content": reply.model_dump_json()}})
 
     @contextmanager

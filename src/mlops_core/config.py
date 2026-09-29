@@ -617,6 +617,32 @@ class ExploreConfig(BaseModel):
         return self
 
 
+class SqlGuard(BaseModel):
+    """A table whose name says less than its rows hold, and the column a query of it must
+    filter on - with the hint the agent's model gets when a query ignores it.
+
+    Said in the data dictionary too; a small model reads past a sentence it was given,
+    and a query that runs gives no error to repair from. The guard checks the query
+    after it ran, and asks once."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    table: str  # schema.table, as queries name it
+    requires: str  # the column a query of the table should filter on
+    hint: str
+
+
+class AgentConfig(BaseModel):
+    """What the agent's SQL is checked against, beyond what the database refuses."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sql_guards: list[SqlGuard] = []
+    # How many of the data dictionary's sections the SQL writer sees, chosen per question
+    # by similarity (with the tables they name); unset, all of them.
+    schema_sections: int | None = Field(default=None, ge=1)
+
+
 class DomainConfig(BaseModel):
     """The sections the core runs. A domain subclasses this to add its own."""
 
@@ -637,6 +663,7 @@ class DomainConfig(BaseModel):
     monitoring: MonitoringConfig
     schedule: ScheduleConfig | None = None  # unset, nothing runs until someone asks
     explore: ExploreConfig | None = None  # the explorer app's map; unset, it has none
+    agent: AgentConfig = AgentConfig()
 
     @model_validator(mode="after")
     def _documents_are_named_once(self) -> Self:

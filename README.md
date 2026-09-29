@@ -33,7 +33,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   of the data - letting the gate decide whether the new model ships.
 - **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`) over three tools:
   locked-down text-to-SQL, the prediction API, and dense retrieval in Qdrant. Every
-  figure in an answer is checked against its evidence before it is shown.
+  figure in an answer is checked against its evidence before it is shown, and when the
+  tools find nothing it says so instead of writing an answer.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
   Desktop, Claude Code or an IDE, and an explorer app - the price ladder at a glance, a
   deck.gl map of the city, questions to the agent with a chart of every answer, the
@@ -47,7 +48,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.608** (dense) | 0.468 (BM25); hybrid did not beat dense |
-| The agent, 48 questions end to end | **73%** correct, 94% verified | 79% the run before, a difference within noise (10% sure) |
+| The agent, 48 questions end to end | **79%** correct, 98% verified | 73% before the fixes of 29 September |
+| The agent, 25 held-out questions written before those fixes | **88%** correct, 100% verified | 52% before them; +12 measured blind, the rest optimistic (see the plan) |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns

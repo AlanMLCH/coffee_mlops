@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import polars as pl
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from typer.testing import CliRunner
 
 import domains.coffee
@@ -318,6 +318,25 @@ def test_a_reply_is_constrained_to_the_schema_and_read_back_through_it() -> None
     assert body["format"] == Draft.model_json_schema()
     assert list(body["format"]["properties"]) == ["usable", "evidence", "question", "answer"]
     assert (body["think"], body["stream"], body["options"]) == (False, False, OPTIONS)
+
+
+def test_a_reply_cut_short_is_asked_for_once_more(caplog: pytest.LogCaptureFixture) -> None:
+    """It happened once under load: `{"` and nothing else, for a whole answer."""
+    good = {"message": {"content": json.dumps({"flag": True})}}
+    replies = iter([{"message": {"content": '{\n"'}}, good, {"message": {"content": "{"}}] * 2)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(replies))
+
+    class Flag(BaseModel):
+        flag: bool
+
+    with ollama_client("http://ollama.test", httpx.MockTransport(handler)) as client:
+        model = LocalModel(client, DRAFTING_MODEL, OPTIONS)
+        assert model.ask("Flag?", Flag).flag
+        with pytest.raises(ValidationError):  # cut twice: an error, said
+            model.ask("Flag?", Flag)
+    assert "gave a malformed Flag; asking again" in caplog.text
 
 
 def test_a_model_ollama_does_not_have_is_named_with_how_to_get_it() -> None:

@@ -6,13 +6,21 @@ parser check exists at all.
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import duckdb
+import numpy as np
 import polars as pl
 import pytest
 
-from mlops_core.adapter import domain_dir
-from mlops_core.agent.dictionary import dictionary_path, schema_context, table_sections
+from mlops_core import cli
+from mlops_core.adapter import domain_dir, load_adapter
+from mlops_core.agent.dictionary import (
+    SchemaLinker,
+    dictionary_path,
+    schema_context,
+    table_sections,
+)
 from mlops_core.agent.sql import Refused, read_only, run_select, views
 from mlops_core.storage import write_table
 
@@ -130,3 +138,38 @@ def test_the_domain_dictionary_describes_every_table_it_names() -> None:
 
     assert "clean.coffee_reviews" in sections
     assert {name.split(".")[0] for name in sections} <= {"clean", "features", "predictions"}
+
+
+def test_a_question_is_shown_the_sections_like_it_and_the_ones_they_name() -> None:
+    """Embedded as one-hot words: the question about prices meets the prices' section,
+    which names the rates table it joins - so the rates come too, and the lots do not."""
+    sections = {
+        "clean.lots": "## `clean.lots` - one lot",
+        "clean.prices": "## `clean.prices` - one price; join `clean.rates` for pesos",
+        "clean.rates": "## `clean.rates` - one rate",
+    }
+    words = ["lot", "price", "rate"]
+
+    def embed(texts: list[str]) -> np.ndarray:
+        return np.array([[float(w in text.lower()) for w in words] for text in texts])
+
+    linker = SchemaLinker(sections, embed, k=1, query=lambda q: q.lower())
+
+    assert linker.chosen("What does a price cost?") == ["clean.prices", "clean.rates"]
+    assert linker("What does a price cost?") == "\n\n".join(
+        [sections["clean.prices"], sections["clean.rates"]]
+    )
+
+
+def test_the_sql_writer_is_linked_only_when_the_domain_asks() -> None:
+    config = load_adapter("coffee").config
+    dictionary = "## `clean.lots` - one lot\n\n## `clean.prices` - one price"
+    names = {"clean.lots", "clean.prices"}
+    embedder = SimpleNamespace(embed=lambda texts: np.ones((len(texts), 2)))
+    linked = config.model_copy(
+        update={"agent": config.agent.model_copy(update={"schema_sections": 1})}
+    )
+
+    assert config.agent.schema_sections is None
+    assert cli._linker(config, dictionary, names, embedder) is None
+    assert isinstance(cli._linker(linked, dictionary, names, embedder), SchemaLinker)

@@ -19,7 +19,7 @@ earlier. Every run records which set it was scored on.
 
 import hashlib
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 from statistics import median
@@ -34,7 +34,7 @@ from mlops_core.agent.prompts import ROUTER_VERSION, ROUTES, SQL_VERSION, Route,
 from mlops_core.agent.routing import route
 from mlops_core.agent.sql import QueryResult, run_select
 from mlops_core.agent.text_to_sql import Generator, write_sql
-from mlops_core.config import DomainConfig
+from mlops_core.config import DomainConfig, SqlGuard
 from mlops_core.provenance import code_version
 from mlops_core.storage import write_table
 
@@ -145,13 +145,16 @@ def run_benchmark(
     context: dict[str, str],
     sql_cases: Sequence[SqlCase],
     route_cases: Sequence[RouteCase],
+    guards: Sequence[SqlGuard] = (),
+    linker: Callable[[str], str] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """One row per SQL question and one per routing question, with the verdicts."""
     sql_rows = []
     for case in sql_cases:
         expected = run_select(con, case.sql, COMPARED_ROWS)
         start = time.perf_counter()
-        answer = write_sql(generator, con, schema, case.question, COMPARED_ROWS)
+        shown = linker(case.question) if linker else schema
+        answer = write_sql(generator, con, shown, case.question, COMPARED_ROWS, guards)
         right = answer.result is not None and same_answer(expected, answer.result)
         sql_rows.append(
             {

@@ -33,10 +33,11 @@ from mlops_core.agent import registry
 from mlops_core.agent.graph import Agent
 from mlops_core.agent.prompts import PROMPTS
 from mlops_core.agent.registry import PREFIX, register_prompts
-from mlops_core.agent.sql import read_only
+from mlops_core.agent.sql import read_only, views
+from mlops_core.agent.text_to_sql import NO_TABLE, absent_values, same_values, write_sql
 from mlops_core.agent.tools import predict
 from mlops_core.agent.verify import cited_ids, figures, problems
-from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE
+from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, SqlGuard
 from mlops_core.data.corpus import CHUNKS_COLUMNS
 from mlops_core.rag import llm
 from mlops_core.rag.llm import ollama_client
@@ -61,19 +62,28 @@ PREDICTED = {
 }
 
 
+# What a scripted model says when a test does not script it: the second opinion adds no
+# tool, and an answer answers.
+NOTHING_TO_ADD = {"predicts": False, "figures": False}
+
+
+def answering(reply: dict[str, Any], shape: str) -> dict[str, Any]:
+    return {"answered": True} | reply if shape == "AnswerReply" else reply
+
+
 class Scripted:
     """Answers each call by the name of the shape it is asked for."""
 
     def __init__(self, **answers: Callable[[str], dict[str, Any]] | list[dict[str, Any]]):
         self.answers = {k: iter(v) if isinstance(v, list) else v for k, v in answers.items()}
+        self.answers.setdefault("NeedsReply", lambda prompt: NOTHING_TO_ADD)
         self.prompts: list[tuple[str, str]] = []
 
     def ask[Reply: BaseModel](self, prompt: str, reply: type[Reply]) -> Reply:
         self.prompts.append((reply.__name__, prompt))
         answer = self.answers[reply.__name__]
-        return reply.model_validate(
-            next(answer) if isinstance(answer, Iterator) else answer(prompt)
-        )
+        given = next(answer) if isinstance(answer, Iterator) else answer(prompt)
+        return reply.model_validate(answering(given, reply.__name__))
 
     def asked(self, shape: str) -> list[str]:
         return [prompt for name, prompt in self.prompts if name == shape]
@@ -371,7 +381,12 @@ def stood_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[Scrip
                 return httpx.Response(200, json=tags)
             if request.url.path == "/api/embed":
                 return httpx.Response(200, json={"embeddings": [[0.5, 0.5, 0.5, 0.5]]})
-            reply = script(json.loads(request.content)["format"]["properties"])
+            shape = json.loads(request.content)["format"]["properties"]
+            reply = script(shape)
+            if "predicts" in shape and "predicts" not in reply:
+                reply = NOTHING_TO_ADD
+            if "answered" in shape:
+                reply = {"answered": True} | reply
             return httpx.Response(200, json={"message": {"content": json.dumps(reply)}})
 
         @contextmanager
@@ -435,19 +450,202 @@ def test_ask_shows_the_query_the_item_and_what_it_could_not_verify(
     assert "unverified: The figure 99 is not in the evidence" in result.output
 
 
-def test_a_prediction_that_failed_is_evidence_too(session: duckdb.DuckDBPyConnection) -> None:
-    """The answer is told the service failed, instead of being told nothing."""
+def test_with_no_evidence_it_says_so_without_writing_an_answer(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A prediction the service refused, and nothing else: no answer is written - a model
+    handed nothing writes a figure anyway - and the reply says what each tool found."""
     generator = Scripted(
         RouteReply=lambda p: {"route": "prediction"},
         ModelChoice=lambda p: {"model": "review"},
         Lot=lambda p: {"country": "Ethiopia"},
-        AnswerReply=lambda p: {"text": "No score could be predicted.", "citations": []},
     )
 
     reply = agent(generator, session, lambda r: httpx.Response(503)).ask("Score?")
 
-    assert "No prediction: The prediction service failed" in generator.asked("AnswerReply")[0]
-    assert reply.verified and reply.sources == []
+    assert generator.asked("AnswerReply") == []
+    assert not reply.answered and reply.verified and reply.sources == []
+    assert reply.text.startswith("I found no answer")
+    assert "The models: no prediction (The prediction service failed" in reply.text
+
+
+def test_a_query_that_finds_nothing_is_checked_against_the_data_once(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """The value it filtered on is not there; the rewrite is shown the values that are,
+    and when it finds nothing too, the documents are what is left."""
+    empty = "SELECT production_t FROM clean.mexico_production WHERE state = 'Chiapaz'"
+    generator = Scripted(
+        RouteReply=lambda p: {"route": "mixed"},
+        PlanReply=lambda p: {"data": "Chiapas?", "prediction": None, "knowledge": "Why?"},
+        SqlReply=[{"sql": empty}, {"sql": empty}],
+        AnswerReply=lambda p: {"text": "Altitude delays ripening [c1].", "citations": ["c1"]},
+    )
+
+    reply = agent(generator, session).ask("How much did Chiapas grow, and why?")
+
+    rewrite = generator.asked("SqlReply")[1]
+    assert "found nothing" in rewrite
+    assert "state = 'Chiapaz' matches no row of clean.mexico_production" in rewrite
+    assert "its values include: Chiapas, Puebla" in rewrite
+    assert "The tables have nothing for it" in generator.asked("AnswerReply")[0]
+    assert "[sql] Query result" not in generator.asked("AnswerReply")[0]
+    assert reply.answered and reply.sql is not None and reply.sql.empty
+
+
+def test_a_passage_far_from_the_question_is_not_evidence(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    generator = Scripted(RouteReply=lambda p: {"route": "knowledge"})
+    far = PASSAGE | {"score": 0.2}
+    asked = Agent(
+        generator, domains.coffee.adapter(), session, "",
+        {"subject": "coffee", "tables": "", "models": "", "topics": ""},
+        lambda question, k: [far], api(lambda r: httpx.Response(500)), {}, {},
+    ).ask("Who won the 2022 World Cup?")  # fmt: skip
+
+    assert not asked.answered and asked.passages == []
+    assert "The documents: no passage is close enough" in asked.text
+
+
+def test_a_rewrite_may_fix_a_spelling_but_never_swap_in_another_value(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Shown the states there are, the rewrite of a query for one that is not there may
+    not answer about another: the empty result stands, and the gate says so."""
+    missing = "SELECT production_t FROM clean.mexico_production WHERE state = 'Jalisco'"
+    swapped = "SELECT production_t FROM clean.mexico_production WHERE state = 'Puebla'"
+    misspelt = "SELECT production_t FROM clean.mexico_production WHERE state = 'CHIAPÁS'"
+    fixed = "SELECT production_t FROM clean.mexico_production WHERE state = 'Chiapas'"
+
+    kept = write_sql(Scripted(SqlReply=[{"sql": missing}, {"sql": swapped}]), session, "", "?")
+    respelt = write_sql(Scripted(SqlReply=[{"sql": misspelt}, {"sql": fixed}]), session, "", "?")
+
+    assert kept.sql == missing and kept.empty
+    assert respelt.sql == fixed and not respelt.empty
+    assert same_values(
+        "SELECT 1 FROM t WHERE shop IN ('Café')", "SELECT 1 FROM t WHERE shop = 'cafe'"
+    )
+    assert not same_values(
+        "SELECT 1 FROM t WHERE shop = 'starbucks'", "SELECT 1 FROM t WHERE shop = 'buna'"
+    )
+
+
+def test_a_query_that_reads_no_table_is_not_an_answer(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Asked who won a World Cup, the model wrote SELECT 'Brazil': its own figure."""
+    constant = "SELECT 'Brazil' AS country"
+    generator = Scripted(SqlReply=[{"sql": constant}] * 3)
+
+    answer = write_sql(generator, session, "", "Who won?")
+
+    assert answer.result is None and answer.error == NO_TABLE
+    assert NO_TABLE in generator.asked("SqlReply")[1]
+    rewritten = write_sql(
+        Scripted(SqlReply=[{"sql": "SELECT state FROM clean.mexico_production WHERE state = 'X'"},
+                           {"sql": constant}]),
+        session, "", "?",
+    )  # fmt: skip
+    assert rewritten.sql.endswith("'X'")  # a rewrite that reads no table is not kept
+
+
+def test_a_query_that_ignores_a_guard_is_written_again_once(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    guard = SqlGuard(table="clean.mexico_production", requires="year", hint="Filter a year.")
+    unguarded = "SELECT state FROM clean.mexico_production ORDER BY production_t DESC LIMIT 1"
+    generator = Scripted(SqlReply=[{"sql": unguarded}, {"sql": unguarded + " -- year"}])
+
+    answer = write_sql(generator, session, "", "Top state?", guards=[guard])
+
+    assert "It ran, but: Filter a year." in generator.asked("SqlReply")[1]
+    assert answer.attempts == 2 and answer.sql.endswith("-- year")
+    assert write_sql(Scripted(SqlReply=[{"sql": TOP}]), session, "", "Top?").attempts == 1
+
+
+def test_a_rewrite_that_fails_keeps_the_query_that_ran(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    empty = "SELECT state FROM clean.mexico_production WHERE state IN ('Nowhere')"
+    broken = "SELECT nonsense FROM clean.mexico_production WHERE state IN ('Nowhere')"
+    generator = Scripted(SqlReply=[{"sql": empty}, {"sql": broken}])
+
+    answer = write_sql(generator, session, "", "Nowhere?")
+
+    assert answer.sql == empty and answer.empty and answer.attempts == 2
+    assert "state = 'Nowhere' matches no row" in generator.asked("SqlReply")[1]
+
+
+def test_only_a_value_the_data_lacks_is_reported(session: duckdb.DuckDBPyConnection) -> None:
+    """A value that is there (the query found nothing for another reason), and a column
+    the table does not have (a name the query gave it), are not what went wrong."""
+    names = views(session)
+    there = "SELECT state FROM clean.mexico_production WHERE state = 'Chiapas' AND production_t < 0"
+    renamed = (
+        "WITH t AS (SELECT state AS s FROM clean.mexico_production) SELECT s FROM t WHERE s = 'X'"
+    )
+
+    assert absent_values(session, there, names) == []
+    assert absent_values(session, renamed, names) == []
+
+
+def test_when_the_tables_find_nothing_the_reply_says_what_the_query_did(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    empty = "SELECT production_t FROM clean.mexico_production WHERE state = 'Jalisco'"
+    found_nothing = Scripted(RouteReply=lambda p: {"route": "data"}, SqlReply=[{"sql": empty}] * 2)
+    failed = Scripted(
+        RouteReply=lambda p: {"route": "data"}, SqlReply=lambda p: {"sql": "SELECT x FROM nowhere"}
+    )
+
+    nothing = agent(found_nothing, session).ask("How much did Jalisco grow?")
+    broken = agent(failed, session).ask("How much did Jalisco grow?")
+
+    assert not nothing.answered and found_nothing.asked("AnswerReply") == []
+    assert "The tables: the query ran and found nothing." in nothing.text
+    assert not broken.answered and "The tables: the query failed (" in broken.text
+
+
+def test_the_second_opinion_adds_a_tool_and_never_takes_one_away(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A lot the question describes and no figure asked of the tables, routed to the
+    tables: it goes to the model instead. A figure asked of a question routed to the
+    documents: the tables are added."""
+    described = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        NeedsReply=lambda p: {"predicts": True, "figures": False},
+        SqlReply=[{"sql": TOP}],
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya"},
+        AnswerReply=lambda p: {"text": "84.4 [prediction].", "citations": ["prediction"]},
+    )
+    counted = Scripted(
+        RouteReply=lambda p: {"route": "knowledge"},
+        NeedsReply=lambda p: {"predicts": False, "figures": True},
+        SqlReply=[{"sql": TOP}],
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+
+    both = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        NeedsReply=lambda p: {"predicts": True, "figures": True},
+        SqlReply=[{"sql": TOP}],
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya"},
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+
+    first = agent(described, session).ask("What would a Kenyan lot score?")
+    second = agent(counted, session).ask("Which state grows most, and why?")
+    # The prediction service is down: the tables still answer, and the answer is told.
+    third = agent(both, session, lambda r: httpx.Response(503)).ask("Top state, and a score?")
+
+    assert first.route == "prediction" and first.prediction is not None and first.sql is None
+    assert second.route == "mixed" and second.sql is not None and second.sql.sql == TOP
+    assert third.route == "mixed" and third.answered and third.prediction is not None
+    assert "No prediction: " in both.asked("AnswerReply")[0]
 
 
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:

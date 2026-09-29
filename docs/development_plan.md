@@ -166,7 +166,7 @@ flowchart TD
         qdrant[("Qdrant, alias coffee-chunks<br/>dense vector + BM25 weights<br/>rebuilt from Parquet, swapped atomically")]
         ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
-        agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
+        agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route + second opinion · SQL · predict · retrieve<br/>gate: no evidence, no answer · answer · verify · a trace each"]
         mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents · draw<br/>dictionary://tables · guardrails server-side"]
         explorer["mlops explore: Streamlit + deck.gl<br/>headline numbers · map · ask · segments · findings · models<br/>each answer's rows as a chart you can change"]
         agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
@@ -1172,6 +1172,71 @@ identical - the same 12 misses. Before, the same prompts at temperature 0 and a 
 seed moved by about two questions in forty between runs, which is what kept a change of
 two from being told apart from noise. The cache also held up to 8 GB of host RAM and had
 crashed an evaluation; the log now says "prompt cache is disabled".
+
+### No answer, rather than a made-up one
+
+The v1.0 misses, read one by one (29 September), had causes, and each fix went after a
+cause rather than a question:
+
+- **The dictionary's examples leaked their constants.** The worked example of a flavour
+  share filtered `country = 'Mexico'`, and the model copied that filter into two questions
+  that never named Mexico; the boroughs table said "`09015` is Cuauhtémoc", and the model
+  filtered Benito Juárez and Coyoacán by `09015`. An example now shows the shape of a query,
+  never a value: the share over all coffees with notes, the single-origin join to add only
+  when a question names a group, and "filter a borough by its name".
+- **A table's name said less than its rows.** `clean.coffee_shops` holds juice stands and
+  ice-cream parlours as well, and "how many coffee shops" counted all of them (3,705 for
+  1,528). Its heading now says what it holds, and the domain declares a guard
+  (`agent.sql_guards` in the YAML, a core capability): a query of that table that never
+  names `kind` goes back once with the hint. Declared for the history table too.
+- **Nothing found was answered anyway.** A query that returned null became "148 MXN/kg".
+  The workflow has a gate now, between the tools and the answer: a query that found no
+  rows (or only nulls), a prediction the API refused and a passage less similar to the
+  question than 0.45 are not evidence, and **when nothing is left the agent says it found
+  no answer, and why, without calling the model to write one** (`Reply.answered` false).
+  Before that, a query that found nothing goes back once with the values it filtered on
+  checked against the data (`starbucks` matches no shop; the shops are almanegra, buna,
+  cucurucho, jiribilla) - and the rewrite is kept only if each value it changed is a
+  spelling of the same one: shown the shops, the model put `buna` in place of Starbucks
+  and answered 945. The 0.45 was calibrated on the 108 retrieval questions against 20
+  off-topic ones written for it (107 of 108 kept, 18 of 20 stopped), never on the held-out
+  set.
+- **A query that reads no table** (`SELECT 'Brazil'`, asked who won the 2022 World Cup) is
+  refused like an error.
+- **The route of a described item.** A second opinion asks two yes-or-no questions a small
+  model answers better than it picks one route of four: does the question describe an item
+  and ask what a model would predict, and does it ask for a figure computed from the
+  tables. A tool is added where the answer is yes; an item described with no figure asked,
+  sent to the tables, goes to the model instead. One extra call per question.
+- **`answered` in the answer's schema**, false only when the evidence answers no part of
+  the question.
+- A reply cut short (`{"` and nothing else, once, under load) is asked for once more, and
+  a question that raises is a wrong answer in the evaluation, not a lost run.
+
+| | Held-out, 25 | Default, 48 |
+|---|---:|---:|
+| Before (29 September) | 52% correct, 84% verified | 73%, 94% |
+| Dictionary, guards, gate, second opinion | 64%, 96% | - |
+| + borough names, same-value rewrites, a query must read a table, the described item's route | **88%, 100%**, routing 96% | **79%, 98%**, routing 100% |
+
+The first round was designed on the default set's misses and measured on the held-out one:
+**+12 points there is the unbiased figure**. The second round came from reading the held-out
+misses, so its 88% there is optimistic; on the default set, where none of it was designed,
+it went from 73% to 79% (+6, -4 to +17). The three questions with no answer are now
+answered with "no answer" (they were answered 100 and "Brazil" before). What is left: an
+offer counted as a coffee, a passage the search missed, a prediction a mixed plan never
+called, and averages taken over the wrong rows.
+
+The benchmark, which asks each skill on its own: **SQL 88% on the default set (79% at
+v1.0) and 78% on the held-out one (67% before, under the 70% bar), routing 96% on both**.
+Repeated, the held-out evaluation gave the same answers to every question.
+
+**Schema linking, measured and not adopted.** Showing the SQL writer only the dictionary
+sections a question needs - the `k` most similar by embedding, and the tables they name -
+is the usual remedy for a long schema (`agent.schema_sections`, `dictionary.SchemaLinker`,
+`experiments/schema_linking.py`). On the default set's 33 SQL questions it did worse: the
+whole dictionary 88%, four sections 85% (18% sure it is better), six 79%; the held-out
+set's nine questions cannot tell. The setting stays unset.
 
 ### The same tools over MCP
 

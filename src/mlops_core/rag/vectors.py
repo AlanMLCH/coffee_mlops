@@ -166,7 +166,8 @@ class IndexSearch:
         nearest = self._nearest(question, k)
         self._located(nearest, k)  # refuses an index built from other chunks
         ranked = sorted(nearest, key=lambda point: (-point.score, _chunk_id(point)))[:k]
-        return [dict(point.payload or {}) for point in ranked]
+        # The similarity too: what a caller judges "close enough to answer" by.
+        return [dict(point.payload or {}) | {"score": point.score} for point in ranked]
 
     def _nearest(self, question: str, k: int) -> list[models.ScoredPoint]:
         found = self._client.query_points(

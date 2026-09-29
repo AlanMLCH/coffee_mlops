@@ -288,6 +288,25 @@ def test_every_question_is_asked_timed_and_traced(session: duckdb.DuckDBPyConnec
     assert table["trace_id"].to_list() == ["tr-1", "tr-1"]
 
 
+def test_a_question_that_breaks_the_agent_is_a_wrong_answer_not_a_lost_run(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    truths = [
+        Truth(case("data-01", "data"), TOP_STATE, ()),
+        Truth(case("data-02", "data"), None, ()),
+    ]
+
+    def ask(text: str) -> Reply:
+        if text == "data-01?":
+            raise ValueError("the reply was cut")
+        return reply(rows=[("Chiapas",)])
+
+    table = run_evaluation(ask, truths, session, trace_id=lambda: None)
+
+    assert table["correct"].to_list() == [False, True]
+    assert "The agent failed: ValueError: the reply was cut" in table["problems"][0]
+
+
 def test_the_run_is_logged_with_its_comparison(tmp_path: Path) -> None:
     mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}")
     mlflow.set_experiment("coffee-agent-eval")

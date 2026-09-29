@@ -8,9 +8,11 @@ zero") are exactly what a model writing SQL gets wrong unless it is told.
 """
 
 import re
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Sequence
 from itertools import pairwise
 from pathlib import Path
+
+import numpy as np
 
 DICTIONARY_FILE = "data_dictionary.md"
 # The models' inputs are not offered. Everything in them comes from the clean layer, some
@@ -54,3 +56,44 @@ def offered(text: str, views: Collection[str]) -> dict[str, str]:
 def schema_context(text: str, views: Collection[str]) -> str:
     """The offered tables' sections, in the dictionary's own order."""
     return "\n\n".join(offered(text, views).values())
+
+
+# What a section is matched on: its heading and opening, where it says what a row is.
+# The query-sized embedding context (512 tokens) would cut a whole section anyway.
+SUMMARY_CHARS = 1200
+
+
+class SchemaLinker:
+    """The sections a question needs, instead of all of them: the `k` most similar to it,
+    and the ones those name (the other side of a join they describe), in the dictionary's
+    order.
+
+    The whole dictionary is ~4,700 of the SQL writer's 8,192 tokens, and a small model
+    reads past what it was told in a long prompt. Schema linking is the usual remedy in
+    text to SQL; whether it helps here is measured, not assumed (`agent.schema_sections`).
+    """
+
+    def __init__(
+        self,
+        sections: dict[str, str],
+        embed: Callable[[Sequence[str]], np.ndarray],
+        k: int,
+        query: Callable[[str], str] = lambda question: question,
+    ):
+        self._sections = sections
+        self._names = list(sections)
+        self._embed, self._k, self._query = embed, k, query
+        self._vectors = embed([section[:SUMMARY_CHARS] for section in sections.values()])
+
+    def chosen(self, question: str) -> list[str]:
+        similarity = self._vectors @ self._embed([self._query(question)])[0]
+        top = {self._names[i] for i in np.argsort(-similarity)[: self._k]}
+        named = {
+            name
+            for name in self._names
+            if any(f"`{name}`" in self._sections[t] for t in top) and name not in top
+        }
+        return [name for name in self._names if name in top | named]
+
+    def __call__(self, question: str) -> str:
+        return "\n\n".join(self._sections[name] for name in self.chosen(question))

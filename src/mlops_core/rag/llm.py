@@ -8,12 +8,15 @@ validated against that same model, so a reply that parses is a reply the code ca
 Local and keyless: no request carries a secret, so no secret can reach a log.
 """
 
+import logging
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 
 import httpx
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 # Loading a model into VRAM is the slow part of a first request: about a minute and a
 # half for a 4B model on the laptop this runs on. A reply after that takes seconds.
@@ -69,7 +72,16 @@ class LocalModel:
         return np.array(vectors, dtype=np.float32)
 
     def ask[Reply: BaseModel](self, prompt: str, reply: type[Reply]) -> Reply:
-        """One prompt, one reply shaped like `reply`."""
+        """One prompt, one reply shaped like `reply`. A reply cut short - it happened once,
+        `{"` and nothing more, under load - is asked for once more before it is an error."""
+        try:
+            return self._ask(prompt, reply)
+        except ValidationError as cut:
+            logger.warning("%s gave a malformed %s; asking again: %s", self.model,
+                           reply.__name__, str(cut).splitlines()[0])  # fmt: skip
+            return self._ask(prompt, reply)
+
+    def _ask[Reply: BaseModel](self, prompt: str, reply: type[Reply]) -> Reply:
         response = self._client.post(
             "/api/chat",
             json={

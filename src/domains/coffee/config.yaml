@@ -1006,6 +1006,23 @@ consumer_prices:
   borough_aliases: # PROFECO's name -> INEGI's, where they differ by more than that
     Magdalena Contreras: La Magdalena Contreras
 
+# The agent's SQL, checked after it runs. The coffee shops table holds every place of
+# DENUE's class 722515 (juice stands, soda fountains, school tuck shops) and OSM's ice-cream
+# parlours: counted whole, "coffee shops" came out 3,705 instead of 1,528 (2026-09-29).
+agent:
+  sql_guards:
+    - table: clean.coffee_shops
+      requires: kind
+      hint: >-
+        clean.coffee_shops holds juice stands, soda fountains, ice-cream parlours and school
+        tuck shops as well as coffee shops. A question about coffee shops filters
+        kind = 'coffee'.
+    - table: clean.coffee_shop_history
+      requires: kind
+      hint: >-
+        clean.coffee_shop_history holds every kind of place in each read, not only coffee
+        shops. A question about coffee shops filters kind = 'coffee'.
+
 # The explorer (`make explore`): a map of the city's coffee, questions to the agent, and a
 # chart of each answer. Each layer is one SELECT, run in the agent's locked session.
 explore:

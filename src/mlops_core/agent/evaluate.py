@@ -120,7 +120,11 @@ def run_evaluation(
     rows = []
     for truth in truths:
         start = time.perf_counter()
-        reply = ask(truth.case.question)
+        try:
+            reply = ask(truth.case.question)
+        except Exception as failed:  # one question that breaks is a wrong answer, not a lost run
+            reply = Reply(truth.case.question, truth.case.route, "", [], None, None, [],
+                          [f"The agent failed: {type(failed).__name__}: {failed}"])  # fmt: skip
         seconds = time.perf_counter() - start
         rows.append(check(truth, reply, con) | {"seconds": seconds, "trace_id": trace_id()})
     return pl.DataFrame(rows, schema=SCHEMA)

@@ -54,7 +54,7 @@ the state's own total, which the build checks). 16 rows.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `borough_id` | String | Official CVEGEO: entity + municipality, e.g. `09015` is Cuauhtémoc |
+| `borough_id` | String | INEGI's code (CVEGEO, entity + municipality); a question names a borough, so filter on `borough` |
 | `borough` | String | Name as INEGI spells it |
 | `area_km2` | Float | Area in the layer's own projection (conformal, so ~0.6% out: the 16 sum to 1,486 km² against the published 1,495) |
 | `boundary` | Binary | The polygon as WKB in WGS84. Readable with `ST_GeomFromWKB`, or any GIS |
@@ -66,7 +66,11 @@ the state's own total, which the build checks). 16 rows.
 
 Per inhabitant: divide by `population` (per 10,000: `* 10000.0 / population`).
 
-## `clean.coffee_shops` — one place that sells coffee
+## `clean.coffee_shops` — one place in DENUE's cafeterías class or OSM's cafés and ice-cream parlours
+
+**Not every row is a coffee shop.** DENUE's class 722515 also holds juice stands, soda
+fountains, ice-cream parlours and school tuck shops: for coffee shops, filter
+`kind = 'coffee'`; count every row only when a question asks for every kind of place.
 
 DENUE and OpenStreetMap side by side, each row placed in a borough by a point-in-polygon
 join, given a `kind`, and linked to its twin in the other register when both list it.
@@ -82,7 +86,7 @@ both can avoid counting one place twice.
 | `brand` | String? | OSM only: set when the place belongs to a chain |
 | `employees_band` | String? | DENUE only: size band of the workforce, e.g. `0 a 5 personas` |
 | `latitude`, `longitude` | Float | WGS84 |
-| `borough_id`, `borough` | String? | From the spatial join. Null if the point falls outside every borough |
+| `borough_id`, `borough` | String? | From the spatial join. Null if the point falls outside every borough. Filter a borough by its name, `borough` |
 | `declared_borough_id` | String? | The borough the source itself claims (DENUE's `AreaGeo`); null for OSM. The column the join is audited against |
 | `kind` | String | What the place is: `coffee`, `tea`, `ice_cream`, `juice`, `soda_fountain`, `school`, `unnamed` or `unclassified`. For a coffee-only view, filter `kind = 'coffee'` |
 | `kind_basis` | String | How the kind was decided: `name` (DENUE, read by the ordered rules in `cleaning.shop_kinds`) or `tag` (OSM, its own `amenity` tag) |
@@ -199,20 +203,22 @@ name at least one note; a coffee with none has no rows. The shops' claims, not a
 | `source` | String | Where the shop wrote it: `title` or `description` |
 
 Coffees that taste of a category: `COUNT(DISTINCT coffee_id)` filtered on `category`; its
-share is over the coffees with any note, not over all 167. Join `roaster_origins` on
-`coffee_id` for the origin or the process - only single-origin coffees (one row there)
-have one - and `roaster_offers` for the price. The share of a group's coffees with notes
-that name a category, here Mexico's and `floral`:
+share is over the coffees with any note, not over all 167. The share of the coffees with
+notes that name one category (here `floral`):
 
 ```sql
-WITH single AS (
-    SELECT coffee_id, any_value(country) AS country, any_value(processing_method) AS method
-    FROM clean.roaster_origins GROUP BY coffee_id HAVING count(*) = 1
-)
-SELECT count(DISTINCT CASE WHEN f.category = 'floral' THEN f.coffee_id END)::DOUBLE
-       / count(DISTINCT f.coffee_id) AS share
-FROM clean.roaster_flavors f JOIN single s USING (coffee_id)
-WHERE s.country = 'Mexico'
+SELECT count(DISTINCT CASE WHEN category = 'floral' THEN coffee_id END)::DOUBLE
+       / count(DISTINCT coffee_id) AS share
+FROM clean.roaster_flavors
+```
+
+For the origin or the process, join `roaster_origins` on `coffee_id` - only single-origin
+coffees (one row there) have one - and `roaster_offers` for the price. The single-origin
+coffees, to join and filter on only when the question names a country or a process:
+
+```sql
+SELECT coffee_id, any_value(country) AS country, any_value(processing_method) AS method
+FROM clean.roaster_origins GROUP BY coffee_id HAVING count(*) = 1
 ```
 
 ## `clean.price_indicators` — one indicator, one day or month
@@ -301,7 +307,7 @@ Internacional, Los Portales, store brands), not specialty coffee: that is
 | `state` | String | As PROFECO spells it (`Ciudad de México`, `Estado de México`) |
 | `municipality` | String | As the store declares it |
 | `latitude`, `longitude` | Float | As PROFECO geocoded the store; 6 of the city's 120 stores fall in another borough than they declare |
-| `borough_id`, `borough` | String? | The city's rows only: the borough the store declares, with `clean.boroughs`' key and spelling |
+| `borough_id`, `borough` | String? | The city's rows only: the borough the store declares, with `clean.boroughs`' key and spelling. Filter a borough by its name, `borough` |
 
 Read with care: **a median, not a mean** (a promotion is one shelf); **per kilogram of
 product** - instant is concentrated, so a kilogram of it makes several times the cups a

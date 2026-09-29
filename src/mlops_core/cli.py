@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from functools import cache
@@ -534,6 +534,7 @@ def benchmark(
         from mlops_core.agent.routing import routing_context
         from mlops_core.agent.sql import read_only, views
         from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
 
     config = _adapter(domain).config
     home = domain_dir(config.name)
@@ -550,7 +551,11 @@ def benchmark(
         with ollama_client(settings.ollama_url) as http:
             model = LocalModel(http, name, GENERATOR_OPTIONS)
             identity = _identified(model)
-            sql, routes = run_benchmark(model, con, schema, context, sql_cases, route_cases)
+            embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
+            linker = _linker(config, dictionary, views(con), embedder)
+            sql, routes = run_benchmark(
+                model, con, schema, context, sql_cases, route_cases, config.agent.sql_guards, linker
+            )
         summary, run_id = log_benchmark(
             config,
             identity,
@@ -820,6 +825,7 @@ def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple[
         search = IndexSearch(
             client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
         )
+        linker = _linker(config, dictionary, views(con), embedder)
         yield (
             Agent(
                 generator,
@@ -831,9 +837,25 @@ def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple[
                 api,
                 {row["document_id"]: row for row in documents.iter_rows(named=True)},
                 prompts,
+                list(config.agent.sql_guards),
+                linker,
             ),
             identity,
         )
+
+
+def _linker(
+    config: DomainConfig, dictionary: str, names: set[str], embedder: "LocalModel"
+) -> "Callable[[str], str] | None":
+    """The sections a question needs, when the domain asks for linking; else None, and
+    the SQL writer sees the whole dictionary."""
+    from mlops_core.agent.dictionary import SchemaLinker, offered
+    from mlops_core.rag.vectors import query_text
+
+    k = config.agent.schema_sections
+    if k is None:
+        return None
+    return SchemaLinker(offered(dictionary, names), embedder.embed, k, query_text)
 
 
 def _current_index(
