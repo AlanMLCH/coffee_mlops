@@ -1305,6 +1305,15 @@ indicator and day or month, in US cents per pound:
   page each time. The file's host also cut the connection twice in a row on the first
   real download: a dropped connection is now tried again, up to three times, while an
   HTTP error is still an answer.
+- **One source down no longer stops the rest** (29 September). A fresh clone's first
+  `make extract` stopped at the fifth source: SIAP's host (`nube.agricultura.gob.mx`)
+  timed out on every attempt that day, and the nine file sources after it, the APIs and
+  the documents were never tried. Each file source is now tried on its own: what the
+  network or the page can cause (an HTTP error, a link that moved, an empty body) is
+  logged and named, everything else is stored, and the command fails at the end naming
+  what it could not reach; run again, it downloads only what is not fresh. A bug is not
+  caught: it still stops the run where it happens. Dagster's `raw_sources` fails the same
+  way, after the rest is stored.
 
 **In pesos.** `clean.exchange_rates` holds the peso-dollar rate, the Federal Reserve's
 daily noon buying rate in New York through FRED (no key; Banxico's official FIX needs a

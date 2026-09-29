@@ -14,7 +14,7 @@ from dagster import AssetKey, AssetSelection, build_sensor_context, materialize
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core.adapter import ApiExtraction
 from mlops_core.config import Settings
-from mlops_core.data.extract import CHECKS, MANIFEST_NAME, Check, Manifest
+from mlops_core.data.extract import CHECKS, MANIFEST_NAME, Check, Extraction, Manifest
 from mlops_core.ml.registry import NoChampion
 from mlops_core.ml.train import TrainResult
 from mlops_core.orchestration import definitions
@@ -148,7 +148,7 @@ def test_every_asset_runs_its_own_pipeline_step(
     )
     monkeypatch.setattr(coffee_adapter, "extract", extract)
     stubs = {
-        "extract_all": Stub({"cqi_2018": artifact}),
+        "extract_all": Stub(Extraction({"cqi_2018": artifact}, {})),
         "fetch_documents": Stub(({"wcr_arabica_catalog": artifact}, {"sca_103_descriptive": "x"})),
         "build_clean": Stub({"coffee_reviews": Path("reviews.parquet")}),
         "build_features": Stub(Path("features.parquet")),
@@ -180,6 +180,22 @@ def test_every_asset_runs_its_own_pipeline_step(
     raw = result.asset_materializations_for_node("coffee__raw_sources")[0]
     assert raw.metadata["sources"].value == 3  # a file source, an API source, a document
     assert raw.metadata["skipped"].value == "denue_cafes (no token), sca_103_descriptive (x)"
+
+
+def test_a_source_that_could_not_be_downloaded_fails_the_run_after_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = SimpleNamespace(manifest=SimpleNamespace(size_bytes=10))
+    extraction = Extraction({"cqi_2018": artifact}, {"siap_agricola": "ConnectTimeout: timed out"})
+    monkeypatch.setattr(definitions, "extract_all", Stub(extraction))
+    monkeypatch.setattr(definitions, "fetch_documents", Stub(({}, {})))
+    monkeypatch.setattr(definitions, "http_client", contextmanager(lambda: iter([None])))
+    monkeypatch.setattr(CoffeeAdapter, "extract", lambda *args: ApiExtraction({}, {}))
+    defs = build_definitions(settings=Settings(data_dir=tmp_path))
+    raw = defs.resolve_assets_def(AssetKey(["coffee", "raw_sources"]))
+
+    with pytest.raises(RuntimeError, match=r"siap_agricola \(ConnectTimeout: timed out\)"):
+        raw()
 
 
 def test_a_model_no_version_has_passed_is_recorded_not_failed(

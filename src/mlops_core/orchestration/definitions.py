@@ -125,7 +125,7 @@ def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefi
         so a source cannot be one that only arrives when a human types the command.
         """
         with http_client() as client:
-            artifacts = extract_all(config, data_dir / "raw", client)
+            files = extract_all(config, data_dir / "raw", client)
             api = adapter.extract(data_dir, client)
             corpus, absent = fetch_documents(
                 config.documents,
@@ -133,7 +133,12 @@ def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefi
                 client,
                 refresh_hours=config.corpus.refresh_hours if config.corpus else None,
             )
-        artifacts |= api.artifacts | corpus
+        if files.failed:  # after every other source is stored: they are not lost
+            raise RuntimeError(
+                "Could not download: "
+                + "; ".join(f"{name} ({why})" for name, why in files.failed.items())
+            )
+        artifacts = files.artifacts | api.artifacts | corpus
         skipped = api.skipped | absent
         return MaterializeResult(
             metadata={

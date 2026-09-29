@@ -28,14 +28,33 @@ T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 T1 = datetime(2026, 12, 20, 12, 0, tzinfo=UTC)
 
 
+def test_a_source_that_cannot_be_reached_does_not_stop_the_others(
+    tmp_path: Path, coffee_config: DomainConfig, server: RecordedServer, client: httpx.Client
+) -> None:
+    """A government host that times out, or a page whose link moved: said, and the rest
+    stored. SIAP's host did time out on a fresh clone's first extract."""
+    del server.payloads[str(coffee_config.sources["siap_agricola"].url)]
+    server.payloads[str(coffee_config.sources["world_bank_prices"].url)] = b"<html>moved</html>"
+
+    extraction = extract_all(coffee_config, tmp_path, client)
+
+    assert extraction.failed.keys() == {"siap_agricola", "world_bank_prices"}
+    assert extraction.failed["siap_agricola"].startswith("HTTPStatusError: Client error '404")
+    assert extraction.failed["world_bank_prices"].startswith("LookupError: No link on")
+    assert "fred_usd_mxn" in extraction.artifacts  # after both in the config's order
+    assert latest_ingestion(tmp_path, "siap_agricola") is None
+
+
 def test_every_source_is_stored_byte_for_byte(
     tmp_path: Path,
     coffee_config: DomainConfig,
     client: httpx.Client,
     recorded: dict[str, bytes],
 ) -> None:
-    artifacts = extract_all(coffee_config, tmp_path, client)
+    extraction = extract_all(coffee_config, tmp_path, client)
+    artifacts = extraction.artifacts
 
+    assert not extraction.failed
     assert artifacts.keys() == recorded.keys()
     for name, artifact in artifacts.items():
         assert artifact.path.read_bytes() == recorded[name]

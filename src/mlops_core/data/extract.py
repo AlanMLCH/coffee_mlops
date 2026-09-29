@@ -309,10 +309,31 @@ def _log_check(raw_dir: Path, name: str, check: Check) -> None:
         log.write(check.model_dump_json() + "\n")
 
 
-def extract_all(
-    config: DomainConfig, raw_dir: Path, client: httpx.Client
-) -> dict[str, RawArtifact]:
-    return {name: ingest(name, source, raw_dir, client) for name, source in config.sources.items()}
+@dataclass(frozen=True)
+class Extraction:
+    """What one pass over a domain's file sources stored, and what it could not reach."""
+
+    artifacts: dict[str, RawArtifact]
+    failed: dict[str, str]  # source -> why, in a line
+
+
+def extract_all(config: DomainConfig, raw_dir: Path, client: httpx.Client) -> Extraction:
+    """Download every file source, each on its own.
+
+    One source that cannot be reached - a government host that times out, a page whose
+    link moved - does not stop the others: they are stored, and the caller says which
+    failed and fails after trying everything. Only what the network or the page can
+    cause is caught; a bug still stops the run where it happens.
+    """
+    artifacts, failed = {}, {}
+    for name, source in config.sources.items():
+        try:
+            artifacts[name] = ingest(name, source, raw_dir, client)
+        except (httpx.HTTPError, LookupError, ValueError) as error:
+            reason = str(error).strip().splitlines()[0] if str(error).strip() else ""
+            failed[name] = f"{type(error).__name__}: {reason}".rstrip(": ")
+            logger.error("%s could not be downloaded: %s", name, failed[name])
+    return Extraction(artifacts, failed)
 
 
 def _download(client: httpx.Client, url: str, target: Path) -> tuple[str, int, str | None]:

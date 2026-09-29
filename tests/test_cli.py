@@ -284,6 +284,20 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
     assert "cqi_2018:" in result.output  # the file sources still ran
 
 
+def test_extract_stores_what_it_reached_and_fails_naming_what_it_did_not(
+    data_dir: Path, server: RecordedServer
+) -> None:
+    siap = str(domains.coffee.adapter().config.sources["siap_agricola"].url)
+    del server.payloads[siap]
+
+    result = CliRunner().invoke(cli.app, ["data", "extract"])
+
+    assert result.exit_code == 1
+    assert "siap_agricola: FAILED, HTTPStatusError" in result.output
+    assert "run `make extract` again" in result.output
+    assert (data_dir / "coffee" / "raw" / "census_2020").is_dir()  # the rest was stored
+
+
 def test_prune_reports_what_it_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))
     table = tmp_path / "coffee" / "clean" / "coffee_reviews"

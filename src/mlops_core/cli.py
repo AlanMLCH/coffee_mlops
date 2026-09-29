@@ -135,7 +135,7 @@ def extract(domain: Domain = None) -> None:
     config = adapter.config
     data_dir = _data_dir(config)
     with http_client() as client:
-        artifacts = extract_all(config, data_dir / "raw", client)
+        files = extract_all(config, data_dir / "raw", client)
         api = adapter.extract(data_dir, client)
         corpus, absent = fetch_documents(
             config.documents,
@@ -145,8 +145,18 @@ def extract(domain: Domain = None) -> None:
         )
     for name, reason in (api.skipped | absent).items():
         typer.echo(f"{name}: skipped, {reason}", err=True)
-    for name, artifact in (artifacts | api.artifacts | corpus).items():
+    for name, artifact in (files.artifacts | api.artifacts | corpus).items():
         typer.echo(f"{name}: {artifact.path} ({artifact.manifest.size_bytes:,} bytes)")
+    if files.failed:
+        for name, reason in files.failed.items():
+            typer.echo(f"{name}: FAILED, {reason}", err=True)
+        # The rest is stored; a source's last good download stays the one `clean` reads.
+        typer.echo(
+            f"{len(files.failed)} source(s) could not be downloaded; run `make extract` again "
+            "later - what is already fresh is not downloaded twice.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @data_app.command()
