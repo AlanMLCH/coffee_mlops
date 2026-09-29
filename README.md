@@ -47,7 +47,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.608** (dense) | 0.468 (BM25); hybrid did not beat dense |
-| The agent, 47 questions end to end | **79%** correct, 100% verified | - |
+| The agent, 48 questions end to end | **73%** correct, 94% verified | 79% the run before, a difference within noise (10% sure) |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
@@ -207,7 +207,7 @@ current month; run it before a month ends). `make help` lists every target.
 | 1 | Static files | Contracts, raw and clean layers, the first model and its gate | done |
 | 2 | APIs + geospatial | Retries, rate limits, secrets, spatial joins; the core extracted | done |
 | 3 | Scraping | Semi-structured parsing, RAG, the agent, MCP | done |
-| 4 | Time series | Accumulating sources, forecasting, drift, retraining, the explorer | in progress |
+| 4 | Time series | Accumulating sources, forecasting, drift, retraining, the explorer | done: v1.0 |
 
 A second domain (video games) comes once coffee is finished: it is the test of whether
 the framework is reusable, and its cost in new lines will be published here.

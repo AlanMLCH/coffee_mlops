@@ -15,9 +15,11 @@ costs.
 
 ## Status
 
-**Stage 4 — time series, drift and retraining: in progress.** Stages 1, 2 and 3 are
-done; the international price of green coffee is in, day by day and month by month, and
-so is what packaged coffee costs on Mexico's shelves, fortnight by fortnight.
+**Stages 1 to 4 are done: v1.0 of the coffee domain (29 September 2026).** Every source
+is in and keeps its history, three models stand behind the gate and the monitor, the
+agent answers from the tables, the models and the documents, and the explorer shows all
+of it; the recipe was run from a fresh clone ([From a fresh clone](#from-a-fresh-clone)).
+Next is the second domain, the test of whether the framework is reusable.
 
 | Stage | New source type | Capability the platform gains |
 |---|---|---|
@@ -310,14 +312,22 @@ the freeze.
    returning an object that satisfies `mlops_core.adapter.DomainAdapter`.
 2. Run anything with `--domain <name>` (or set `MLOPS_DOMAIN`). Dagster picks it up.
 
-What that costs today, as a baseline for the next domain (code lines: no blanks,
-comments or docstrings):
+What that costs, as a baseline for the next domain (code lines: no blanks, comments or
+docstrings), when the core was extracted and at v1.0:
 
-| | Files | Code lines |
-|---|---:|---:|
-| `mlops_core` (shared by every domain) | 30 | 2,173 |
-| `domains/coffee` | 13 | 1,101 |
-| ↳ the adapter's own glue (`adapter.py`, `__init__.py`, `request.py`, `features.py`) | 4 | 111 |
+| | End of stage 2 (21 Sep) | | v1.0 (29 Sep) | |
+|---|---:|---:|---:|---:|
+| | Files | Code lines | Files | Code lines |
+| `mlops_core` (shared by every domain) | 30 | 2,173 | 68 | 7,771 |
+| `domains/coffee` | 12 | 968 | 21 | 3,581 |
+| ↳ the adapter's own glue (`adapter.py`, `__init__.py`, `request.py`, `features.py`) | 4 | 111 | 4 | 301 |
+
+The v1.0 count is `uv run python experiments/code_lines.py`, which reproduces the core's
+and the glue's figures of 21 September exactly from that day's commit; the domain's was
+first published as 1,101 lines in 13 files, counted another way, and is recounted here.
+The core grew by what stages 3 and 4 gave every domain - the scraping client, the corpus
+and RAG, the agent and MCP, monitoring, the explorer, `status`; the glue grew with a
+second and a third model.
 
 Most of coffee's lines are knowledge no framework can supply: six sources, their
 contracts, and how two CQI scrapes that disagree about spelling become one table. The
@@ -1114,6 +1124,18 @@ the run before; the benchmark's routing 96%, SQL 84% (the washed-floral share is
 answered from the wrong rows). As with every fix here, measured on the questions that
 found it, so optimistic.
 
+**At v1.0 (29 September)**, with the registers' history in the dictionary and a question
+on it (48 in all): **73% correct, 94% verified, routing 94%**, median 4 s a question;
+against the run above, -4 points (-13 to +4), 10% sure it is better: not a change the
+48 questions can tell from the 4B model's run-to-run variation.
+The new question is one of the misses: asked how many coffee shops entered the register
+in November 2024, the model wrote `listed_since >= '2024-11-01'` and forgot `kind =
+'coffee'` (4,059 instead of 1,528). Two predictions go to the tables, three joins return
+the wrong rows, two answers carry an unverified figure - and every one of them is shown
+as such in the explorer. The benchmark: SQL 79% (33 questions), routing 94%, above the
+bar; granite4.2:3b still below it (48%, 69%). Not tuned further: the prompts moved to fit
+these 48 questions would be the questions fitting the prompts.
+
 ### The same tools over MCP
 
 `mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for
@@ -1257,6 +1279,11 @@ September: one app). The dashboard's content is now the explorer's:
   every figure it drew: the findings are a curated few, the rest is one click away.
 - Nothing is recomputed: the tables come through the agent's locked session
   (`analysis.*`), the figures from the newest drawing on disk (`explore/studies.py`).
+  The stamp names the partitions of the model's own features and predictions, and a
+  box plot of more than four periods cycles the house colours (the fifth read of the
+  shops fell back to matplotlib's own style).
+
+![The Models tab: the price model, its partitions, the monitor's verdict, its target read by read](figures/explorer_models.png)
 
 `make dashboard`, `mlops analysis dashboard` and `analysis/dashboard.py` are gone, and
 Streamlit moved from the `analysis` extra to `explore`: the analysis pipeline draws with
