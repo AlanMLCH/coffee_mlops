@@ -50,8 +50,15 @@ def data_findings(
     raw = data_dir / "raw"
     found: list[Finding] = []
     refresh = {name: source.refresh_hours for name, source in config.sources.items()}
+    # Credentials are optional: an API source is skipped while one it needs is missing, and
+    # which one is the domain's to know. A never-downloaded API source is then a note.
+    keyless = any(secret is None for secret in adapter.credentials().values())
     for name in [*config.sources, *adapter.json_readers()]:
         checked = last_checked(raw, name)
+        if checked is None and keyless and name not in config.sources:
+            detail = "never downloaded: an API source, skipped while its key is missing (keys)"
+            found.append(Finding(DATA, name, None, detail))
+            continue
         if checked is None:
             found.append(Finding(DATA, name, False, "never downloaded", EXTRACT))
             continue
@@ -68,7 +75,10 @@ def data_findings(
         by_hand = [d.inbox for d in missing if d.inbox]
         if by_hand:
             detail += f"; put {', '.join(by_hand)} in {inbox.as_posix()}"
-        found.append(Finding(DATA, "documents", not missing, detail, EXTRACT if missing else ""))
+        # A document only a person can fetch is optional: the corpus works without it.
+        fetchable = [d for d in missing if not d.inbox]
+        ready = None if missing and not fetchable else not missing
+        found.append(Finding(DATA, "documents", ready, detail, EXTRACT if fetchable else ""))
     newest_raw = max((stamp(p) for p in raw.glob("*/*=*") if p.is_dir()), default=None)
     clean_tables = [*adapter.clean_contracts(), *config.corpus_tables]
     found.append(_layer(data_dir / "clean", clean_tables, newest_raw, CLEAN))
@@ -162,12 +172,11 @@ def service_findings(
 
 
 def key_findings(adapter: DomainAdapter) -> list[Finding]:
-    """Each credential the domain reads: set or not, never its value."""
-    fix = "set it in .env (see .env.example)"
+    """Each credential the domain reads: set or not, never its value. A missing one is a
+    note, not a task: credentials are optional, and what needs one is skipped out loud."""
+    missing = "missing: optional, what needs it is skipped (see .env.example)"
     return [
-        Finding(
-            KEYS, label, secret is not None, "set" if secret else "missing", "" if secret else fix
-        )
+        Finding(KEYS, label, True if secret else None, "set" if secret else missing)
         for label, secret in adapter.credentials().items()
     ]
 

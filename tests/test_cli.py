@@ -332,6 +332,8 @@ def test_analysis_run_writes_studies_and_publishes_figures(
     """The repo root is redirected on purpose: the command publishes figures into
     `docs/figures/`, so without this the suite overwrites the documentation with
     pictures of the 25-row fixture -- committed, and rendered in the README."""
+    # With the register: without it the coffee shops per resident are unknown, not drawn.
+    monkeypatch.setenv("COFFEE_DENUE_TOKEN", "fixture-token")
     runner = CliRunner()
     runner.invoke(cli.app, ["data", "run"])
     runner.invoke(cli.app, ["ml", "features"])
@@ -353,7 +355,8 @@ def test_analysis_run_writes_studies_and_publishes_figures(
         "review_feature_importance.png",
         "market_history.png",
         "mexico_production.png",  # review_residual_bias needs predictions; this run has none
-        "coffee_and_schooling.png",
+        "coffee_and_schooling.png",  # both drawn from DENUE's register
+        "shop_kinds.png",
         "roaster_coverage.png",
         "flavor_profiles.png",
         "offer_feature_importance.png",

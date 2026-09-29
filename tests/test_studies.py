@@ -296,6 +296,25 @@ def test_coffee_shops_are_counted_per_borough_against_area_and_residents() -> No
     assert table.row(-1, named=True)["per_10k_people"] is None
 
 
+def test_without_the_register_no_borough_has_a_count_rather_than_zero() -> None:
+    """A clone without a DENUE token has only OpenStreetMap: zero shops would be a
+    finding, and a figure of zeros would be published."""
+    shops = pl.DataFrame({"borough_id": ["b1"], "kind": ["coffee"], "source": ["osm"]})
+    boroughs = pl.DataFrame(
+        {
+            "borough_id": ["b1", "b2"],
+            "borough": ["Centro", "Norte"],
+            "area_km2": [2.0, 4.0],
+            "population": [20_000, 40_000],
+            "schooling_years": [13.0, 11.0],
+        }
+    )
+
+    table = borough_coffee_shops(shops, boroughs)
+
+    assert table["coffee_shops"].null_count() == table["per_10k_people"].null_count() == 2
+
+
 def test_coffee_and_schooling_is_drawn_with_its_rank_correlation() -> None:
     table = pl.DataFrame(
         {

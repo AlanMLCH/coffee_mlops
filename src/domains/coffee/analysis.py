@@ -162,17 +162,19 @@ def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.Data
     The official register's (DENUE): OpenStreetMap's count where its volunteers map. Per
     10,000 inhabitants counts residents, so a borough people commute into - the centre -
     serves many more than it houses; read it as where coffee shops are, per resident, not
-    as demand. A borough the census has not reached yet has no rate.
+    as demand. A borough the census has not reached yet has no rate, and without the
+    register (no DENUE token) no borough has a count: unknown, not zero.
     """
+    register = shops.filter(pl.col("source") == "denue")
     counted = (
-        shops.filter((pl.col("kind") == COFFEE) & (pl.col("source") == "denue"))
+        register.filter(pl.col("kind") == COFFEE)
         .group_by("borough_id")
         .agg(pl.len().alias("coffee_shops"))
     )
     return (
         boroughs.select("borough_id", "borough", "area_km2", "population", "schooling_years")
         .join(counted, on="borough_id", how="left")
-        .with_columns(pl.col("coffee_shops").fill_null(0))
+        .with_columns(pl.col("coffee_shops").fill_null(pl.lit(None if register.is_empty() else 0)))
         .with_columns(
             (pl.col("coffee_shops") / pl.col("area_km2")).alias("per_km2"),
             (pl.col("coffee_shops") * 10_000 / pl.col("population")).alias("per_10k_people"),

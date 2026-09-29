@@ -326,7 +326,10 @@ number to watch is the second domain's, and whether `mlops_core` had to change f
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make
-(Windows: `winget install ezwinports.make`), Docker (for services).
+(Windows: `winget install ezwinports.make`), Docker (for services). The README's
+[Quickstart](../README.md#quickstart) also covers the optional credentials (`.env`) and the
+eight documents fetched by hand; [From a fresh clone](#from-a-fresh-clone) is what running
+it from zero found.
 
 ```bash
 make install                  # venv + all extras + git hooks
@@ -344,7 +347,8 @@ make retrieval                # BM25 -> dense -> hybrid, each through the gate
 
 # The explorer: needs the layers built; its questions need Ollama, the index and the API
 make services-up PROFILE=api  # the prediction API
-make explore                  # http://localhost:8502: the map, the chat, the charts
+make explore                  # http://localhost:8502: map, agent, segments, findings, models
+make status                   # what is ready, and the command for what is not
 
 make sql Q="SELECT p.snapshot, round(avg(p.prediction - f.total_cup_points), 3) AS bias \
   FROM predictions.review_predictions p JOIN features.review_features f USING (review_id) \
@@ -1716,6 +1720,39 @@ The evaluation is built to survive a small test set:
   A test fails if a column stops being documented.
 
 ## Development
+
+### From a fresh clone
+
+On 29 September the repository was cloned from GitHub into an empty directory and the
+recipe run from zero, as a stranger would: no `.env` (no DENUE token, no FAS key), none of
+the eight documents fetched by hand, its own SQLite MLflow and its own Qdrant container,
+so nothing could lean on the working copy.
+
+- **Found and fixed:** `make extract` stopped at the fifth source, SIAP's host timing out
+  that day, and never tried the other nine files, the APIs or the documents - now each
+  source is tried on its own and the command fails at the end naming what it could not
+  reach. A read of the shops stored a new partition every time, Buna's pages changing
+  their whitespace between requests - now stored without it. Without the DENUE register
+  the per-borough study counted zero coffee shops everywhere and published a figure of
+  zeros over the committed one - now the counts are unknown and nothing is drawn. `make
+  status` listed the optional credentials and the hand-fetched documents as tasks
+  forever - now they are notes.
+- **Not fixed, because it is not ours:** `thedocs.worldbank.org` began resetting the TLS
+  handshake of Python's client that morning (curl, with the same user agent, got the
+  file; the working copy had downloaded it hours before). It is named as a failed source
+  and not worked around. For the rest of the run, SIAP's and the World Bank's stored
+  downloads were copied in, as a later successful retry would have left them.
+- MLflow could not open its SQLite store from a clone deep in a temporary folder: one of
+  its migration files has a 90-character name, and the path passed Windows' 260-character
+  limit. The README says to clone to a short path or enable long paths.
+- **Reproduced from zero:** validation of every source; the 17 clean tables without the
+  token (OSM's places only, 3 minutes); the cup-score model's MAE 1.648 against 1.894,
+  identical to the working copy's; the price model 228.7 against 257.5 out of fold, 99%
+  sure, on one read of the shops (512 offers); the green-coffee forecast not promoted,
+  80% sure, identical; the index (1,030 chunks of nine documents) and the retrieval
+  ladder, dense passing the gate (nDCG@10 0.424 against 0.370; lower than with all 17
+  documents, since questions point at the missing eight); the analysis and the monitor.
+  About 350 MB of downloads and 1.4 GB of environment.
 
 - **`make status`** (`mlops status`) says what is ready and what is left to do, each with
   the command that makes it ready, in the order to run them: the keys (set or missing,

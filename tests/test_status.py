@@ -38,8 +38,9 @@ def test_a_fresh_raw_layer_asks_for_what_is_built_from_it(
     assert found(findings, "psd_coffee").ready is True
     assert found(findings, "ico_prices").detail.endswith("1 read kept")  # accumulates
     documents = found(findings, "documents")
-    # The fixtures serve the documents a publisher serves; the others are handed over.
-    assert documents.ready is False and "put " in documents.detail and "inbox" in documents.detail
+    # The fixtures serve the documents a publisher serves; the others are handed over, and
+    # a document only a person can fetch is optional: a note, not a task.
+    assert documents.ready is None and "put " in documents.detail and "inbox" in documents.detail
     clean = found(findings, "clean")
     assert (clean.ready, clean.fix) == (False, "make clean-layer")
     assert found(findings, "review_features").fix == "make ml"
@@ -257,8 +258,23 @@ def test_keys_are_said_set_or_missing_never_shown(coffee_adapter: CoffeeAdapter)
 
     findings = checks.key_findings(CoffeeAdapter(coffee_adapter.config, keys))
 
-    assert [(f.ready, f.detail) for f in findings] == [(True, "set"), (False, "missing")]
+    assert [(f.ready, f.fix) for f in findings] == [(True, ""), (None, "")]  # optional
+    assert findings[1].detail.startswith("missing: optional")
     assert "secret-token" not in repr(findings)
+
+
+def test_without_a_key_an_api_source_never_read_is_a_note_and_a_file_is_still_to_do(
+    coffee_adapter: CoffeeAdapter, tmp_path: Path
+) -> None:
+    keyless = CoffeeAdapter(coffee_adapter.config, CoffeeCredentials(denue_token=None))
+    (tmp_path / "raw").mkdir()
+
+    findings = checks.data_findings(keyless, tmp_path)
+
+    assert found(findings, "denue_cafes").ready is None  # skipped at extract, said there
+    assert found(findings, "psd_coffee").fix == "make extract"
+    documents = found(findings, "documents")
+    assert (documents.ready, documents.fix) == (False, "make extract")  # some can be fetched
 
 
 def test_what_to_do_comes_in_the_order_it_should_run() -> None:

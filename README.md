@@ -37,7 +37,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
   Desktop, Claude Code or an IDE, and an explorer app - the price ladder at a glance, a
   deck.gl map of the city, questions to the agent with a chart of every answer, the
-  tables sliced by hand, and the findings.
+  tables sliced by hand, the findings, and each model's evidence.
 
 ## Results
 
@@ -123,28 +123,60 @@ The complete diagram, every source and table in it, is in the
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make
 (Windows: `winget install ezwinports.make`), Docker. The agent needs
-[Ollama](https://ollama.com) with `qwen3.5:4b` and `qwen3-embedding:0.6b`.
+[Ollama](https://ollama.com) with `qwen3.5:4b` and `qwen3-embedding:0.6b`
+(`ollama pull` each). Disk: about 350 MB of downloads, 2 GB with the environment. On
+Windows, clone to a short path (MLflow ships files whose names push a deep one past the
+260-character limit) or enable long paths.
+
+**1. Install.**
 
 ```bash
 make install                  # venv + every extra + git hooks
-make check                    # lint + types + tests
+make check                    # lint + types + tests: offline, no services needed
+```
 
-make data                     # download, validate, clean
+**2. Credentials: optional.** Without them everything builds except DENUE's register of
+establishments and the USDA API's cross-check of the PSD file; `make extract` says which it
+skipped and why.
+
+```bash
+cp .env.example .env          # then fill in what you have (the file says where to get each)
+uv run mlops secrets          # which are loaded, without printing them
+```
+
+**3. Documents a publisher will not serve to a script: optional.** MDPI, Oxford Academic
+and the SCA answer 403, so eight of the corpus's 17 documents are downloaded by hand into
+`data/coffee/inbox/documents/`, under the names below; without them the corpus has nine,
+and `make extract` names each missing one with its address.
+
+| Save as | From |
+|---|---|
+| `beverages-06-00029-v2.pdf` | https://www.mdpi.com/2306-5710/6/2/29 |
+| `beverages-06-00044-v3.pdf` | https://www.mdpi.com/2306-5710/6/3/44 |
+| `ijfs16261.pdf` | https://academic.oup.com/ijfst/article/58/3/1007/7807986 |
+| `CVA+Cupping+Forms+(EN).pdf`, `AW_SCA-102_Sample-Preparation_28.10.24_Secured.pdf`, `AW_SCA-103_Descriptive-Assessment_Sept2024_Secured.pdf`, `AW_SCA-104_Affective-Assessment_Sept2024_Secured.pdf`, `SCA_Standard_105-Extrinsic-Assessment_SECURED+(2).pdf` | https://sca.coffee/value-assessment |
+
+**4. Build and use.**
+
+```bash
+make data                     # download, validate, clean (about 10 minutes)
 make services-up PROFILE=ml   # MLflow at http://localhost:5000
 make ml                       # features, training through the gate, batch predictions
+make analysis                 # the studies and figures
 
 make services-up PROFILE=ai   # Qdrant
 make index                    # embed the documents
 make services-up PROFILE=api  # the prediction API
 make ask Q="Which borough has the most coffee shops per square kilometre?"
-make explore                  # the map, the chat, the charts: http://localhost:8502
+make explore                  # the map, the agent, the findings, the models: http://localhost:8502
 
 make status                   # what is ready, and the command for what is not
 ```
 
-Everything runs by hand: `make extract` again keeps the history of the sources that
-only show the present (the ICO's page shows the current month; run it before a month
-ends). `make status` says what is left to run, in order; `make help` lists every target.
+A source whose host is down is named and the rest are stored: run `make extract` again
+later, and only what is missing is fetched. Everything runs by hand: `make extract` again
+keeps the history of the sources that only show the present (the ICO's page shows the
+current month; run it before a month ends). `make help` lists every target.
 
 ## Stack
 
