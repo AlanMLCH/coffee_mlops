@@ -939,6 +939,57 @@ def secrets(domain: Domain = None) -> None:
         typer.echo(f"{label}: {state}")
 
 
+STATES = {True: "[ok]   ", False: "[to do]", None: "[note] "}
+
+
+@app.command()
+def status(domain: Domain = None) -> None:
+    """What is ready and what is left to do - keys, data, models, services - each with the
+    command that makes it ready."""
+    with _needs_extra("data"):
+        from mlops_core import status as checks
+
+    adapter = _adapter(domain)
+    config, settings = adapter.config, Settings()
+    data_dir = _data_dir(config)
+    findings = [*checks.key_findings(adapter), *checks.data_findings(adapter, data_dir)]
+    with http_client() as http:
+        services = checks.service_findings(settings, config, data_dir, http)
+    registry_up = next(f.ready for f in services if f.name == "MLflow")
+    if registry_up:
+        findings += checks.model_findings(config, data_dir, _champion_version(settings))
+    else:
+        findings.append(checks.Finding(checks.MODELS, "champions", None, "unknown: MLflow is down"))
+    findings += services
+    for section, found in checks.by_section(findings).items():
+        typer.echo(section)
+        for finding in found:
+            fix = f"  ->  {finding.fix}" if finding.fix else ""
+            typer.echo(f"  {STATES[finding.ready]} {finding.name}: {finding.detail}{fix}")
+    commands = checks.to_do(findings)
+    typer.echo("\nNothing to do." if not commands else "\nTo do, in this order:")
+    for command, fixes in commands.items():
+        typer.echo(f"  {command}   ({', '.join(fixes)})")
+
+
+def _champion_version(settings: Settings) -> Any:
+    """A lookup of each registered model's champion version, None when there is none."""
+    import mlflow
+    from mlflow import MlflowClient
+    from mlflow.exceptions import MlflowException
+
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    client = MlflowClient()
+
+    def champion(registered_model: str) -> str | None:
+        try:
+            return str(client.get_model_version_by_alias(registered_model, "champion").version)
+        except MlflowException:  # no alias, or no such model: the gate never promoted one
+            return None
+
+    return champion
+
+
 @app.command()
 def sql(
     query: Annotated[str, typer.Argument(help="e.g. 'SELECT count(*) FROM clean.<table>'")],

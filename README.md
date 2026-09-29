@@ -135,11 +135,13 @@ make index                    # embed the documents
 make services-up PROFILE=api  # the prediction API
 make ask Q="Which borough has the most coffee shops per square kilometre?"
 make explore                  # the map, the chat, the charts: http://localhost:8502
+
+make status                   # what is ready, and the command for what is not
 ```
 
 Everything runs by hand: `make extract` again keeps the history of the sources that
 only show the present (the ICO's page shows the current month; run it before a month
-ends). `make help` lists every target.
+ends). `make status` says what is left to run, in order; `make help` lists every target.
 
 ## Stack
 

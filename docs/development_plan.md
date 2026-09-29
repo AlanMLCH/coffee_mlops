@@ -1589,6 +1589,15 @@ The evaluation is built to survive a small test set:
 
 ## Development
 
+- **`make status`** (`mlops status`) says what is ready and what is left to do, each with
+  the command that makes it ready, in the order to run them: the keys (set or missing,
+  never shown), every source's last download and whether it is due again, the documents
+  read and the ones to hand over, whether each layer was built after the data it reads,
+  each model's champion and a retraining the monitor asked for, and the services - the
+  registry, the prediction API with the models it serves, the vector index against the
+  chunks on disk, and the local models pulled. It exists because the explorer and the
+  agent stand on all of them at once, and a missing one used to surface elsewhere as an
+  unrelated error. A service that is down is a finding, not a crash (`mlops_core/status.py`).
 - Python 3.12, dependencies managed with `uv` (`uv.lock` is committed).
 - Every MLflow run is tagged with the git commit that produced it, and whether the tree
   was dirty: a run from uncommitted code is not reproducible and should not pretend to be.

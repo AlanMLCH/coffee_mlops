@@ -6,10 +6,11 @@ export DAGSTER_HOME := $(CURDIR)/.dagster
 # Compose profile to start: ml | api | ai | all (repeat with PROFILE="ml --profile api")
 PROFILE ?= ml
 
-.PHONY: help install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard explore questions review index retrieval benchmark ask agent-eval monitor retrain mcp sql prune dagster services-up services-down
+.PHONY: help status install lint format typecheck test test-network check data extract validate clean-layer ml features train predict analysis dashboard explore questions review index retrieval benchmark ask agent-eval monitor retrain mcp sql prune dagster services-up services-down
 
 help:
 	@echo "install    venv + dependencies + git hooks"
+	@echo "status     what is ready and what is left to do, with the command for each"
 	@echo "lint       ruff lint and format check"
 	@echo "format     apply ruff fixes and formatting"
 	@echo "typecheck  mypy --strict"
@@ -107,6 +108,9 @@ prune:
 
 analysis:
 	uv run mlops analysis run --domain $(DOMAIN)
+
+status:
+	uv run mlops status --domain $(DOMAIN)
 
 dashboard:
 	uv run mlops analysis dashboard --domain $(DOMAIN)
