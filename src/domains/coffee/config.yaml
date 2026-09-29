@@ -1121,6 +1121,7 @@ explore:
         stores: count(DISTINCT store)
       dimensions: [product, fortnight, state, borough, chain, store_type, brand, sweetened, decaf]
       filters: [product, sweetened, decaf, state, chain]
+      null_labels: {borough: outside Mexico City}
     - name: Specialty roasters' bags
       description: >-
         The four roasters' offers - a coffee in one size - with what their sheets say about
@@ -1133,6 +1134,11 @@ explore:
         coffees: count(DISTINCT coffee_id)
       dimensions: [shop, country, state, processing_method, variety, bag_grams]
       filters: [shop, country, processing_method]
+      null_labels:
+        country: origin not stated
+        state: not a Mexican state, or not stated
+        processing_method: not stated
+        variety: not stated
     - name: What the roasters say their coffees taste of
       description: >-
         Tasting notes read from the shops' descriptions into the SCA's flavour categories;
@@ -1154,6 +1160,7 @@ explore:
         mean_altitude_m: avg(altitude_m)
       dimensions: [country, processing_method, variety, snapshot, color]
       filters: [snapshot, processing_method, country]
+      null_labels: {processing_method: not stated, variety: not stated, color: not stated}
     - name: Mexico's harvest (SIAP, 2025)
       description: Coffee cherry by state and municipality, the closing figures of the year.
       table: clean.mexico_production

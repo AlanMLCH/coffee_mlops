@@ -567,6 +567,9 @@ class ExploreDataset(BaseModel):
     measures: dict[str, str] = Field(min_length=1)
     dimensions: list[str] = Field(min_length=1)  # what it can be segmented and coloured by
     filters: list[str] = []  # columns a person can restrict to some of their values
+    # What an empty value of a dimension means, where "(no value)" would mislead: a price
+    # recorded outside every area has no area, and is not an area called "null".
+    null_labels: dict[str, str] = {}
 
     @model_validator(mode="after")
     def _names_are_bare_identifiers(self) -> Self:
@@ -574,6 +577,9 @@ class ExploreDataset(BaseModel):
         odd = [name for name in names if not re.match(_IDENTIFIER, name)]
         if odd:
             raise ValueError(f"{self.name}: not bare column names: {odd}")
+        unknown = sorted(set(self.null_labels) - set(self.dimensions))
+        if unknown:
+            raise ValueError(f"{self.name}: null_labels name no dimension: {unknown}")
         return self
 
 

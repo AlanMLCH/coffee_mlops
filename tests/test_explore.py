@@ -234,6 +234,14 @@ def test_bars_are_sorted_and_segments_stand_side_by_side() -> None:
     assert spec["encoding"]["color"]["title"] == "product"
 
 
+def test_bars_of_numbers_stand_in_their_own_order() -> None:
+    sizes = pl.DataFrame({"bag_grams": [1000.0, 250.0], "offers": [5, 90]})
+
+    spec = vega_lite(Chart(kind="bar", x="bag_grams", y="offers"), sizes)
+
+    assert spec is not None and spec["encoding"]["x"]["sort"] == "ascending"
+
+
 def test_long_names_lie_the_bars_down_and_axes_read_as_words() -> None:
     """A borough's name would be cut under an upright bar and every other one skipped."""
     boroughs = pl.DataFrame(

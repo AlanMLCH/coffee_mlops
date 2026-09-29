@@ -27,6 +27,7 @@ what `mlops agent ask` needs: Ollama, Qdrant with an index, and the prediction A
 import html
 import threading
 import time
+from collections.abc import Callable
 from contextlib import ExitStack
 from typing import Any
 
@@ -44,11 +45,19 @@ from mlops_core.explore.charts import (
     check_chart,
     frame,
     infer_chart,
+    is_period,
     vega_lite,
 )
 from mlops_core.explore.layers import areas_if_built, ranked, run_layer
 from mlops_core.explore.maps import area_layer, deck, density_layer, point_layer
-from mlops_core.explore.segments import segment_sql, summary, top_segments, values_sql
+from mlops_core.explore.segments import (
+    NO_VALUE,
+    named_nulls,
+    segment_sql,
+    summary,
+    top_segments,
+    values_sql,
+)
 from mlops_core.explore.studies import domain_figures, domain_studies, figure, lineage
 from mlops_core.explore.style import CSS
 
@@ -111,11 +120,23 @@ def cached(sql: str) -> tuple[pl.DataFrame, bool]:
 
 
 def rows_or_warning(name: str, sql: str) -> pl.DataFrame | None:
-    """A query's rows, or None and a warning that says which table is missing."""
+    """A query's rows, or None and a warning that says which table is missing. Rows past
+    the map's limit are not drawn, and the page says so."""
+    try:
+        rows, truncated = cached(sql)
+    except (Refused, duckdb.Error) as failed:
+        st.warning(f"{name}: {first_line(failed)} (`make status` says what to build)")
+        return None
+    if truncated:
+        st.caption(f"{name}: only the first {rows.height:,} rows are drawn.")
+    return rows
+
+
+def built(sql: str) -> pl.DataFrame | None:
+    """A query's rows, or None without a word: for a table that may rightly not exist."""
     try:
         return cached(sql)[0]
-    except (Refused, duckdb.Error) as failed:
-        st.warning(f"{name}: {first_line(failed)} (run `make data`?)")
+    except (Refused, duckdb.Error):
         return None
 
 
@@ -211,8 +232,9 @@ def map_tab() -> None:
     for layer in place_layers:
         if layer.name in picked_places:
             draw_places(layer, style or DENSITY, drawn, explained)
-    if "on_map" in st.session_state:
-        chart, rows, title = st.session_state["on_map"]
+    answered = st.session_state.get("on_map")
+    if answered is not None:
+        chart, rows, title = answered
         drawn += answer_on_map(chart, rows, title)
         explained.append(f"<b>From your question</b>: {html.escape(title)}")
     left, right = st.columns([3, 2], gap="large")
@@ -225,6 +247,11 @@ def map_tab() -> None:
         st.subheader("What you are looking at")
         for text in explained:
             note(text)
+        if answered is not None:
+            st.button(
+                "Take the answer off the map", key="off_map", icon=":material/wrong_location:",
+                on_click=off_map,
+            )  # fmt: skip
         if ranking is not None:
             rows, value, _ = ranking
             st.markdown(f"**{picked_area}, area by area**")
@@ -344,6 +371,7 @@ def ask(question: str) -> None:
             "question": question,
             "text": reply.text,
             "route": getattr(reply, "route", None),
+            "answered": getattr(reply, "answered", True),
             "sources": reply.sources,
             "problems": reply.problems,
             "sql": sql.sql if sql else None,
@@ -365,8 +393,11 @@ def show_turn(turn: dict[str, Any], index: int) -> None:
                 "index and the prediction API (`make services-up`, `make index`)."
             )
             return
-        chips = [ROUTES.get(turn["route"] or "", "answered"), f"{turn['seconds']:.0f} s"]
-        chips.append("every figure checked" if not turn["problems"] else "not fully verified")
+        if turn.get("answered", True):
+            chips = [ROUTES.get(turn["route"] or "", "answered"), f"{turn['seconds']:.0f} s"]
+            chips.append("every figure checked" if not turn["problems"] else "not fully verified")
+        else:  # no tool found anything: the reply says so, and no model wrote it
+            chips = ["no answer found", f"{turn['seconds']:.0f} s"]
         st.html("".join(f'<span class="explore-chip">{html.escape(c)}</span>' for c in chips))
         st.markdown(turn["text"])
         for problem in turn["problems"]:
@@ -458,6 +489,10 @@ def put_on_map(chart: Chart, rows: pl.DataFrame, title: str) -> None:
     st.session_state["view"] = MAP
 
 
+def off_map() -> None:
+    st.session_state.pop("on_map", None)
+
+
 # --- Explore by segment ------------------------------------------------------------------
 
 
@@ -482,10 +517,14 @@ def segments_tab() -> None:
     colours = [NONE, *(d for d in dataset.dimensions if d != by)]
     color = picks[2].selectbox("Colour by", colours, format_func=label, key=f"color:{name}")
     filters = pick_filters(dataset)
-    sql = segment_sql(dataset, measure, by, None if color == NONE else color, filters)
-    rows = rows_or_warning(dataset.name, sql)
-    if rows is None:
+    coloured = None if color == NONE else color
+    sql = segment_sql(dataset, measure, by, coloured, filters)
+    found = rows_or_warning(dataset.name, sql)
+    if found is None:
         return
+    rows, dropped = named_nulls(found, [by, coloured], dataset.null_labels)
+    if dropped:
+        st.caption(f"{dropped:,} rows with no {label(by)} are left out.")
     shown = top_segments(rows, by, measure)
     if shown.height < rows.height:
         st.caption(
@@ -515,14 +554,19 @@ def pick_filters(dataset: ExploreDataset) -> dict[str, list[object]]:
         options = values[column].to_list() if values is not None else []
         picked[column] = boxes[number % len(boxes)].multiselect(
             f"Only {label(column)}", options, key=f"filter:{dataset.name}:{column}",
-            placeholder="any",
+            placeholder="any", format_func=shown_as(dataset.null_labels.get(column, NO_VALUE)),
         )  # fmt: skip
     return picked
 
 
+def shown_as(empty: str) -> Callable[[object], str]:
+    """How a filter shows a value: the empty one by what it means."""
+    return lambda value: empty if value is None else str(value)
+
+
 def segment_chart(rows: pl.DataFrame, by: str, measure: str, color: str | None) -> Chart:
     """A line over time, bars otherwise; a colour with too many values is left out."""
-    kind: ChartKind = "line" if rows.schema[by].is_temporal() else "bar"
+    kind: ChartKind = "line" if is_period(rows, by) else "bar"
     if color is not None and rows[color].n_unique() > 12:
         st.caption(f"{label(color)} has too many values to colour by.")
         color = None
@@ -652,9 +696,13 @@ def models_tab() -> None:
 
 
 def show_residuals(model: str, period: str) -> None:
-    rows = rows_or_warning(model, f"SELECT * FROM analysis.{model}_residuals")
+    rows = built(f"SELECT * FROM analysis.{model}_residuals")
     if rows is None:
-        st.info("No batch predictions yet: run `make predict`, then `make analysis`.")
+        st.info(
+            f"No error to show: {model} has no batch predictions. A model the gate never "
+            "promoted has no champion to predict with; one that has, needs `make predict` "
+            "and then `make analysis`."
+        )
         return
     image = figure(data_dir, f"{model}_residual_bias")
     if image is not None:

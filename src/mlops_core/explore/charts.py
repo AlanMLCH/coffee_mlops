@@ -216,9 +216,11 @@ def vega_lite(
     x_type = "quantitative" if chart.kind == "scatter" else _type(result, chart.x)
     if chart.kind == "bar":
         x_type = "nominal"
+    # Bars of numbers (a bag's grams) stand in their own order; bars of names, by height.
+    order = "ascending" if chart.x is not None and result[chart.x].dtype.is_numeric() else "-y"
     encoding: dict[str, Any] = {
         "x": {"field": chart.x, "type": x_type, "title": _title(chart.x)}
-        | ({"sort": "-y", "axis": {"labelAngle": -35}} if chart.kind == "bar" else {}),
+        | ({"sort": order, "axis": {"labelAngle": -35}} if chart.kind == "bar" else {}),
         "y": {"field": chart.y, "type": "quantitative", "title": _title(chart.y)}
         # A line's change is the story; from zero, a 15% rise is a flat line.
         | ({"scale": {"zero": False}} if chart.kind in ("line", "scatter") else {}),
@@ -282,14 +284,17 @@ def _measures(result: pl.DataFrame, numbers: list[str]) -> list[str]:
     return ordered + [c for c in numbers if c not in ordered]
 
 
+def is_period(result: pl.DataFrame, column: str) -> bool:
+    """Whether a column is time: dates, and whole numbers named as years (`year`,
+    `market_year`). Time is drawn as a line and never cut to its largest values."""
+    dtype = result[column].dtype
+    return dtype.is_temporal() or (
+        dtype.is_integer() and (column == "year" or column.endswith("_year"))
+    )
+
+
 def _periods(result: pl.DataFrame) -> list[str]:
-    """Time: dates, and whole numbers named as years (`year`, `market_year`)."""
-    return [
-        c
-        for c in result.columns
-        if result[c].dtype.is_temporal()
-        or (result[c].dtype.is_integer() and (c == "year" or c.endswith("_year")))
-    ]
+    return [c for c in result.columns if is_period(result, c)]
 
 
 def _labels(result: pl.DataFrame) -> list[str]:
@@ -311,7 +316,7 @@ def _type(result: pl.DataFrame, column: str | None) -> str:
     dtype = result[column].dtype if column else pl.String
     if dtype.is_temporal():
         return "temporal"
-    if column in _periods(result):
+    if column is not None and is_period(result, column):
         return "ordinal"
     return "quantitative" if dtype.is_numeric() else "nominal"
 

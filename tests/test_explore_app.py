@@ -168,9 +168,10 @@ class StoodIn:
         fails: bool = False,
         query_fails: bool = False,
         prediction: Any = None,
+        answered: bool = True,
     ):
         self.sql, self.fails, self.query_fails = sql, fails, query_fails
-        self.prediction = prediction
+        self.prediction, self.answered = prediction, answered
         self.asked: list[str] = []
 
     def ask(self, question: str) -> Any:
@@ -186,7 +187,8 @@ class StoodIn:
         unverified = ["The figure 9 is not in the evidence"]
         return SimpleNamespace(
             text="Cuauhtémoc [sql].", route="data", sources=["[sql] the tables"], sql=answer,
-            problems=unverified, prediction=self.prediction,
+            problems=unverified if self.answered else [], prediction=self.prediction,
+            answered=self.answered,
         )  # fmt: skip
 
 
@@ -339,6 +341,31 @@ def test_an_answer_about_places_can_go_on_the_map(
     assert any("From your question" in h.proto.body for h in page.get("html"))
 
 
+def test_an_answer_taken_off_the_map_leaves_it(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = explorer(data_dir, monkeypatch, view=ASK)
+    page.chat_input(key="question").set_value("Where?").run()
+    page.button(key="map0").click().run()
+
+    page.button(key="off_map").click().run()
+
+    assert not page.exception and "on_map" not in page.session_state
+    assert not any("From your question" in h.proto.body for h in page.get("html"))
+
+
+def test_no_answer_is_never_shown_as_a_checked_one(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = explorer(data_dir, monkeypatch, StoodIn(answered=False), view=ASK)
+
+    page.chat_input(key="question").set_value("How much did Jalisco grow?").run()
+
+    chips = next(h.proto.body for h in page.get("html") if "explore-chip" in h.proto.body
+                 and "<style>" not in h.proto.body)  # fmt: skip
+    assert "no answer found" in chips and "every figure checked" not in chips
+
+
 def test_an_answer_without_a_query_has_no_chart(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -374,6 +401,20 @@ def test_a_table_is_sliced_by_hand_without_the_agent(
     assert page.get("vega_lite_chart")
     assert page.code[0].value.startswith("SELECT fortnight, median(price_mxn_per_kg)")
     assert any(m.value.startswith("**median mxn per kg:") for m in page.markdown)
+
+
+def test_an_empty_value_is_named_and_can_be_picked(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shelf prices outside the city have no borough: a bar says so instead of "null"."""
+    page = explorer(data_dir, monkeypatch, view=SEGMENTS)
+    name = "Shelf prices of packaged coffee (PROFECO)"
+    page.selectbox(key="dataset").set_value(name).run()
+
+    page.selectbox(key=f"by:{name}").set_value("borough").run()
+
+    assert not page.exception and page.get("vega_lite_chart")
+    assert "outside Mexico City" in page.dataframe[-1].value["borough"].to_list()
 
 
 def test_the_findings_and_the_about_page_draw_from_the_tables(
@@ -435,6 +476,17 @@ def test_a_models_studies_are_shown_with_what_they_came_from(
     assert len(page.dataframe) >= 4
 
 
+def test_a_model_with_nothing_predicted_says_why_there_is_no_error_to_show(
+    analysed: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fixtures' model has studies but was never used to predict: no residuals."""
+    page = explorer(analysed, monkeypatch, view=MODELS)
+
+    assert not page.exception
+    assert any("has no batch predictions" in i.value for i in page.info)
+    assert not any("Catalog Error" in w.value for w in page.warning)
+
+
 def test_a_model_without_studies_says_what_to_run(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -462,7 +514,7 @@ def test_a_layer_whose_table_is_not_built_says_so(
     page = explorer(tmp_path, monkeypatch)
 
     assert not page.exception
-    assert any("run `make data`?" in w.value for w in page.warning)
+    assert any("`make status` says what to build" in w.value for w in page.warning)
     assert {m.value for m in page.metric} == {"-"}  # nothing built, nothing to show
 
 

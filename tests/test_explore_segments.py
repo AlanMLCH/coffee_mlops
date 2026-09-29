@@ -12,7 +12,9 @@ from pydantic import ValidationError
 from mlops_core.agent.sql import read_only, run_select
 from mlops_core.config import ExploreDataset
 from mlops_core.explore.segments import (
+    NO_VALUE,
     literal,
+    named_nulls,
     segment_sql,
     summary,
     top_segments,
@@ -109,16 +111,46 @@ def test_the_query_runs_in_the_locked_session(tmp_path: Path) -> None:
     assert values.rows == [("ground", 2), ("instant", 1)]
 
 
+def test_the_empty_value_can_be_picked_alone_or_with_others() -> None:
+    """`product IN (NULL)` is never true: the empty value is asked for as IS NULL."""
+    alone = segment_sql(SHELVES, "prices", "state", None, {"product": [None]})
+    both = segment_sql(SHELVES, "prices", "state", None, {"product": ["ground", None]})
+
+    assert "AND product IS NULL\n" in alone
+    assert "AND (product IN ('ground') OR product IS NULL)\n" in both
+
+
+def test_empty_segments_are_named_and_those_that_cannot_be_are_counted_out() -> None:
+    rows = pl.DataFrame({"borough": ["Centro", None], "grams": [250, None], "prices": [3, 9]})
+
+    by_name, dropped = named_nulls(rows, ["borough", None], {"borough": "outside the city"})
+    unnamed, _ = named_nulls(rows, ["borough"])
+    by_size, left_out = named_nulls(rows, ["grams", "grams"])
+
+    assert by_name["borough"].to_list() == ["Centro", "outside the city"] and dropped == 0
+    assert unnamed["borough"].to_list() == ["Centro", NO_VALUE]
+    assert by_size["grams"].to_list() == [250] and left_out == 1
+    assert named_nulls(rows.head(1), ["borough"])[0].equals(rows.head(1))
+
+
+def test_a_dataset_labels_only_its_own_dimensions() -> None:
+    with pytest.raises(ValidationError, match="null_labels name no dimension"):
+        ExploreDataset.model_validate(SHELVES.model_dump() | {"null_labels": {"store": "x"}})
+
+
 def test_the_largest_segments_are_kept_and_time_never_cut() -> None:
     notes = pl.DataFrame({"note": [f"n{i}" for i in range(30)], "coffees": list(range(30))})
     series = pl.DataFrame(
         {"day": [dt.date(2026, 1, d) for d in range(1, 31)], "coffees": list(range(30))}
     )
+    years = pl.DataFrame({"market_year": list(range(1960, 2027)), "bags": list(range(67))})
 
     top = top_segments(notes, "note", "coffees", n=3)
 
     assert top["note"].to_list() == ["n27", "n28", "n29"]
     assert top_segments(series, "day", "coffees", n=3).height == 30
+    assert top_segments(years, "market_year", "bags", n=3).height == 67  # years are time too
+    assert summary(years, "market_year", "bags").endswith("(67 periods).")
     assert top_segments(notes.head(2), "note", "coffees", n=3).height == 2
 
 

@@ -16,8 +16,10 @@ from decimal import Decimal
 import polars as pl
 
 from mlops_core.config import ExploreDataset
+from mlops_core.explore.charts import is_period
 
 TOP = 25  # segments a bar chart shows; past that it is a list, not a comparison
+NO_VALUE = "(no value)"  # a row whose column is empty, as a chart and a filter name it
 
 
 def segment_sql(
@@ -41,13 +43,43 @@ def segment_sql(
         if column not in dataset.filters:
             raise ValueError(f"{dataset.name} cannot be filtered by {column!r}")
         if values:
-            conditions.append(f"{column} IN ({', '.join(literal(v) for v in values)})")
+            conditions.append(_one_of(column, values))
     where = f"\nWHERE {' AND '.join(conditions)}" if conditions else ""
     return (
         f"SELECT {', '.join(groups)}, {dataset.measures[measure]} AS {measure}\n"
         f"FROM {dataset.table}{where}\n"
         f"GROUP BY ALL\nORDER BY {', '.join(groups)}"
     )
+
+
+def _one_of(column: str, values: Sequence[object]) -> str:
+    """`column IN (...)`, and `IS NULL` for the empty value: `x IN (NULL)` is never true, so
+    picking "no value" would find nothing."""
+    known = [literal(v) for v in values if v is not None]
+    parts = [f"{column} IN ({', '.join(known)})"] if known else []
+    if len(known) < len(values):
+        parts.append(f"{column} IS NULL")
+    return parts[0] if len(parts) == 1 else f"({' OR '.join(parts)})"
+
+
+def named_nulls(
+    rows: pl.DataFrame, columns: Sequence[str | None], labels: Mapping[str, str] | None = None
+) -> tuple[pl.DataFrame, int]:
+    """The segments' empty values named, so a chart does not draw a bar called "null": a text
+    column's empty value gets the dataset's label for it ("outside the city") or
+    "(no value)"; rows empty in a column of any other type are left out, and counted."""
+    dropped = 0
+    for column in dict.fromkeys(c for c in columns if c is not None):
+        if rows[column].null_count() == 0:
+            continue
+        if rows.schema[column] == pl.String:
+            name = (labels or {}).get(column, NO_VALUE)
+            rows = rows.with_columns(pl.col(column).fill_null(name))
+        else:
+            kept = rows.filter(pl.col(column).is_not_null())
+            dropped += rows.height - kept.height
+            rows = kept
+    return rows, dropped
 
 
 def values_sql(dataset: ExploreDataset, column: str) -> str:
@@ -78,8 +110,9 @@ def literal(value: object) -> str:
 
 def top_segments(rows: pl.DataFrame, by: str, measure: str, n: int = TOP) -> pl.DataFrame:
     """The `n` segments with the largest measure, with every colour of each: a bar chart of
-    150 tasting notes says nothing a list of the first 25 does not. Time is never cut."""
-    if rows.schema[by].is_temporal() or rows[by].n_unique() <= n:
+    150 tasting notes says nothing a list of the first 25 does not. Time is never cut: not
+    dates, nor years counted as whole numbers."""
+    if is_period(rows, by) or rows[by].n_unique() <= n:
         return rows
     # Ranked by each segment's largest value: a median summed over colours means nothing.
     largest = rows.group_by(by).agg(pl.col(measure).max()).sort(measure, descending=True)
@@ -97,7 +130,7 @@ def summary(rows: pl.DataFrame, by: str, measure: str, color: str | None = None)
     def named(row: dict[str, object]) -> str:
         return f"{row[by]}, {row[color]}" if color and color != by else str(row[by])
 
-    if known.schema[by].is_temporal():
+    if is_period(known, by):
         periods = known[by].n_unique()
         first = known.filter(pl.col(by) == known[by].min()).row(0, named=True)
         last = known.filter(pl.col(by) == known[by].max()).row(0, named=True)
