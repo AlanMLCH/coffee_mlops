@@ -650,9 +650,19 @@ Clustering on the Jaccard distance itself was tried: average linkage peeled outl
 two at a time (92 coffees and 2 at k = 2), complete linkage held together worse (0.22).
 
 What it is not: a cupper's judgement. These are the shops' own claims, written to sell.
-A next step, if it earns it through the gate: the categories as features of the price
-model - which needs the notes per read of the catalogue, not only today's, to stay
-point-in-time correct.
+
+**Nor do they help the price model** (`experiments/flavor_features.py`, 29 September).
+The categories went in as features - one indicator per SCA category and the number of
+notes, null where a description names none - measured the way the gate measures a group
+model: every coffee predicted out of fold, paired against the same model without them,
+coffees resampled whole, each feature set tuned with the same budget (40 trials). On
+2,558 offers of 157 coffees (1,435 of the 94 with notes): **235.2 MXN/kg with the notes,
+236.4 without, -1.2 (-8.3 to +5.9), 63% sure** where the gate asks 95%. Where the notes
+exist the model with them does *worse* (196.6 against 192.6); the small overall gain comes
+from coffees without notes, where only the tuner's draw differs. Not adopted, so the notes
+per read that a promoted version would have needed were not built. The experiment used
+today's notes on every read of the offers: the leak it leaves open is a description that
+changed between reads, and it could only have flattered the notes.
 
 ## What the agent will read (stage 3)
 
