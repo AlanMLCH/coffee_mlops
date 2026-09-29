@@ -7,12 +7,14 @@ import pytest
 from mlops_core.storage import (
     TIMESTAMP_FORMAT,
     built_from,
+    content_version,
     data_version,
     latest_data_version,
     latest_partition,
     prune_layers,
     prune_partitions,
     read_table,
+    rows_version,
     write_table,
 )
 
@@ -144,3 +146,19 @@ def test_a_derived_table_knows_the_data_it_was_built_from(tmp_path: Path) -> Non
 
     assert built_from(tmp_path, features) == data_version(tmp_path, {"lots": clean})
     assert built_from(tmp_path, tmp_path / "features" / "never_built") is None
+
+
+def test_the_rows_version_follows_the_rows_not_their_order_or_rebuild(tmp_path: Path) -> None:
+    """What a model learned from: the same rows, written in another order or rebuilt from a
+    download of a source the table does not keep, are the same data."""
+    rows = pl.DataFrame({"month": ["2026-07", "2026-08"], "price": [358.8, 351.2]})
+    features = tmp_path / "features" / "month_features"
+    write_table(rows, features, {"prices": "built_at=A"}, at=T0)
+    first = content_version(features)
+    write_table(rows.reverse(), features, {"prices": "built_at=B"}, at=T1)  # rebuilt
+
+    assert content_version(features) == first == rows_version(rows.select("price", "month"))
+    assert rows_version(rows.with_columns(price=pl.col("price") + 0.01)) != first
+    assert rows_version(rows.head(1)) != first
+    assert rows_version(rows.with_columns(pl.col("price").cast(pl.Float32))) != first
+    assert content_version(tmp_path / "features" / "never_built") is None

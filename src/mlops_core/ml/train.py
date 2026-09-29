@@ -56,12 +56,12 @@ from mlops_core.ml.evaluation import (
 )
 from mlops_core.provenance import code_version
 from mlops_core.stats import Comparison, compare
-from mlops_core.storage import built_from, latest_partition, read_table
+from mlops_core.storage import latest_partition, read_table, rows_version
 
 logger = logging.getLogger(__name__)
 
 CHAMPION = "champion"
-DATA_VERSION = "data_version"  # the run tag: which raw data the model learned from
+DATA_VERSION = "data_version"  # the run tag: which rows the model learned from
 # MLflow stores sklearn models with skops, which refuses to load types it was not told
 # to trust (unlike pickle, which runs arbitrary code on load). These are the LightGBM
 # internals the pipeline contains.
@@ -364,8 +364,8 @@ def train_model(
         mlflow.set_tags(
             {
                 "features_partition": partition.name if partition else "",
-                # What it learned from: retraining on the same data again is pointless.
-                DATA_VERSION: built_from(data_dir, table_dir) or "",
+                # The rows it learned from: retraining on the same rows is pointless.
+                DATA_VERSION: rows_version(features),
             }
             | (version_tags.as_tags() if version_tags else {})
         )

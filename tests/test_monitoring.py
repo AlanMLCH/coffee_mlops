@@ -24,7 +24,7 @@ from mlops_core.monitoring.drift import (
     latest_verdict,
     monitor_model,
 )
-from mlops_core.storage import built_from, read_table, write_table
+from mlops_core.storage import content_version, read_table, write_table
 
 ROWS = 200  # per period: enough for a shift of one standard deviation to be found
 
@@ -184,7 +184,7 @@ def test_the_monitor_writes_its_table_and_report_and_logs_a_run(
     verdict = latest_verdict(data_dir, "price")
     assert verdict is not None and verdict.retrain and verdict.current == "2026"
     assert verdict.data_version == result.data_version
-    assert result.data_version == built_from(data_dir, data_dir / "features" / "price_features")
+    assert result.data_version == content_version(data_dir / "features" / "price_features")
     (run,) = mlflow.search_runs(experiment_names=["coffee-monitoring"], output_format="list")
     assert run.data.tags["retrain"] == "True"
     assert run.data.tags["data_version"] == result.data_version

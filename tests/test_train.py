@@ -45,7 +45,7 @@ from mlops_core.ml.train import (
     xy,
 )
 from mlops_core.stats import Comparison
-from mlops_core.storage import built_from, write_table
+from mlops_core.storage import content_version, write_table
 from tests.fakes import with_training
 
 REVIEW = "review"
@@ -201,9 +201,9 @@ def test_training_is_tracked_registered_and_servable(
         run.data.metrics
     )
     assert run.data.tags["features_partition"].startswith("built_at=")
-    # What it learned from, so the same data is never trained on twice for nothing.
+    # The rows it learned from, so the same rows are never trained on twice for nothing.
     review = fast_config.model_named(REVIEW)
-    version = built_from(data_dir, data_dir / "features" / review.features_table)
+    version = content_version(data_dir / "features" / review.features_table)
     assert version is not None and run.data.tags["data_version"] == version
     assert trained_on(fast_config, REVIEW, version) == result.run_id
     assert trained_on(fast_config, REVIEW, "another-data") is None

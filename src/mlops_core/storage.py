@@ -102,6 +102,30 @@ def latest_data_version(data_dir: Path, tables: Sequence[str]) -> str | None:
     return data_version(data_dir, {t: p.name for t, p in partitions.items() if p is not None})
 
 
+def rows_version(frame: pl.DataFrame) -> str:
+    """Twelve characters that change when, and only when, a table's rows do - whatever
+    order they were written in.
+
+    What a model learns from is its feature table's rows, and that is what "trained on
+    this data" has to mean. The raw data behind a table is too coarse for it: a table can
+    stack several sources, and a new download of one the model does not read (a day of
+    prices for a model of months) changed the raw version, and retrained a model on rows
+    it had already learned from (2026-09-29). Row hashes are polars': stable within one
+    version of it, so an upgrade may retrain each model once.
+    """
+    columns = sorted(frame.columns)
+    hashes = frame.select(columns).hash_rows(seed=0).sort().to_list()
+    payload = json.dumps([columns, [str(frame.schema[c]) for c in columns], hashes])
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def content_version(table_dir: Path) -> str | None:
+    """The rows version of a table's newest partition; None if it has none."""
+    if latest_partition(table_dir) is None:
+        return None
+    return rows_version(read_table(table_dir))
+
+
 def built_from(data_dir: Path, table_dir: Path) -> str | None:
     """The data version a derived table's newest partition was built from (the clean
     partitions its manifest lists); None if it has none."""

@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from mlops_core.config import DomainConfig, ModelConfig
 from mlops_core.provenance import code_version
-from mlops_core.storage import built_from, latest_partition, read_table, write_table
+from mlops_core.storage import content_version, latest_partition, read_table, write_table
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class DriftResult:
     accepted_mae: float | None  # the upper end of the interval the gate accepted it with
     reasons: list[str]  # why it should be retrained; empty when it should not
     report_html: str
-    data_version: str = ""  # the raw data behind the features compared
+    data_version: str = ""  # the rows of the features compared (`storage.rows_version`)
 
     @property
     def retrain(self) -> bool:
@@ -251,7 +251,7 @@ def monitor_model(
         logger.info("%s has one period only: nothing to compare yet", model_name)
         return None
     features_dir = data_dir / "features" / model.features_table
-    result = replace(result, data_version=built_from(data_dir, features_dir) or "")
+    result = replace(result, data_version=content_version(features_dir) or "")
 
     table = write_table(
         result.columns,

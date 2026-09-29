@@ -7,8 +7,10 @@ Two questions, each answered from what is on disk and in the registry:
   writes new partitions whatever happened; the data version (`storage.data_version`)
   changes only when a download brought something new.
 - **Is a retraining due, and not done?** The monitor's newest verdict for the model calls
-  for one, on data no training run of the model has used yet. A source that stopped
-  changing - a frozen snapshot - is then retrained once, not on every run.
+  for one, on feature rows no training run of the model has used yet (compared by their
+  content, `storage.rows_version`). A source that stopped changing - a frozen snapshot -
+  is then retrained once, not on every run; nor is a model retrained because a table it
+  reads gained rows it does not learn from.
 """
 
 from pathlib import Path
