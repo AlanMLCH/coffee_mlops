@@ -23,8 +23,10 @@ from domains.coffee.analysis import (
     price_ladder,
     production_by_state,
     production_crosscheck,
+    register_editions,
     roaster_coverage,
     shop_kinds,
+    shop_turnover,
 )
 from mlops_core.analysis.studies import (
     categorical_profile,
@@ -308,6 +310,82 @@ def test_coffee_and_schooling_is_drawn_with_its_rank_correlation() -> None:
     subtitle = figure.axes[0].texts[0].get_text()
     assert "3 boroughs" in subtitle and "Spearman 1.00" in subtitle
     assert {t.get_text() for t in figure.axes[0].texts[1:]} == {"A", "B", "C"}
+
+
+def test_the_register_is_counted_by_the_edition_each_place_entered() -> None:
+    shops = pl.DataFrame(
+        {
+            "source": ["denue", "denue", "denue", "osm"],
+            "kind": ["coffee", "juice", "coffee", "coffee"],
+            "listed_since": [date(2024, 11, 1), date(2024, 11, 1), date(2010, 7, 1), None],
+        }
+    )
+
+    table = register_editions(shops)
+
+    assert table.rows() == [
+        (date(2010, 7, 1), 1, 1, pytest.approx(100 / 3)),
+        (date(2024, 11, 1), 2, 1, pytest.approx(200 / 3)),
+    ]
+
+
+def test_turnover_counts_what_appeared_and_went_and_what_was_only_redrawn() -> None:
+    """Between two reads of a map: a café deleted, a node redrawn as its building 20 m
+    away under a new id, and a new place. The second register was read once: no pair."""
+
+    def listed(snapshot: str, *places: tuple[str, str, float]) -> list[dict[str, object]]:
+        return [
+            {
+                "source": "osm",
+                "snapshot": snapshot,
+                "shop_id": shop_id,
+                "name": name,
+                "latitude": 19.4,
+                "longitude": longitude,
+            }
+            for shop_id, name, longitude in places
+        ]
+
+    history = pl.DataFrame(
+        [
+            *listed(
+                "2026-09-22",
+                ("n1", "Café Uno", -99.1),
+                ("n2", "Café Dos", -99.2),
+                ("n3", "Tres", -99.3),
+            ),
+            # "CAFE DOS" is the same name, folded; 0.0002 degrees of longitude is ~21 m.
+            *listed(
+                "2026-09-27",
+                ("n1", "Café Uno", -99.1),
+                ("w9", "CAFE DOS", -99.2002),
+                ("n4", "Tres", -99.35),  # a namesake 5 km away is another place
+            ),
+            {
+                "source": "denue",
+                "snapshot": "2026-09-20",
+                "shop_id": "d1",
+                "name": None,
+                "latitude": 19.4,
+                "longitude": -99.1,
+            },
+        ]
+    )
+
+    table = shop_turnover(history, redraw_m=60.0)
+
+    assert table.rows(named=True) == [
+        {
+            "source": "osm",
+            "since": "2026-09-22",
+            "until": "2026-09-27",
+            "listed_before": 3,
+            "listed_after": 3,
+            "appeared": 2,
+            "disappeared": 2,
+            "redrawn": 1,
+        }
+    ]
 
 
 def test_shop_kinds_share_each_register_by_kind() -> None:

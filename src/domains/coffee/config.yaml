@@ -126,8 +126,10 @@ sources:
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
 # shows only the current month, each read of the roasters' catalogues is an observation
 # of what they sold then, and PROFECO's archive holds only the current year - when 2027's
-# replaces it, 2026's fortnights must stay. Every download is kept (raw is never pruned).
-accumulate: [ico_prices, roaster_catalogs, profeco_prices]
+# replaces it, 2026's fortnights must stay. The two registers of places, because what
+# each lists is what exists then: a place a later read leaves out is gone from it. Every
+# download is kept (raw is never pruned).
+accumulate: [ico_prices, roaster_catalogs, profeco_prices, denue_cafes, osm_places]
 
 # Stage 2, token required (COFFEE_DENUE_TOKEN). Verified against the live API on
 # 2026-09-20: class 722515 has 9,860 establishments in Mexico City.
@@ -1217,6 +1219,17 @@ explore:
       kind: scatter
       x: schooling_years
       y: per_10k_people
+    - title: Most places entered the register with a census
+      text: >-
+        DENUE's places today, by the edition each entered the register. Nine in ten came
+        in its first edition (2010) or right after an economic census (2014, 2019, 2024):
+        an entry says when INEGI came by, not when a place opened.
+      sql: >-
+        SELECT strftime(listed_since, '%Y-%m') AS edition, places, coffee_shops
+        FROM analysis.register_editions
+      kind: bar
+      x: edition
+      y: places
     - title: Who grows Mexico's coffee
       text: >-
         Share of the 2025 harvest of coffee cherry by state: Chiapas, Veracruz, Puebla and

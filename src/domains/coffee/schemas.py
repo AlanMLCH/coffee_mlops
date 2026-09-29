@@ -156,6 +156,11 @@ DENUE_ESTABLISHMENTS = pa.DataFrameSchema(
         "Longitud": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
         # Size band of the workforce ("0 a 5 personas"), the only size DENUE publishes.
         "Estrato": _text(nullable=True),
+        # The register's edition the place entered it, as a month: "2024-11" (twice in
+        # 9,860 with a space, "2013 07").
+        "Fecha_Alta": pa.Column(
+            pl.String, pa.Check.str_matches(r"^\d{4}[- ]\d{2}$"), nullable=True
+        ),
     },
 )
 
@@ -466,8 +471,32 @@ COFFEE_SHOPS = pa.DataFrameSchema(
         # What the source itself says the borough is. DENUE carries one, OSM does not,
         # so this is the column the spatial join is audited against.
         "declared_borough_id": pa.Column(pl.String, nullable=True),
+        # The month of the DENUE edition the place entered the register; OSM keeps none.
+        # An entry, not an opening: each economic census adds thousands at once.
+        "listed_since": pa.Column(pl.Date, nullable=True),
     },
 )
+
+
+def coffee_shop_history_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """Contract of `coffee_shop_history`: every place in every read of its register."""
+    return pa.DataFrameSchema(
+        name="coffee_shop_history",
+        strict=True,
+        unique=["shop_id", "snapshot"],
+        columns={
+            "shop_id": pa.Column(pl.String),
+            "source": pa.Column(pl.String, pa.Check.isin(["denue", "osm"])),
+            # The day of the read, as the roasters' history writes it.
+            "snapshot": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}-\d{2}-\d{2}$")),
+            "name": pa.Column(pl.String, nullable=True),
+            "kind": pa.Column(pl.String, pa.Check.isin(rules.kinds)),
+            "latitude": pa.Column(pl.Float64, pa.Check.in_range(-90, 90)),
+            "longitude": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
+            "borough_id": pa.Column(pl.String, nullable=True),
+            "borough": pa.Column(pl.String, nullable=True),
+        },
+    )
 
 
 def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
@@ -477,6 +506,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "market_context": MARKET_CONTEXT,
         "boroughs": BOROUGHS,
         "coffee_shops": coffee_shops_schema(rules),
+        "coffee_shop_history": coffee_shop_history_schema(rules),
         "mexico_production": MEXICO_PRODUCTION,
         "roaster_coffees": ROASTER_COFFEES,
         "roaster_origins": roaster_origins_schema(rules),

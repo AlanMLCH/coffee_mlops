@@ -12,6 +12,7 @@ from domains.coffee.clean import (
     altitude_from_text,
     borough_census,
     clean_boroughs,
+    clean_coffee_shop_history,
     clean_coffee_shops,
     clean_market_context,
     clean_mexico_production,
@@ -25,6 +26,7 @@ from domains.coffee.schemas import (
     MARKET_CONTEXT,
     PSD_ATTRIBUTES,
     coffee_reviews_schema,
+    coffee_shop_history_schema,
     coffee_shops_schema,
 )
 from mlops_core.config import DomainConfig
@@ -203,6 +205,7 @@ def test_build_clean_writes_every_table_with_lineage(
         "market_context",
         "boroughs",
         "coffee_shops",
+        "coffee_shop_history",
         "mexico_production",
         "roaster_coffees",
         "roaster_origins",
@@ -309,6 +312,49 @@ def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
 def test_no_register_at_all_says_what_to_run(frames: Frames) -> None:
     with pytest.raises(ValueError, match="run extract first"):
         clean_coffee_shops({}, frames["cdmx_boroughs"], RULES)
+    with pytest.raises(ValueError, match="run extract first"):
+        clean_coffee_shop_history({}, frames["cdmx_boroughs"], RULES, {})
+
+
+def test_the_edition_a_place_entered_the_register_is_kept(frames: Frames) -> None:
+    listed = dict(shops(frames).select("shop_id", "listed_since").iter_rows())
+
+    assert listed["denue-1"] == date(2024, 11, 1)
+    assert listed["denue-2"] == date(2013, 7, 1)  # written "2013 07"
+    assert listed["osm-node-319644388"] is None  # OSM keeps no such date
+
+
+def test_every_read_of_a_register_is_its_history_and_the_newest_is_now(frames: Frames) -> None:
+    """A register read twice: the place the second read leaves out is in the history
+    and not in the table of places now, and the first day's earlier read gives way to
+    its later one."""
+    first, later = datetime(2026, 3, 1, 9, tzinfo=UTC), datetime(2026, 3, 1, 18, tzinfo=UTC)
+    second = datetime(2026, 9, 20, 10, tzinfo=UTC)
+    denue = frames["denue_cafes"].drop("ingested_at")
+    stacked = pl.concat(
+        [
+            denue.with_columns(pl.lit("NOT COFFEE").alias("Nombre"), ingested_at=pl.lit(first)),
+            denue.with_columns(ingested_at=pl.lit(later)),
+            denue.filter(pl.col("Id") != "2").with_columns(ingested_at=pl.lit(second)),
+        ]
+    )
+    registers = {"denue_cafes": stacked}
+
+    history = check_contract(
+        coffee_shop_history_schema(RULES),
+        clean_coffee_shop_history(
+            registers, frames["cdmx_boroughs"], RULES, {"denue_cafes": second}
+        ),
+    )
+    now = clean_coffee_shops(registers, frames["cdmx_boroughs"], RULES)
+
+    assert history.group_by("snapshot").len().sort("snapshot").rows() == [
+        ("2026-03-01", 3),
+        ("2026-09-20", 2),
+    ]
+    assert "NOT COFFEE" not in history["name"].to_list()  # the day's later read won
+    assert history["borough"].null_count() == 0  # placed, once per point
+    assert sorted(now["shop_id"]) == ["denue-1", "denue-3"]
 
 
 def test_boroughs_keep_their_polygon_and_their_official_key(frames: Frames) -> None:

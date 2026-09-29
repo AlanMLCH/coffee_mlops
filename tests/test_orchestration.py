@@ -40,6 +40,8 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/ico_prices_reads",
         "tea/roaster_catalogs_reads",
         "tea/profeco_prices_reads",
+        "tea/denue_cafes_reads",
+        "tea/osm_places_reads",
         "tea/review_features",
         "tea/review_model",
         "tea/review_predictions",
@@ -61,9 +63,13 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "coffee_ico_prices_reads",
         "coffee_roaster_catalogs_reads",
         "coffee_profeco_prices_reads",
+        "coffee_denue_cafes_reads",
+        "coffee_osm_places_reads",
         "tea_ico_prices_reads",
         "tea_roaster_catalogs_reads",
         "tea_profeco_prices_reads",
+        "tea_denue_cafes_reads",
+        "tea_osm_places_reads",
     ]
 
 
@@ -76,6 +82,8 @@ def test_without_a_list_every_installed_domain_gets_a_graph(tmp_path: Path) -> N
         "coffee_ico_prices_reads",
         "coffee_roaster_catalogs_reads",
         "coffee_profeco_prices_reads",
+        "coffee_denue_cafes_reads",
+        "coffee_osm_places_reads",
     ]
 
 

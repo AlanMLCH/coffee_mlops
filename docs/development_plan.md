@@ -89,8 +89,8 @@ flowchart TD
         end
         subgraph APIS["APIs, which need code"]
             direction TB
-            denue_cafes["denue_cafes<br/>DENUE · token in path, paged"]
-            osm_places["osm_places<br/>Overpass · one query"]
+            denue_cafes["denue_cafes<br/>DENUE · token in path, paged<br/>every read kept"]
+            osm_places["osm_places<br/>Overpass · one query<br/>every read kept"]
             fas_psd_coffee["fas_psd_coffee<br/>USDA FAS · key in header, by year"]
         end
         subgraph SHOPS["Shops, read politely"]
@@ -121,7 +121,8 @@ flowchart TD
         market_context["market_context<br/>country × market year"]
         mexico_production["mexico_production<br/>municipality × year"]
         boroughs["boroughs<br/>16 polygons as WKB"]
-        coffee_shops["coffee_shops<br/>kind · borough · twin link"]
+        coffee_shops["coffee_shops<br/>kind · borough · twin link<br/>each register's newest read"]
+        coffee_shop_history["coffee_shop_history<br/>every read of DENUE and OSM: place × read"]
         roaster_coffees["roaster_coffees<br/>the shops' coffees: 2026 items"]
         roaster_origins["roaster_origins<br/>one row per origin · blends split<br/>PSD · SIAP · CQI vocabularies"]
         roaster_offers["roaster_offers<br/>size from the titles · price per kg<br/>copied prices flagged"]
@@ -234,7 +235,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 
 | Pipeline | Commands | Reads | Produces |
 |---|---|---|---|
-| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.roaster_flavors`, `clean.documents`, `clean.document_chunks` |
+| **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.coffee_shop_history`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.roaster_flavors`, `clean.documents`, `clean.document_chunks` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
 | **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
@@ -474,6 +475,41 @@ would not add up, and is refused rather than stored.
   more people than live there, since it is where people commute to work.
 - In the explorer: a layer of coffee shops per 10,000 residents and a finding with the
   scatter (`analysis.borough_coffee_shops`).
+
+### Every read of the registers (stage 4)
+
+A register lists what exists when it is read, so a read that replaces the one before
+loses the places that closed in between. DENUE and OSM now **accumulate** like the
+roasters' shops (`accumulate` in the YAML): every download that changed is kept, and
+`clean.coffee_shops` is each register's newest read while `clean.coffee_shop_history` is
+each place at every read (one row per place and read day; a day read twice is its later
+read; each distinct point is placed in its borough once). The helper that picks the reads
+(`domains/coffee/reads.py`) is now shared with the roasters' history.
+
+- `analysis.shop_turnover`: between two consecutive reads of a register, the places it
+  listed, what appeared and what it no longer lists. Neither is an opening or a closing:
+  DENUE drops a place when an update finds it gone, and an OSM mapper can replace a node
+  with its building under a new id, so a disappeared place with a namesake among the new
+  ones within 60 m (the twin-link radius) is counted as `redrawn`.
+- **Real, 29 September:** OSM read twice (22 and 27 September), 1,357 elements each, the
+  same in every field the reader keeps (the two files differ by 7 bytes elsewhere), so 0
+  appeared and 0 disappeared. DENUE was read once (20
+  September). The history is empty of change because it is five days old; it fills with
+  each `make extract`, by hand.
+
+**When each place entered the register.** DENUE's `Fecha_Alta` is the register's edition
+a place entered (`2024-11`; twice in 9,860 written with a space, `2013 07`). It is now in
+the raw contract and in `clean.coffee_shops` as `listed_since`, with a study,
+`analysis.register_editions`, and a finding in the explorer:
+
+- **92% of today's 9,860 places entered in four editions**: 2010-07, the register's first
+  (23%), and those right after an economic census, 2014-12 (12%), 2019-11 (20%) and
+  2024-11 (38%). An entry date says when INEGI came by, not when a place opened.
+- Only survivors are counted: a place the register dropped is gone from it, so the 2,278
+  of 2010 are what is left of that edition.
+- Coffee shops sit later than the rest: 41% of the 3,717 entered in 2024-11 (38% of all
+  places), 18% in 2010 (23%). Newer places or more turnover - one read cannot tell which;
+  the history can, as it grows.
 
 ## Where Mexico grows it (stage 2)
 

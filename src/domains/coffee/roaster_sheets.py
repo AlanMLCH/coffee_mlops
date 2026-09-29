@@ -38,6 +38,7 @@ import polars as pl
 
 from domains.coffee.config import OTHER, UNCLASSIFIED, CleaningConfig, RoasterSheetRules
 from domains.coffee.flavors import tasting_notes
+from domains.coffee.reads import daily_reads
 from mlops_core.data.sheets import headed_paragraphs, html_text, labelled_lines, records
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,6 @@ OFFERS = pl.Schema(
 
 # The history: every read's offers, each named by the offer and the read.
 HISTORY_OFFERS = ["observation_id", *OFFERS, "price_outlier"]
-READ_AT = "ingested_at"  # the column each read's rows carry, from the raw layer
 
 _TRIM = " .,;:-"
 _PARENS = re.compile(r"\([^)]*\)")
@@ -197,7 +197,7 @@ def clean_roasters(
     elif read_at is None:
         raise ValueError("Offers need the time their catalogue was read")
     else:
-        reads = _reads(offers, read_at)
+        reads = [(at, read) for at, read in daily_reads(offers, read_at)]
     tables = [(at, _catalogue(frame, rules, at, log=at == reads[-1][0])) for at, frame in reads]
     now = tables[-1][1]
     snapshot = pl.col("snapshot")
@@ -215,16 +215,6 @@ def clean_roasters(
             ]
         ),
     }
-
-
-def _reads(offers: pl.DataFrame, read_at: datetime) -> list[tuple[datetime | None, pl.DataFrame]]:
-    """Each day's latest read, oldest first: one catalogue per day."""
-    if READ_AT not in offers.columns:  # one read, handed over as it is
-        return [(read_at, offers)]
-    by_day: dict[object, datetime] = {}
-    for at in sorted(offers[READ_AT].unique().to_list()):
-        by_day[at.date()] = at  # a later read of the day replaces an earlier one
-    return [(at, offers.filter(pl.col(READ_AT) == at).drop(READ_AT)) for at in by_day.values()]
 
 
 def _catalogue(

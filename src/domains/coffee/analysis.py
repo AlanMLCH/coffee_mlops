@@ -11,6 +11,7 @@ tables, drawn in the core's house style.
 
 from collections.abc import Mapping
 from datetime import timedelta
+from itertools import pairwise
 
 import numpy as np
 import polars as pl
@@ -20,6 +21,7 @@ from matplotlib.figure import Figure
 from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances, silhouette_score
 
+from domains.coffee.clean import normalised_name
 from domains.coffee.config import (
     UNCLASSIFIED,
     ConsumerPricesConfig,
@@ -81,12 +83,14 @@ def studies(
     states: Mapping[str, str],
     home_country: str,
     min_rows: int,
+    redraw_m: float,
 ) -> dict[str, pl.DataFrame]:
     """The domain's studies: the world market, the city's places, what the roasters say
     their coffees taste of, and the price of a kilogram from the farm to the shelf.
     `states` maps the domain's spelling of a state (folded) to SIAP's; `home_country` is
     the one the roasters' own coffees are profiled against the rest of the world; a group
-    of fewer than `min_rows` coffees is not reported."""
+    of fewer than `min_rows` coffees is not reported; a place that leaves a register and
+    a namesake that enters it within `redraw_m` are one place drawn again."""
     context, shops = clean["market_context"], clean["coffee_shops"]
     prices, production = clean["consumer_prices"], clean["mexico_production"]
     flavors, origins = clean["roaster_flavors"], clean["roaster_origins"]
@@ -97,6 +101,8 @@ def studies(
         "market_history": market_history(context, market.spotlight_country, market.history_since),
         "shop_kinds": shop_kinds(shops),
         "borough_coffee_shops": borough_coffee_shops(shops, clean["boroughs"]),
+        "register_editions": register_editions(shops),
+        "shop_turnover": shop_turnover(clean["coffee_shop_history"], redraw_m),
         "kind_agreement": agreement,
         "kind_scores": kind_scores(agreement),
         "production_by_state": production_by_state(clean["mexico_production"]),
@@ -197,6 +203,95 @@ def coffee_and_schooling_figure(table: pl.DataFrame) -> Figure:
     value_grid(ax, "y")
     figure.tight_layout()
     return figure
+
+
+def register_editions(shops: pl.DataFrame) -> pl.DataFrame:
+    """DENUE's places now, by the edition of the register each entered.
+
+    An entry is not an opening: INEGI adds places when an economic census walks the
+    streets (2014, 2019, 2024), so the editions after a census are where most places
+    enter, whatever year they opened. And only the places still listed are here: the
+    ones the register dropped are gone from it, so an old edition counts its survivors.
+    """
+    listed = shops.filter((pl.col("source") == "denue") & pl.col("listed_since").is_not_null())
+    return (
+        listed.group_by("listed_since")
+        .agg(pl.len().alias("places"), (pl.col("kind") == COFFEE).sum().alias("coffee_shops"))
+        .with_columns((100 * pl.col("places") / pl.col("places").sum()).alias("share_pct"))
+        .sort("listed_since")
+    )
+
+
+TURNOVER = pl.Schema(
+    {
+        "source": pl.String,
+        "since": pl.String,
+        "until": pl.String,
+        "listed_before": pl.UInt32,
+        "listed_after": pl.UInt32,
+        "appeared": pl.UInt32,
+        "disappeared": pl.UInt32,
+        # Of the disappeared, those with a namesake among the appeared that close: one
+        # place drawn again (an OSM node redrawn as its building), not a closing.
+        "redrawn": pl.UInt32,
+    }
+)
+EARTH_RADIUS_M = 6_371_008.8  # the mean radius (IUGG)
+
+
+def shop_turnover(history: pl.DataFrame, redraw_m: float) -> pl.DataFrame:
+    """Between each two consecutive reads of a register: what it listed, what appeared,
+    what it no longer lists, and how many of those look like a place drawn again.
+
+    Appearing and disappearing are about the register, not the street: DENUE drops a place
+    when an update finds it closed, and OpenStreetMap when a mapper deletes it - or
+    replaces a node with the building, under a new id. A disappeared place with a
+    namesake among the new ones within `redraw_m` is counted as `redrawn`.
+    """
+    rows = []
+    for source in sorted(history["source"].unique()):
+        reads = history.filter(pl.col("source") == source)
+        snapshots = sorted(reads["snapshot"].unique())
+        for since, until in pairwise(snapshots):
+            before = reads.filter(pl.col("snapshot") == since)
+            after = reads.filter(pl.col("snapshot") == until)
+            gone = before.join(after, on="shop_id", how="anti")
+            new = after.join(before, on="shop_id", how="anti")
+            rows.append(
+                {
+                    "source": source,
+                    "since": since,
+                    "until": until,
+                    "listed_before": before.height,
+                    "listed_after": after.height,
+                    "appeared": new.height,
+                    "disappeared": gone.height,
+                    "redrawn": _redrawn(gone, new, redraw_m),
+                }
+            )
+    return pl.DataFrame(rows, schema=TURNOVER)
+
+
+def _redrawn(gone: pl.DataFrame, new: pl.DataFrame, within_m: float) -> int:
+    """How many disappeared places have a new one of the same name within `within_m`."""
+    named = [
+        frame.filter(pl.col("name").is_not_null()).select(
+            normalised_name(pl.col("name")).alias("key"), "shop_id", "latitude", "longitude"
+        )
+        for frame in (gone, new)
+    ]
+    pairs = named[0].join(named[1], on="key", suffix="_new")
+    rad = np.pi / 180
+    half_lat = (pl.col("latitude_new") - pl.col("latitude")) * rad / 2
+    half_lon = (pl.col("longitude_new") - pl.col("longitude")) * rad / 2
+    chord = (
+        half_lat.sin() ** 2
+        + (pl.col("latitude") * rad).cos()
+        * (pl.col("latitude_new") * rad).cos()
+        * half_lon.sin() ** 2
+    )
+    close = pairs.filter(2 * EARTH_RADIUS_M * chord.sqrt().arcsin() <= within_m)
+    return close["shop_id"].n_unique()
 
 
 def shop_kinds(shops: pl.DataFrame) -> pl.DataFrame:

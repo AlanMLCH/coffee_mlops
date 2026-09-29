@@ -30,6 +30,8 @@ DENUE_ESTABLISHMENTS = [
         "Estrato": "0 a 5 personas",
         "Latitud": "19.45",
         "Longitud": "-99.15",
+        # One in the 2024 census's edition, one written as a handful of real rows are.
+        "Fecha_Alta": "2024-11" if i == 1 else "2013 07",
     }
     for i in (1, 2)
 ] + [
@@ -44,6 +46,7 @@ DENUE_ESTABLISHMENTS = [
         "Estrato": "6 a 10 personas",
         "Latitud": "19.3495012",
         "Longitud": "-99.1969644",
+        "Fecha_Alta": "2024-11",
     }
 ]
 

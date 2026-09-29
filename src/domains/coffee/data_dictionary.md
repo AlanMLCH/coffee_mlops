@@ -87,12 +87,26 @@ both can avoid counting one place twice.
 | `kind` | String | What the place is: `coffee`, `tea`, `ice_cream`, `juice`, `soda_fountain`, `school`, `unnamed` or `unclassified`. For a coffee-only view, filter `kind = 'coffee'` |
 | `kind_basis` | String | How the kind was decided: `name` (DENUE, read by the ordered rules in `cleaning.shop_kinds`) or `tag` (OSM, its own `amenity` tag) |
 | `matched_shop_id` | String? | The same place in the other register, both ways: within 60 m, names at least 0.88 alike (Jaro-Winkler), each the other's best match |
+| `listed_since` | Date? | DENUE only: the first day of the month of the register's edition the place entered it (`2024-11-01`). An entry, not an opening: 92% entered in the first edition (2010-07) or right after an economic census (2014-12, 2019-11, 2024-11) |
 
 > DENUE's activity class 722515 is **wider than coffee**: 38% of it is named as coffee,
 > 24% as juice stands, and ice-cream parlours are only 2%. Every row is kept with its
 > `kind` rather than filtered. Where both registers list a place, the name rule's
 > `coffee` agrees with OSM's tag 142 times out of 142, and finds 79% of the cafes OSM
 > knows (`analysis.kind_scores`); `unclassified` names are where the rest hide.
+
+## `clean.coffee_shop_history` — one place in one read of its register
+
+Every read of DENUE and OpenStreetMap is kept (stage 4): `clean.coffee_shops` is each
+register now, this table is each place at every read, one row per place per read day. A
+place a later read no longer lists left the register; one that appears was added.
+**For the places today, use `clean.coffee_shops`**; this table counts a place once per
+read. `analysis.shop_turnover` counts what appeared and disappeared between reads.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop_id`, `source`, `name`, `kind`, `latitude`, `longitude`, `borough_id`, `borough` | | As in `clean.coffee_shops`, as that read listed them |
+| `snapshot` | String | The read's day, `YYYY-MM-DD`. A read identical to the one before is not stored, so a snapshot is a day the register changed |
 
 ## `clean.mexico_production` — coffee grown in one Mexican municipality, one year
 

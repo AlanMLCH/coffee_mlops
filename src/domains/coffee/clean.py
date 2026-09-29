@@ -4,7 +4,8 @@
 - USDA PSD (long format) -> `market_context` (one row per country and market year).
 - INEGI's borough polygons and its 2020 Census -> `boroughs` (one row per alcaldia,
   geometry as WKB, with who lives there).
-- DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough).
+- DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough, as
+  each register lists it now) and `coffee_shop_history` (each place in every read).
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
 - The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
   `domains.coffee.roaster_sheets`.
@@ -36,12 +37,14 @@ from domains.coffee.config import (
 )
 from domains.coffee.consumer_prices import clean_consumer_prices
 from domains.coffee.prices import clean_exchange_rates, clean_price_indicators
+from domains.coffee.reads import daily_reads, newest
 from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
     PSD_ATTRIBUTES,
     SENSORY_COLUMNS,
     SENSORY_SCORES,
     SENSORY_SCORES_2018,
+    coffee_shop_history_schema,
     coffee_shops_schema,
 )
 from mlops_core.adapter import CleanTable
@@ -54,7 +57,6 @@ TEXT_COLUMNS = ["country", "region", "variety", "processing_method", "color", "g
 # DENUE packs entity + municipality + locality into `AreaGeo`; the first five characters
 # are the borough's official CVEGEO, the same key INEGI's polygons carry.
 BOROUGH_ID_LENGTH = 5
-SHOP_SOURCES = ("denue_cafes", "osm_places")
 
 
 def altitude_from_text(text: pl.Expr) -> pl.Expr:
@@ -329,6 +331,9 @@ def _denue_shops(denue: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
         pl.col("AreaGeo").str.slice(0, BOROUGH_ID_LENGTH).alias("declared_borough_id"),
         shop_kind(pl.col("Nombre"), rules.shop_kinds).alias("kind"),
         pl.lit("name").alias("kind_basis"),
+        (pl.col("Fecha_Alta").str.replace(" ", "-") + "-01")
+        .str.to_date("%Y-%m-%d")
+        .alias("listed_since"),
     )
 
 
@@ -354,7 +359,11 @@ def _osm_shops(osm: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
         pl.lit(None, pl.String).alias("declared_borough_id"),  # nor which borough it is in
         pl.col("amenity").replace_strict(rules.osm_kinds, return_dtype=pl.String).alias("kind"),
         pl.lit("tag").alias("kind_basis"),
+        pl.lit(None, pl.Date).alias("listed_since"),  # OSM's elements carry no such date here
     )
+
+
+READERS = {"denue_cafes": _denue_shops, "osm_places": _osm_shops}
 
 
 def clean_coffee_shops(
@@ -366,9 +375,12 @@ def clean_coffee_shops(
     The sources sit side by side rather than merged: DENUE is the official register, OSM
     is what people mapped, and they disagree about what exists. `matched_shop_id` says
     where they agree, so a count across both can avoid counting one place twice.
+
+    Each register keeps every read (`coffee_shop_history`); this table is its newest.
     """
-    readers = {"denue_cafes": _denue_shops, "osm_places": _osm_shops}
-    parts = [reader(frames[name], rules) for name, reader in readers.items() if name in frames]
+    parts = [
+        reader(newest(frames[name]), rules) for name, reader in READERS.items() if name in frames
+    ]
     if not parts:
         raise ValueError("No register of places has been ingested: run extract first")
     shops = pl.concat(parts)
@@ -384,6 +396,44 @@ def clean_coffee_shops(
     _report_placement(placed)
     linked = _link_registers(placed, rules)
     return linked.select(*coffee_shops_schema(rules).columns).sort("shop_id")
+
+
+def clean_coffee_shop_history(
+    frames: Mapping[str, pl.DataFrame],
+    areas: pl.DataFrame,
+    rules: CleaningConfig,
+    read_at: Mapping[str, datetime],
+) -> pl.DataFrame:
+    """Every place in every read of its register, one row per place and read day.
+
+    A place missing from a read that follows one listing it left the register (or the
+    map); one that appears was added. Neither is a closing or an opening: DENUE adds
+    places when a census visits them, and an OSM mapper can redraw a node as a building.
+    `analysis.shop_turnover` counts both, and says which OSM changes look like a redraw.
+
+    Each distinct point is placed once, however many reads list it. A place with no
+    coordinate cannot be placed and is left out; `coffee_shops` says how many the
+    newest read had.
+    """
+    reads = [
+        reader(frame, rules).with_columns(pl.lit(at.date().isoformat()).alias("snapshot"))
+        for name, reader in READERS.items()
+        if name in frames
+        for at, frame in daily_reads(frames[name], read_at[name])
+    ]
+    if not reads:
+        raise ValueError("No register of places has been ingested: run extract first")
+    located = pl.concat(reads).filter(
+        pl.col("latitude").is_not_null() & pl.col("longitude").is_not_null()
+    )
+    point = ["shop_id", "latitude", "longitude"]
+    placed = attribute_points(located.unique(point).select(point), areas, "latitude", "longitude")
+    return (
+        located.join(placed, on=point, how="left")
+        .rename({"area_id": "borough_id", "area_name": "borough"})
+        .select(*coffee_shop_history_schema(rules).columns)
+        .sort("shop_id", "snapshot")
+    )
 
 
 def _link_registers(shops: pl.DataFrame, rules: CleaningConfig) -> pl.DataFrame:
@@ -501,7 +551,7 @@ def clean_tables(
         reconcile_market_sources(frames["psd_coffee"], frames["fas_psd_coffee"])
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
-    shop_inputs = tuple(name for name in (*SHOP_SOURCES, "cdmx_boroughs") if name in frames)
+    shop_inputs = tuple(name for name in (*READERS, "cdmx_boroughs") if name in frames)
     roasters = clean_roasters(
         frames.get("roaster_catalogs"), rules, read_at.get("roaster_catalogs")
     )
@@ -513,6 +563,9 @@ def clean_tables(
             tuple(name for name in ("cdmx_boroughs", "census_2020") if name in frames),
         ),
         "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
+        "coffee_shop_history": CleanTable(
+            clean_coffee_shop_history(frames, areas, rules, read_at), shop_inputs
+        ),
         "mexico_production": CleanTable(
             clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)
         ),
