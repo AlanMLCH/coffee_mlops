@@ -253,28 +253,6 @@ def analysis_run(domain: Domain = None) -> None:
         typer.echo(f"published: {path}")
 
 
-@analysis_app.command()
-def dashboard(domain: Domain = None, port: int = 8501) -> None:
-    """Open the analysis dashboard over whatever the pipeline last wrote."""
-    with _needs_extra("analysis"):
-        from streamlit.web import cli as streamlit_cli
-
-    app_path = Path(__file__).resolve().parent / "analysis" / "dashboard.py"
-    # Streamlit reads the domain from the environment, like every other setting.
-    os.environ["MLOPS_DOMAIN"] = _adapter(domain).config.name
-    # Headless also on the command line, in case the repo's .streamlit/ is not the cwd.
-    sys.argv = [
-        "streamlit",
-        "run",
-        str(app_path),
-        "--server.port",
-        str(port),
-        "--server.headless",
-        "true",
-    ]
-    streamlit_cli.main()
-
-
 @app.command()
 def explore(domain: Domain = None, port: int = 8502) -> None:
     """Open the explorer: a map of the domain's places, questions to its agent, and a

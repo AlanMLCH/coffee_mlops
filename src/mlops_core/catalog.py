@@ -24,9 +24,10 @@ def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:
         con.execute(f"CREATE SCHEMA IF NOT EXISTS {layer}")
         for table_dir in sorted(p for p in layer_dir.iterdir() if p.is_dir()):
             partition = latest_partition(table_dir)
-            if partition is None:
-                continue
-            parquet = (partition / f"{table_dir.name}.parquet").as_posix()
+            parquet_path = partition / f"{table_dir.name}.parquet" if partition else None
+            if parquet_path is None or not parquet_path.is_file():
+                continue  # never built, or not a table: the analysis layer keeps its figures
+            parquet = parquet_path.as_posix()
             # hive_partitioning off: the `built_at=` folder is lineage, not a data column.
             con.execute(
                 f"CREATE VIEW {layer}.{table_dir.name} AS "

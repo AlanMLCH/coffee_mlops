@@ -1,7 +1,7 @@
 """The explorer: a map of the domain's places, questions to its agent, the tables sliced
 by hand, and what the data already says.
 
-Five tabs under a band of headline numbers:
+Six tabs under a band of headline numbers:
 
 - **Map**: the layers the domain declares in its YAML - a number per area raised as
   columns, places as dots or counted in hexagons - with what each one is, a legend, and
@@ -11,7 +11,11 @@ Five tabs under a band of headline numbers:
   viewer can change. A failed query says why, and shows the query.
 - **Explore by segment**: a measure, what to segment it by, what to colour it by, and
   filters - all picked from the YAML's lists, so the query is assembled, never written.
-- **Findings**: the results worth showing unasked, each a chart and a sentence.
+- **Findings**: the results worth showing unasked, each a chart and a sentence, and
+  every study and figure the analysis wrote, to read or download.
+- **Models**: how each model was trained and how it does - its target period by period,
+  what each feature is worth, its error by period, and the monitor's last verdict - as
+  the analysis and the monitor last wrote it, stamped with the partitions it came from.
 - **About**: the sources, the models and the agent, and their limits.
 
 Everything drawn is a SELECT run in the agent's locked session, so the app can show
@@ -45,6 +49,7 @@ from mlops_core.explore.charts import (
 from mlops_core.explore.layers import areas_if_built, ranked, run_layer
 from mlops_core.explore.maps import area_layer, deck, density_layer, point_layer
 from mlops_core.explore.segments import segment_sql, summary, top_segments, values_sql
+from mlops_core.explore.studies import domain_figures, domain_studies, figure, lineage
 from mlops_core.explore.style import CSS
 
 KINDS = ["bar", "line", "scatter", "points", "areas", "table"]
@@ -55,9 +60,10 @@ TABS = [
     ":material/forum: Ask the agent",
     ":material/bar_chart: Explore by segment",
     ":material/lightbulb: Findings",
+    ":material/model_training: Models",
     ":material/info: About",
 ]
-MAP, ASK, SEGMENTS, FINDINGS, ABOUT = TABS
+MAP, ASK, SEGMENTS, FINDINGS, MODELS, ABOUT = TABS
 DOTS, DENSITY = "dots", "density"
 ROUTES = {
     "data": "answered from the tables",
@@ -69,6 +75,7 @@ ROUTES = {
 settings = Settings()
 adapter = load_adapter(settings.domain)
 config = adapter.config
+data_dir = settings.data_dir / config.name
 st.set_page_config(
     page_title=config.explore.title if config.explore else config.name,
     page_icon=":material/explore:",
@@ -88,7 +95,7 @@ explore = config.explore
 def session() -> tuple[duckdb.DuckDBPyConnection, threading.Lock]:
     """One locked, read-only session for the page, and a lock: a DuckDB connection serves
     one query at a time, and every browser tab shares it."""
-    return read_only(settings.data_dir / config.name), threading.Lock()
+    return read_only(data_dir), threading.Lock()
 
 
 def query(sql: str) -> tuple[pl.DataFrame, bool]:
@@ -536,6 +543,22 @@ def findings_tab() -> None:
         ):
             with column, st.container(border=True):
                 show_finding(finding)
+    every_study()
+
+
+def every_study() -> None:
+    """Every study and figure the analysis wrote, beyond the findings: to read or keep."""
+    models = [model.name for model in config.models]
+    studies = domain_studies(data_dir, models)
+    if studies:
+        st.subheader("Every study")
+        name = st.selectbox("Study", studies, format_func=label, key="study")
+        show_study(name)
+    drawn = domain_figures(data_dir, models)
+    if drawn:
+        with st.expander(f"The figures the analysis drew ({len(drawn)})"):
+            for path in drawn:
+                st.image(str(path))
 
 
 def show_finding(finding: ExploreFinding) -> None:
@@ -557,6 +580,82 @@ def show_finding(finding: ExploreFinding) -> None:
         st.vega_lite_chart(spec | {"height": 280}, width="stretch")
     with st.expander("The query"):
         st.code(finding.sql, language="sql")
+
+
+def show_study(name: str, caption: str | None = None, figure_name: str | None = None) -> None:
+    """One study as the analysis wrote it: its figure, its rows and the CSV of both."""
+    rows = rows_or_warning(name, f"SELECT * FROM analysis.{name}")
+    if rows is None:
+        return
+    if caption:
+        st.markdown(f"**{caption}**")
+    image = figure(data_dir, figure_name) if figure_name else None
+    if image is not None:
+        st.image(str(image))
+    st.dataframe(rows, hide_index=True)
+    st.download_button(
+        "Download as CSV", rows.write_csv(), file_name=f"{name}.csv", key=f"csv:{name}"
+    )
+
+
+def models_tab() -> None:
+    note(
+        "What the analysis and the monitor last wrote about each model, read from the saved "
+        "tables, not recomputed. A model is replaced only when a candidate beats both the "
+        "baseline and the current champion, 95% sure, on the same rows."
+    )
+    names = [model.name for model in config.models]
+    picked = st.segmented_control("Model", names, default=names[0], key="model", required=True)
+    model = config.model_named(picked or names[0])
+    st.markdown(f"**{model.name}**: {model.description}")
+    stamp = lineage(data_dir, model.name)
+    if not stamp:
+        st.info(f"No study of {model.name} has been built yet: run `make analysis`.")
+        return
+    st.caption(" · ".join(f"{key}: {value}" for key, value in stamp.items()))
+    from mlops_core.monitoring.drift import latest_verdict  # MLflow: only when the tab opens
+
+    found = latest_verdict(data_dir, model.name)
+    if found is None:
+        st.caption("The monitor has not compared its periods yet (`make monitor`).")
+    elif found.retrain:
+        st.warning(f"The monitor asks for retraining ({found.current}): {'; '.join(found.reasons)}")
+    else:
+        st.success(f"The monitor compared {found.current} with the periods before: nothing due.")
+    named = model.name + "_{}"
+    data, features, errors = st.tabs(["The target", "The features", "The error"])
+    with data:
+        show_study(named.format("target_distribution"), "The target, period by period",
+                   named.format("target_distribution"))  # fmt: skip
+        show_study(named.format("categorical_profile"), "What each period is made of")
+    with features:
+        show_study(named.format("feature_recommendation"), "What each feature is worth",
+                   named.format("feature_importance"))  # fmt: skip
+        st.caption(
+            "`suggested_action` is a prompt to look, never an instruction: a feature with no "
+            "correlation of its own can still be useful to the model."
+        )
+        show_study(named.format("numeric_profile"), "The numeric features in detail",
+                   named.format("numeric_signal"))  # fmt: skip
+    with errors:
+        show_residuals(model.name, model.items.period)
+
+
+def show_residuals(model: str, period: str) -> None:
+    rows = rows_or_warning(model, f"SELECT * FROM analysis.{model}_residuals")
+    if rows is None:
+        st.info("No batch predictions yet: run `make predict`, then `make analysis`.")
+        return
+    image = figure(data_dir, f"{model}_residual_bias")
+    if image is not None:
+        st.image(str(image))
+    periods = sorted(rows[period].unique().to_list())
+    chosen = st.selectbox("Period", periods, index=len(periods) - 1, key=f"period:{model}")
+    st.dataframe(rows.filter(pl.col(period) == chosen), hide_index=True)
+    st.caption(
+        "The error on a period the model trained on forecasts nothing; the newest period is "
+        "the one to read."
+    )
 
 
 def about_tab() -> None:
@@ -586,7 +685,7 @@ def about_tab() -> None:
 header()
 views = st.tabs(TABS, key="view", on_change="rerun")
 for tab, render in zip(
-    views, (map_tab, ask_tab, segments_tab, findings_tab, about_tab), strict=True
+    views, (map_tab, ask_tab, segments_tab, findings_tab, models_tab, about_tab), strict=True
 ):
     if tab.open:
         with tab:

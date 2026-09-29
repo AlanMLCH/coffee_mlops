@@ -1,6 +1,6 @@
-# Committed: the dashboard must start the same way for everyone.
+# Committed: the explorer must start the same way for everyone.
 [server]
-# Headless skips the first-run email prompt, which otherwise blocks `make dashboard`.
+# Headless skips the first-run email prompt, which otherwise blocks `make explore`.
 headless = true
 # This machine only. The default binds every interface and prints a LAN and an external
 # URL, which is not what a local analysis tool should do.

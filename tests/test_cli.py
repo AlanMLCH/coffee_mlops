@@ -349,25 +349,6 @@ def test_analysis_run_writes_studies_and_publishes_figures(
     }
 
 
-def test_the_dashboard_command_launches_streamlit_headless(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Started through us, not through a raw `streamlit run`, so the domain and the
-    headless flag are always set: otherwise it blocks asking for an email."""
-    launched: dict[str, object] = {}
-    monkeypatch.setitem(
-        sys.modules,
-        "streamlit.web",
-        types.SimpleNamespace(
-            cli=types.SimpleNamespace(main=lambda: launched.update(argv=sys.argv))
-        ),
-    )
-
-    CliRunner().invoke(cli.app, ["analysis", "dashboard", "--port", "9999"])
-
-    assert "--server.headless" in launched["argv"]  # type: ignore[operator]
-    assert "9999" in launched["argv"]  # type: ignore[operator]
-    assert os.environ["MLOPS_DOMAIN"] == "coffee"
-
-
 def test_the_explore_command_launches_the_explorer_headless(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

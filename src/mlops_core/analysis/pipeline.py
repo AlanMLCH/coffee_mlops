@@ -5,7 +5,7 @@ and never feeds them back automatically. Its output is evidence — including a 
 recommendation used to decide what the model should look at next — and evidence is
 reviewed by a person before it changes a config.
 
-Every table is written as Parquet (what the catalog and the dashboard read) and as CSV
+Every table is written as Parquet (what the catalog and the explorer read) and as CSV
 (what a human opens in a spreadsheet). The core's studies run once per model and are
 named after it (`review_residuals`); the domain's own studies run once.
 """
@@ -33,7 +33,14 @@ from mlops_core.analysis.studies import (
 from mlops_core.config import DomainConfig, ModelConfig
 from mlops_core.ml.registry import load_champion
 from mlops_core.ml.train import split_items, xy
-from mlops_core.storage import latest_partition, new_partition, read_table, write_table
+from mlops_core.storage import (
+    MANIFEST_NAME,
+    TableManifest,
+    latest_partition,
+    new_partition,
+    read_table,
+    write_table,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +142,7 @@ def build_analysis(
         else:
             logger.info("%s: %d rows", name, table.height)
 
-    saved = _save_figures(drawn, data_dir, built_at)
+    saved = _save_figures(drawn, data_dir, built_at, written)
     published = _publish(saved, config.analysis.published_figures, publish_to)
     return AnalysisOutput(written, saved, published)
 
@@ -178,14 +185,27 @@ def model_studies(
     return tables
 
 
-def _save_figures(drawn: dict[str, Figure], data_dir: Path, built_at: datetime) -> dict[str, Path]:
-    """One PNG per figure, in a partition beside the tables they were drawn from."""
+def _save_figures(
+    drawn: dict[str, Figure], data_dir: Path, built_at: datetime, tables: dict[str, Path]
+) -> dict[str, Path]:
+    """One PNG per figure, in a partition beside the tables they were drawn from.
+
+    The manifest goes last, as a table's does: it is what says the drawing is complete,
+    so a reader never takes a half-written partition for the newest one.
+    """
     partition = new_partition(data_dir / "analysis" / FIGURES, "built_at", built_at)
     paths = {}
     for name, figure in drawn.items():
         paths[name] = partition / f"{name}.png"
         figure.savefig(paths[name], facecolor=figure.get_facecolor())
         plt.close(figure)  # figures hold memory until closed
+    manifest = TableManifest(
+        table=FIGURES,
+        rows=len(paths),
+        built_at=built_at,
+        inputs={name: path.parent.name for name, path in tables.items()},
+    )
+    (partition / MANIFEST_NAME).write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
     return paths
 
 

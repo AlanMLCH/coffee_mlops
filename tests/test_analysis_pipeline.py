@@ -12,7 +12,7 @@ from mlops_core.data.clean import build_clean
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
 from mlops_core.ml.registry import ServedModel
-from mlops_core.storage import MANIFEST_NAME, read_table
+from mlops_core.storage import MANIFEST_NAME, latest_partition, read_table
 from tests.fakes import ConstantModel
 
 AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
@@ -151,6 +151,12 @@ def test_figures_are_drawn_and_the_selection_is_published(
     } <= set(output.figures)
     for path in output.figures.values():
         assert path.suffix == ".png" and path.stat().st_size > 0
+    # The drawing is complete, so a reader taking the newest complete partition finds it.
+    drawing = next(iter(output.figures.values())).parent
+    assert latest_partition(drawing.parent) == drawing
+    manifest = json.loads((drawing / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["rows"] == len(output.figures)
+    assert set(manifest["inputs"]) == set(output.tables)
     # Only the configured selection is copied where the docs can reference it.
     assert {path.name for path in output.published} <= {
         f"{name}.png" for name in analysis_adapter.config.analysis.published_figures

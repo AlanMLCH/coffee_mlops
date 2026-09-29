@@ -153,7 +153,6 @@ flowchart TD
         green_price_predictions[("predictions/green_price_predictions<br/>once a version beats the baselines<br/>v1 did not")]
         api["FastAPI POST /models/{name}/predict<br/>each model's request body<br/>the same enrich"]
         analysis["mlops analysis run<br/>core studies + the domain's"]
-        dashboard["Streamlit dashboard"]
         catalog[("DuckDB views over the<br/>newest partitions: mlops sql")]
     end
 
@@ -167,7 +166,7 @@ flowchart TD
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
         agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route · plan · SQL · predict · retrieve<br/>answer · verify · one MLflow trace each"]
         mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents · draw<br/>dictionary://tables · guardrails server-side"]
-        explorer["mlops explore: Streamlit + deck.gl<br/>headline numbers · map · ask · segments · findings<br/>each answer's rows as a chart you can change"]
+        explorer["mlops explore: Streamlit + deck.gl<br/>headline numbers · map · ask · segments · findings · models<br/>each answer's rows as a chart you can change"]
         agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
         agent_answers[("evaluations/agent_answers<br/>per question · one MLflow run, a trace each")]
     end
@@ -193,7 +192,7 @@ flowchart TD
     schedule -.-> monitor
     mlflow --> api
     market_context --> api
-    review_predictions --> analysis --> dashboard
+    review_predictions --> analysis -- "Findings · Models" --> explorer
     roaster_flavors -- "profiles · price · clusters" --> analysis
     CLEAN & review_features & review_predictions & analysis -.-> catalog
     offer_features & offer_predictions -.-> catalog
@@ -214,7 +213,7 @@ flowchart TD
     classDef domain fill:#fde6d8,stroke:#eb6834,color:#111
     classDef store fill:#eeeeea,stroke:#898781,color:#111
     classDef planned fill:#ffffff,stroke:#898781,color:#555,stroke-dasharray: 5 5
-    class extract_files,validate,train,gate,api,analysis,dashboard,documents,document_chunks core
+    class extract_files,validate,train,gate,api,analysis,documents,document_chunks core
     class extract_apis,review_features,offer_features,green_price_features,audits,coffee_reviews,market_context,mexico_production,boroughs,coffee_shops domain
     class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
@@ -238,7 +237,7 @@ ask it to: every step is its own command, reading the previous step's output fro
 | **data** (ETL) | `extract`, `validate`, `clean`, `run` | external sources | `clean.coffee_reviews`, `clean.market_context`, `clean.boroughs`, `clean.coffee_shops`, `clean.coffee_shop_history`, `clean.mexico_production`, `clean.roaster_coffees`, `clean.roaster_origins`, `clean.roaster_offers`, `clean.roaster_flavors`, `clean.documents`, `clean.document_chunks` |
 | **ml** | `features`, `train`, `predict`, `run` | the clean tables | tracked runs, a registered `champion` model, batch predictions |
 | **serving** | the API container | clean tables + the `champion` model | online predictions |
-| **analysis** | `run`, `dashboard` | every layer + the champion | study tables (Parquet + CSV), figures, a dashboard |
+| **analysis** | `run` | every layer + the champion | study tables (Parquet + CSV), figures; the explorer shows them |
 | **rag** (stage 3) | `draft`, `review`, `index`, `evaluate` | the corpus' clean tables | the questions retrieval is judged by, the vector index, each search's scores |
 | **agent** (stage 3) | `benchmark`, `ask`, `evaluate`, and `mlops mcp` | every layer, the index, the prediction API | answers that cite their evidence, one MLflow trace each; the same tools over MCP |
 
@@ -265,7 +264,7 @@ src/
 │   ├── data/            # file + API extraction, validation routing, geo, clean driver
 │   ├── ml/              # features, the model's split, tuning, gate, registry, batch
 │   ├── serving/         # FastAPI: the request body is whatever the domain declares
-│   ├── analysis/        # profiles, drift, feature evidence, residuals, dashboard
+│   ├── analysis/        # profiles, drift, feature evidence, residuals
 │   ├── rag/             # question set, BM25, dense index in Qdrant, retrieval gate
 │   ├── agent/           # locked-down SQL, benchmark, LangGraph agent, MCP server
 │   └── orchestration/   # one Dagster graph per installed domain
@@ -358,8 +357,8 @@ Run `make help` for every target, or `uv run mlops --help` for the CLI.
 
 `make analysis` rebuilds every table and figure below from the layers, writing each one
 as Parquet (queryable: `SELECT * FROM analysis.review_feature_recommendation`) and as CSV, next
-to the figure drawn from it. `make dashboard` opens them with the partition they came
-from stamped on screen.
+to the figure drawn from it. The explorer (`make explore`) shows them: the domain's under
+**Findings**, each model's under **Models**, with the partitions they came from.
 
 ![Total cup points by period](figures/review_target_distribution.png)
 
@@ -1166,8 +1165,10 @@ a project's `.mcp.json`):
 first version (a map beside a chat) was, as the user found it, poor and too simple: no
 chart unless the agent's query returned rows, a failed query shown as nothing but the
 agent saying so, and a question box that sat under a growing column. It was rebuilt as a
-band of headline numbers over five tabs; everything drawn is still a SELECT in the
-agent's locked session, so the app can show nothing a question could not ask for.
+band of headline numbers over five tabs (six since the analysis dashboard moved in, see
+[One app](#one-app-the-dashboard-moves-into-the-explorer)); everything drawn is still a
+SELECT in the agent's locked session, so the app can show nothing a question could not
+ask for.
 
 ![The explorer: headline numbers, the map, the ranking](figures/explorer_map.png)
 
@@ -1235,6 +1236,35 @@ every place in DENUE's class, juice stands included (48.8 per km² for Cuauhtém
 21.2 for coffee shops), and cited a column instead of its evidence; the answer carries
 "not fully verified", and the query is there to read. The 4B model's limits are shown,
 not hidden.
+
+### One app: the dashboard moves into the explorer
+
+Two Streamlit apps on two ports - the analysis dashboard (`make dashboard`, 8501) and the
+explorer (8502) - was one too many for a person to find their way around (decision of 29
+September: one app). The dashboard's content is now the explorer's:
+
+- A **Models** tab: pick a model, read its description, the partitions its studies came
+  from, and the monitor's last verdict ("nothing due", or why a retraining is); then its
+  target period by period, what each feature is worth (permutation importance, with the
+  reminder that `suggested_action` prompts a look, never acts), the numeric features in
+  detail, and its error by period, the newest period first. Figures beside their tables,
+  every table downloadable as the CSV the pipeline wrote.
+- Under **Findings**, **every study** the domain's analysis wrote, picked from a list, and
+  every figure it drew: the findings are a curated few, the rest is one click away.
+- Nothing is recomputed: the tables come through the agent's locked session
+  (`analysis.*`), the figures from the newest drawing on disk (`explore/studies.py`).
+
+`make dashboard`, `mlops analysis dashboard` and `analysis/dashboard.py` are gone, and
+Streamlit moved from the `analysis` extra to `explore`: the analysis pipeline draws with
+matplotlib and never needed a web server, so the orchestrator's environment no longer
+installs one.
+
+**A bug the move found:** the dashboard never showed a figure. A figures partition had no
+manifest - the file that says a partition is complete - and the dashboard, like every
+reader, takes the newest *complete* partition, so it found none and quietly showed the
+tables alone. The analysis now writes the manifest after the last PNG (the partitions of
+each table it read as its inputs), and the catalog skips a folder with no Parquet in it,
+so the figures never become a view.
 
 ## The price of green coffee (stage 4)
 

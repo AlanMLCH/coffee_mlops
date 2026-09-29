@@ -59,6 +59,17 @@ def test_empty_data_dir_gives_an_empty_catalog(tmp_path: Path) -> None:
     assert con.sql("SELECT count(*) FROM information_schema.tables").fetchone() == (0,)
 
 
+def test_a_folder_of_figures_is_not_a_table(tmp_path: Path) -> None:
+    """The analysis keeps its drawings in a partition with a manifest and no Parquet."""
+    drawing = tmp_path / "analysis" / "figures" / "built_at=20260929T120000Z"
+    drawing.mkdir(parents=True)
+    (drawing / "manifest.json").write_text("{}", encoding="utf-8")
+
+    con = connect(tmp_path)
+
+    assert con.sql("SELECT count(*) FROM information_schema.tables").fetchone() == (0,)
+
+
 def test_table_with_only_an_interrupted_build_is_skipped(tmp_path: Path) -> None:
     (tmp_path / "features" / "review_features" / "built_at=20260919T120000Z").mkdir(parents=True)
 

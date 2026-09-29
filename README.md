@@ -74,8 +74,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 
 ## The explorer
 
-`make explore` opens it at http://localhost:8502. Everything it draws is a read-only
-query; every answer shows the query behind it.
+`make explore` opens it at http://localhost:8502: the map, questions to the agent, a table
+sliced by hand, the findings and every study, and each model's evidence and monitor
+verdict. Everything it draws is a read-only query; every answer shows the query behind it.
 
 ![The explorer: the price ladder, the map, the boroughs ranked](docs/figures/explorer_map.png)
 

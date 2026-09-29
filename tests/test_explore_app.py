@@ -17,6 +17,8 @@ import mlops_core.adapter
 from domains.coffee.adapter import CoffeeAdapter
 from mlops_core import cli
 from mlops_core.agent.sql import QueryResult
+from mlops_core.analysis import pipeline
+from mlops_core.analysis.pipeline import build_analysis
 from mlops_core.config import MapView
 from mlops_core.data.clean import build_clean
 from mlops_core.explore import app as app_module
@@ -33,9 +35,12 @@ from mlops_core.explore.maps import (
     point_layer,
     ramp,
 )
+from mlops_core.ml.features import build_features
+from mlops_core.ml.registry import ServedModel
+from tests.fakes import ConstantModel
 
 APP = Path(app_module.__file__)
-MAP, ASK, SEGMENTS, FINDINGS, ABOUT = app_module.TABS
+MAP, ASK, SEGMENTS, FINDINGS, MODELS, ABOUT = app_module.TABS
 SQUARE = {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}
 AREAS = Areas("area_id", "area", {"type": "FeatureCollection", "features": [
     {"type": "Feature", "properties": {"id": key, "name": name}, "geometry": SQUARE}
@@ -380,6 +385,75 @@ def test_the_findings_and_the_about_page_draw_from_the_tables(
     assert not findings.exception and not about.exception
     assert next(h.value for h in findings.subheader) == "A kilogram, from the farm to the shelf"
     assert any("**review**" in m.value for m in about.markdown)
+
+
+@pytest.fixture
+def analysed(
+    data_dir: Path, coffee_adapter: CoffeeAdapter, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """The fixtures' layers with the analysis built over them, and a verdict that asks for
+    a retraining, as the monitor would leave it."""
+    config = coffee_adapter.config
+    adapter = CoffeeAdapter(
+        config.model_copy(
+            update={
+                "analysis": config.analysis.model_copy(update={"min_rows": 1}),
+                "market_analysis": config.market_analysis.model_copy(update={"market_year": 2022}),
+            }
+        )
+    )
+    monkeypatch.setattr(
+        pipeline, "load_champion", lambda *a, **k: ServedModel(ConstantModel(), "1", "cache")
+    )
+    domain_dir = data_dir / "coffee"
+    build_features(adapter, "review", domain_dir)
+    build_analysis(adapter, domain_dir, "sqlite:///unused")
+    drift = domain_dir / "monitoring" / "review_drift" / "built_at=20260929T000000Z"
+    drift.mkdir(parents=True)
+    (drift / "verdict.json").write_text(
+        '{"model": "review", "current": "cqi_2023", "retrain": true, '
+        '"reasons": ["the target drifted"], "data_version": "abc"}',
+        encoding="utf-8",
+    )
+    (drift / "manifest.json").write_text("{}", encoding="utf-8")
+    return data_dir
+
+
+def test_a_models_studies_are_shown_with_what_they_came_from(
+    analysed: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = explorer(analysed, monkeypatch, view=MODELS)
+
+    assert not page.exception
+    # The stamp says which partitions are on screen: without it last week's numbers pass
+    # for today's.
+    assert any("review_features: built_at=" in c.value for c in page.caption)
+    assert "the target drifted" in page.warning[0].value  # the monitor's verdict
+    shown = {m.value for m in page.markdown}
+    assert {"**The target, period by period**", "**What each feature is worth**"} <= shown
+    assert page.get("image")  # the figures, found in the newest complete drawing
+    assert len(page.dataframe) >= 4
+
+
+def test_a_model_without_studies_says_what_to_run(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = explorer(data_dir, monkeypatch, view=MODELS)
+
+    assert not page.exception
+    assert "run `make analysis`" in page.info[0].value
+
+
+def test_every_study_the_analysis_wrote_is_one_pick_away(
+    analysed: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page = explorer(analysed, monkeypatch, view=FINDINGS)
+
+    studies = page.selectbox(key="study")
+    assert "market summary" in studies.options and "review residuals" not in studies.options
+    studies.set_value("market_summary").run()
+    assert not page.exception
+    assert page.get("download_button")
 
 
 def test_a_layer_whose_table_is_not_built_says_so(

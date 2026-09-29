@@ -359,7 +359,6 @@ analysis = [
     { name = "mlflow" },
     { name = "optuna" },
     { name = "scikit-learn" },
-    { name = "streamlit" },
 ]
 data = [
     { name = "duckdb" },
@@ -504,7 +503,7 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'serving'", specifier = ">=1.9.1" },
     { name = "skops", marker = "extra == 'serving'", specifier = ">=0.15.0" },
     { name = "snowballstemmer", marker = "extra == 'rag'", specifier = ">=3.0" },
-    { name = "streamlit", marker = "extra == 'analysis'", specifier = ">=1.52.0" },
+    { name = "streamlit", marker = "extra == 'explore'", specifier = ">=1.52.0" },
     { name = "typer", specifier = ">=0.27.2" },
     { name = "uvicorn", marker = "extra == 'serving'", specifier = ">=0.53.0" },
     { name = "vl-convert-python", marker = "extra == 'mcp'", specifier = ">=1.9.0" },
