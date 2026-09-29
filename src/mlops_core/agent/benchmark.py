@@ -51,6 +51,21 @@ ROUTE_CASES_FILE = Path("evals") / "routing_questions.jsonl"
 EVALUATIONS = "evaluations"
 
 
+def case_file(home: Path, name: Path, cases: str | None = None) -> Path:
+    """A case file of the domain's set, or of a named one beside it (`evals/<cases>/`).
+
+    A named set is one kept apart: a held-out set, written before a change and never
+    looked at while making it, measures the change without having been fitted by it.
+    """
+    return home / (name if cases is None else name.parent / cases / name.name)
+
+
+def results_name(base: str, cases: str | None) -> str:
+    """The evaluations table a set's results go to: each set is compared only with its own
+    previous runs."""
+    return base if cases is None else f"{base}_{cases}"
+
+
 class SqlCase(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -72,9 +87,14 @@ class RouteCase(BaseModel):
     sql: str | None = None  # a reference for the data part the SQL set does not hold
     model: str | None = None  # the model a prediction is for
     item: dict[str, str | float] = {}  # every field the question states, as the model spells it
+    # False for a question the data and the documents cannot answer: the right answer is
+    # to say so, and anything else is an answer made up.
+    answerable: bool = True
 
     @model_validator(mode="after")
     def _expectations_fit_the_route(self) -> Self:
+        if not self.answerable and (self.sql or self.model or self.tools):
+            raise ValueError(f"{self.id}: an unanswerable question has no reference to state")
         if (self.route == "mixed") != bool(self.tools):
             raise ValueError(f"{self.id}: list the tools of a mixed question, and only then")
         if ("prediction" in self.needs) != bool(self.model and self.item):
@@ -190,13 +210,16 @@ def log_benchmark(
     data_dir: Path,
     tracking_uri: str,
     at: datetime | None = None,
+    cases: str | None = None,
 ) -> tuple[dict[str, float], str]:
     """Write the per-question verdicts to the evaluations layer and log one MLflow run:
     the generator, its options, the prompts' versions and which question sets."""
     summary = summarise(sql, routes)
     slug = "".join(c if c.isalnum() else "_" for c in generator.split("@")[0])
     tables = [
-        write_table(frame, data_dir / EVALUATIONS / f"agent_{kind}_{slug}", {}, at)
+        write_table(
+            frame, data_dir / EVALUATIONS / results_name(f"agent_{kind}_{slug}", cases), {}, at
+        )
         for kind, frame in (("sql", sql), ("routes", routes))
     ]
     mlflow.set_tracking_uri(tracking_uri)
@@ -215,6 +238,7 @@ def log_benchmark(
             "sql_bar": SQL_BAR,
             "route_bar": ROUTE_BAR,
             "cases_written_by": "assistant",
+            "case_set": cases or "default",
             "case_files_sha256": case_digest(case_files),
         }
         mlflow.log_params(params)

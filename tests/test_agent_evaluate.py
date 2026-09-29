@@ -4,6 +4,7 @@ correct, and how two runs are compared.
 Replies are built by hand: what is under test is the judging, not the agent.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -185,11 +186,12 @@ def test_a_prediction_is_right_only_with_every_stated_field_as_the_model_spells_
 # --- Runs ---------------------------------------------------------------------------------
 
 
-def answers(*correct: bool, route: str = "data") -> pl.DataFrame:
+def answers(*correct: bool, route: str = "data", answerable: bool = True) -> pl.DataFrame:
     rows = [
         {"case_id": f"c{n}", "route_expected": route, "route": route, "route_ok": True,
          "tools_ok": True, "verified": ok, "sql_ok": ok if n % 2 else None, "passage_ok": None,
-         "item_ok": None, "correct": ok, "seconds": float(n + 1)}
+         "item_ok": None, "answerable": answerable, "answered": answerable or not ok,
+         "correct": ok, "seconds": float(n + 1)}
         for n, ok in enumerate(correct)
     ]  # fmt: skip
     return pl.DataFrame(rows, schema={k: SCHEMA[k] for k in rows[0]})
@@ -204,6 +206,33 @@ def test_the_summary_counts_each_check_over_the_questions_it_applies_to() -> Non
     assert "passage" not in summary and "item" not in summary
     assert (summary["correct_data"], summary["correct_mixed"]) == (0.75, 0.0)
     assert (summary["seconds_median"], summary["seconds_max"]) == (2.0, 4.0)
+
+
+def test_saying_there_is_no_answer_is_right_only_where_there_is_none(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    unanswerable = Truth(case("none-01", "data", answerable=False), None, ())
+    answerable = Truth(case("data-01", "data"), TOP_STATE, ())
+    declined = replace(reply(rows=[("Chiapas",)]), answered=False)
+
+    assert check(unanswerable, declined, session)["correct"] is True
+    assert check(unanswerable, reply(rows=[("Chiapas",)]), session)["correct"] is False
+    assert check(answerable, declined, session)["correct"] is False  # its query was right
+    with pytest.raises(ValidationError, match="an unanswerable question has no reference"):
+        case("none-02", "data", answerable=False, sql="SELECT 1")
+
+
+def test_the_summary_says_how_often_it_abstained_right_and_declined_wrongly() -> None:
+    declined_one = answers(True, True, True, False).with_columns(
+        answered=pl.Series([True, True, True, False])
+    )
+    runs = [answers(True, False, answerable=False), declined_one]
+
+    summary = summarise(pl.concat(runs))
+
+    assert summary["abstained_right"] == 0.5
+    assert summary["declined_answerable"] == 0.25  # the answerable one it got wrong declined
+    assert "abstained_right" not in summarise(answers(True))
 
 
 def test_a_run_is_compared_with_the_previous_on_the_questions_both_asked() -> None:
@@ -225,6 +254,19 @@ def test_record_hands_back_the_previous_run(tmp_path: Path) -> None:
     assert none is None
     assert previous is not None and previous["correct"].to_list() == [True]
     assert first.parent.parent == second.parent.parent == tmp_path / "evaluations" / TABLE
+
+
+def test_a_named_case_set_keeps_its_own_table_and_history(tmp_path: Path) -> None:
+    """A held-out set is compared only with its own previous runs."""
+    record(answers(True), tmp_path, datetime(2026, 9, 25, 10, tzinfo=UTC))
+    held_out, none = record(
+        answers(True), tmp_path, datetime(2026, 9, 25, 11, tzinfo=UTC), "holdout"
+    )
+    _, previous = record(answers(False), tmp_path, datetime(2026, 9, 25, 12, tzinfo=UTC), "holdout")
+
+    assert none is None  # the default set's run is not this one's previous
+    assert previous is not None and previous["correct"].to_list() == [True]
+    assert held_out.parent.parent == tmp_path / "evaluations" / f"{TABLE}_holdout"
 
 
 def test_every_question_is_asked_timed_and_traced(session: duckdb.DuckDBPyConnection) -> None:

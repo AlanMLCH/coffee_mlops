@@ -66,6 +66,8 @@ class Reply:
     prediction: PredictionAnswer | None
     passages: list[dict[str, Any]]  # every passage the search returned, cited or not
     problems: list[str]  # what verification still found after the rewrite
+    # False when the agent said it found no answer instead of giving one.
+    answered: bool = True
 
     @property
     def verified(self) -> bool:

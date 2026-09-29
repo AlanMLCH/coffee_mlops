@@ -1,0 +1,25 @@
+{"id": "h-data-01", "question": "How many coffee shops does DENUE list in Benito Juárez?", "route": "data"}
+{"id": "h-data-02", "question": "Which borough has the most coffee shops per 10,000 residents?", "route": "data"}
+{"id": "h-data-03", "question": "What is the median shelf price per kilogram of plain ground coffee in Coyoacán?", "route": "data"}
+{"id": "h-data-04", "question": "What was the highest peso-dollar exchange rate recorded in 2025?", "route": "data"}
+{"id": "h-data-05", "question": "How many hectares of coffee were harvested in Veracruz in 2025?", "route": "data"}
+{"id": "h-data-06", "question": "What share of the roasters' coffees with tasting notes name a nutty or cocoa note?", "route": "data"}
+{"id": "h-data-07", "question": "How many offers does Cucurucho list?", "route": "data"}
+{"id": "h-data-08", "question": "What was the highest daily ICO composite indicator price recorded in September 2026?", "route": "data"}
+{"id": "h-data-09", "question": "What is the cup-score model's mean absolute error on the lots of the 2023 snapshot?", "route": "data"}
+{"id": "h-none-01", "question": "What is the average cup score of the lots from Iceland?", "route": "data", "answerable": false}
+{"id": "h-none-02", "question": "What is the median price per kilo of Starbucks' coffee in the roasters' catalogues?", "route": "data", "answerable": false}
+{"id": "h-none-03", "question": "Who won the 2022 FIFA World Cup?", "route": "knowledge", "answerable": false}
+{"id": "h-pred-01", "question": "What cup score would a natural Brazilian lot grown at 1,100 metres with 12% moisture get?", "route": "prediction", "model": "review", "item": {"country": "Brazil", "processing_method": "natural", "altitude_m": 1100, "moisture_pct": 12}}
+{"id": "h-pred-02", "question": "Estimate the total cup points of a washed Kenyan lot from 1,900 m with two category-one defects.", "route": "prediction", "model": "review", "item": {"country": "Kenya", "processing_method": "washed", "altitude_m": 1900, "category_one_defects": 2}}
+{"id": "h-pred-03", "question": "What would Buna charge per kilogram for a 1 kg bag of a washed coffee from Oaxaca?", "route": "prediction", "model": "offer", "item": {"shop": "buna", "bag_grams": 1000, "state": "Oaxaca", "processing_method": "washed"}}
+{"id": "h-pred-04", "question": "How much per kilo would a 1 kg bag of a natural Ethiopian coffee cost at Cucurucho?", "route": "prediction", "model": "offer", "item": {"shop": "cucurucho", "bag_grams": 1000, "country": "Ethiopia", "processing_method": "natural"}}
+{"id": "h-pred-05", "question": "If Almanegra sold a 500 g honey-processed Costa Rican coffee grown at 1,600 m, what would it cost per kilogram?", "route": "prediction", "model": "offer", "item": {"shop": "almanegra", "bag_grams": 500, "country": "Costa Rica", "processing_method": "honey", "altitude_m": 1600}}
+{"id": "h-know-01", "question": "In roasting, what makes the beans crack at the first crack?", "route": "knowledge"}
+{"id": "h-know-02", "question": "In which country is the Monte Claro variety an important regional variety?", "route": "knowledge"}
+{"id": "h-know-03", "question": "Which practices can reduce how much water coffee trees need?", "route": "knowledge"}
+{"id": "h-know-04", "question": "To what moisture content does processing bring green coffee before it is exported?", "route": "knowledge"}
+{"id": "h-mixed-01", "question": "Which processing method has the highest average cup score among methods with at least 20 graded lots, and why does the choice between washed, natural and honey processing matter?", "route": "mixed", "tools": ["data", "knowledge"], "sql": "SELECT processing_method FROM clean.coffee_reviews WHERE processing_method IS NOT NULL GROUP BY processing_method HAVING count(*) >= 20 ORDER BY avg(total_cup_points) DESC LIMIT 1"}
+{"id": "h-mixed-02", "question": "What would a 250 g washed coffee from Chiapas cost per kilo at Cucurucho, and what is the median price per kilo of Cucurucho's offers?", "route": "mixed", "tools": ["prediction", "data"], "sql": "SELECT median(price_mxn_per_kg) AS median_mxn_per_kg FROM clean.roaster_offers WHERE shop = 'cucurucho'", "model": "offer", "item": {"shop": "cucurucho", "bag_grams": 250, "state": "Chiapas", "processing_method": "washed"}}
+{"id": "h-mixed-03", "question": "How many of Almanegra's coffees name a floral tasting note, and what does soaking during wet processing do to floral aroma compounds?", "route": "mixed", "tools": ["data", "knowledge"], "sql": "SELECT count(DISTINCT coffee_id) AS coffees FROM clean.roaster_flavors WHERE shop = 'almanegra' AND category = 'floral'"}
+{"id": "h-mixed-04", "question": "What cup score would a washed Guatemalan lot from 1,700 m get, and which growing factors affect a coffee tree's yield and quality?", "route": "mixed", "tools": ["prediction", "knowledge"], "model": "review", "item": {"country": "Guatemala", "processing_method": "washed", "altitude_m": 1700}}

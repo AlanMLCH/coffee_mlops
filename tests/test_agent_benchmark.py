@@ -26,6 +26,7 @@ from mlops_core.agent.benchmark import (
     SQL_CASES_FILE,
     RouteCase,
     SqlCase,
+    case_file,
     load_cases,
     log_benchmark,
     meets_bar,
@@ -271,3 +272,13 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
     assert result.exit_code == 0, result.output
     assert "qwen3.5:4b@2a654d98e6fb: SQL 100% right" in result.output
     assert "meets the bar" in result.output
+
+
+def test_a_named_case_set_lives_beside_the_domains() -> None:
+    home = Path("domains") / "tea"
+
+    assert case_file(home, SQL_CASES_FILE) == home / "evals" / "sql_questions.jsonl"
+    assert (
+        case_file(home, SQL_CASES_FILE, "holdout")
+        == home / "evals" / "holdout" / "sql_questions.jsonl"
+    )

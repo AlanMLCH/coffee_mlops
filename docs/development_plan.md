@@ -1136,6 +1136,43 @@ as such in the explorer. The benchmark: SQL 79% (33 questions), routing 94%, abo
 bar; granite4.2:3b still below it (48%, 69%). Not tuned further: the prompts moved to fit
 these 48 questions would be the questions fitting the prompts.
 
+### A held-out set, written before the fixes
+
+Every change to the agent so far was found on the questions it was then measured on, so
+each improvement was optimistic. Before touching the agent again (29 September), a second
+set was written and committed apart - `evals/holdout/`, 25 cases the fixes are never
+tuned on, run with `mlops agent evaluate --cases holdout` and `mlops agent benchmark
+--cases holdout`, each set compared only with its own previous runs (its own evaluations
+table). Written by the assistant, like the first; every SQL reference was run on the real
+data, and every knowledge excerpt is literal in exactly one (document, part) - two first
+choices were not, the SCA roasting article and the WCR catalogue repeating a sentence on
+another page, and were replaced.
+
+- 9 data questions over tables the first set asks little of (the census, the register's
+  kinds, the shelf prices by borough, the peso, the harvest, the flavour notes, the ICO's
+  days, the cup-score model's stored error); 5 predictions of items given by their
+  attributes; 4 knowledge questions from four documents; 4 mixed.
+- **3 questions with no answer** (`answerable: false`): lots from Iceland, Starbucks in the
+  roasters' catalogues, and the 2022 World Cup. The right answer says there is none; the
+  agent's `Reply.answered` says whether it did, and the evaluation reports how often it
+  abstained right (`abstained_right`) and how often it declined a question that had an
+  answer (`declined_answerable`).
+
+**The baseline, the agent as it was: 52% correct, 84% verified, routing 92%** (the
+benchmark on the same set: SQL 67% - below the 70% bar the first set clears - routing
+92%). Twelve misses: three wrong queries (coffee shops counted without `kind`, a flavour
+share filtered to Mexico unasked, the shop's offers), all three unanswerable questions
+answered anyway (one with an invented 100), two predictions sent to the tables or never
+made, one invented figure on a real prediction (2,262.70), a passage missed, and the
+mixed questions' predictions never called.
+
+**The same answers three times.** With Ollama's prompt cache off (`LLAMA_ARG_CACHE_RAM=0`
+in the server's environment, set that day), the three runs of the baseline came out
+identical - the same 12 misses. Before, the same prompts at temperature 0 and a fixed
+seed moved by about two questions in forty between runs, which is what kept a change of
+two from being told apart from noise. The cache also held up to 8 GB of host RAM and had
+crashed an evaluation; the log now says "prompt cache is disabled".
+
 ### The same tools over MCP
 
 `mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for

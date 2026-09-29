@@ -39,7 +39,14 @@ import mlflow
 import numpy as np
 import polars as pl
 
-from mlops_core.agent.benchmark import COMPARED_ROWS, EVALUATIONS, RouteCase, SqlCase, same_answer
+from mlops_core.agent.benchmark import (
+    COMPARED_ROWS,
+    EVALUATIONS,
+    RouteCase,
+    SqlCase,
+    results_name,
+    same_answer,
+)
 from mlops_core.agent.graph import Reply
 from mlops_core.agent.prompts import ROUTES
 from mlops_core.agent.sql import run_select
@@ -63,6 +70,8 @@ SCHEMA: dict[str, Any] = {
     "passage_ok": pl.Boolean,
     "item_ok": pl.Boolean,
     "item_errors": pl.String,  # the stated fields the request got wrong
+    "answerable": pl.Boolean,
+    "answered": pl.Boolean,  # False when the agent said it found no answer
     "correct": pl.Boolean,
     "text": pl.String,
     "sql": pl.String,
@@ -131,6 +140,13 @@ def check(truth: Truth, reply: Reply, con: duckdb.DuckDBPyConnection) -> dict[st
     item_ok = not item_errors if case.item else None
     tools_ok = set(case.needs) <= ran
     applicable = [ok for ok in (sql_ok, passage_ok, item_ok) if ok is not None]
+    # An unanswerable question is answered right by saying there is no answer; an
+    # answerable one is not answered by saying so, whatever its checks found.
+    correct = (
+        not reply.answered
+        if not case.answerable
+        else reply.answered and tools_ok and reply.verified and all(applicable)
+    )
     return {
         "case_id": case.id,
         "route_expected": case.route,
@@ -144,7 +160,9 @@ def check(truth: Truth, reply: Reply, con: duckdb.DuckDBPyConnection) -> dict[st
         "passage_ok": passage_ok,
         "item_ok": item_ok,
         "item_errors": ", ".join(item_errors),
-        "correct": tools_ok and reply.verified and all(applicable),
+        "answerable": case.answerable,
+        "answered": reply.answered,
+        "correct": correct,
         "text": reply.text,
         "sql": reply.sql.sql if reply.sql else None,
         "request": json.dumps(reply.prediction.request) if reply.prediction else None,
@@ -168,6 +186,12 @@ def summarise(answers: pl.DataFrame) -> dict[str, float]:
         mine = answers.filter(pl.col("route_expected") == name)
         if mine.height:
             summary[f"correct_{name}"] = _share(mine["correct"])
+    unanswerable = answers.filter(~pl.col("answerable"))
+    if unanswerable.height:  # of the questions with no answer, how many it said so
+        summary["abstained_right"] = _share(unanswerable["correct"])
+        answerable = answers.filter(pl.col("answerable"))
+        if answerable.height:  # and how often it declined one that had an answer
+            summary["declined_answerable"] = _share(~answerable["answered"])
     summary["seconds_median"] = median(answers["seconds"].to_list())
     summary["seconds_max"] = float(answers["seconds"].max())  # type: ignore[arg-type]
     return summary
@@ -187,13 +211,13 @@ def versus(previous: pl.DataFrame, current: pl.DataFrame) -> Comparison | None:
 
 
 def record(
-    answers: pl.DataFrame, data_dir: Path, at: datetime | None = None
+    answers: pl.DataFrame, data_dir: Path, at: datetime | None = None, cases: str | None = None
 ) -> tuple[Path, pl.DataFrame | None]:
     """Write this run's answers to the evaluations layer, and return the previous run's,
-    read before the write, to compare with."""
-    table_dir = data_dir / EVALUATIONS / TABLE
+    read before the write, to compare with. A named case set keeps a table of its own."""
+    table_dir = data_dir / EVALUATIONS / results_name(TABLE, cases)
     before = latest_partition(table_dir)
-    previous = pl.read_parquet(before / f"{TABLE}.parquet") if before else None
+    previous = pl.read_parquet(before / f"{table_dir.name}.parquet") if before else None
     return write_table(answers, table_dir, {}, at), previous
 
 

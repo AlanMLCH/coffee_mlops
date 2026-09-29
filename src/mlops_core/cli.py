@@ -32,6 +32,7 @@ from mlops_core.data.extract import extract_all, http_client
 from mlops_core.data.validate import validate_raw
 from mlops_core.provenance import REPO_ROOT, code_version
 from mlops_core.rag.questions import (
+    QUESTIONS_FILE,
     Question,
     contains,
     load_questions,
@@ -76,6 +77,12 @@ Domain = Annotated[
 ModelName = Annotated[
     str | None,
     typer.Option("--model", "-m", help="One of the domain's models; defaults to all of them"),
+]
+
+
+Cases = Annotated[
+    str | None,
+    typer.Option(help="A named case set beside the domain's (evals/<name>/), e.g. holdout"),
 ]
 
 
@@ -493,6 +500,7 @@ def benchmark(
         list[str] | None,
         typer.Option(help="An Ollama model to measure; repeat it. Defaults to the candidates"),
     ] = None,
+    cases: Cases = None,
 ) -> None:
     """Measure how well each local model writes the SQL and routes the questions.
 
@@ -508,6 +516,7 @@ def benchmark(
             SQL_CASES_FILE,
             RouteCase,
             SqlCase,
+            case_file,
             load_cases,
             log_benchmark,
             meets_bar,
@@ -525,7 +534,7 @@ def benchmark(
     dictionary = dictionary_path(home).read_text(encoding="utf-8")
     schema = schema_context(dictionary, views(con))
     context = routing_context(config, dictionary, views(con))
-    case_files = [home / SQL_CASES_FILE, home / ROUTE_CASES_FILE]
+    case_files = [case_file(home, SQL_CASES_FILE, cases), case_file(home, ROUTE_CASES_FILE, cases)]
     sql_cases = load_cases(case_files[0], SqlCase)
     route_cases = load_cases(case_files[1], RouteCase)
     settings = Settings()
@@ -535,7 +544,14 @@ def benchmark(
             identity = _identified(model)
             sql, routes = run_benchmark(model, con, schema, context, sql_cases, route_cases)
         summary, run_id = log_benchmark(
-            config, identity, sql, routes, case_files, data_dir, settings.mlflow_tracking_uri
+            config,
+            identity,
+            sql,
+            routes,
+            case_files,
+            data_dir,
+            settings.mlflow_tracking_uri,
+            cases=cases,
         )
         verdict = "meets the bar" if meets_bar(summary) else "misses the bar"
         typer.echo(
@@ -577,7 +593,7 @@ def ask(
 
 
 @agent_app.command("evaluate")
-def evaluate_agent(domain: Domain = None) -> None:
+def evaluate_agent(domain: Domain = None, cases: Cases = None) -> None:
     """Ask the agent every routing question and check each answer end to end.
 
     Checks the tools that ran, verification, the query's answer against the SQL set's
@@ -596,6 +612,7 @@ def evaluate_agent(domain: Domain = None) -> None:
             RouteCase,
             SqlCase,
             case_digest,
+            case_file,
             load_cases,
         )
         from mlops_core.agent.evaluate import (
@@ -610,7 +627,9 @@ def evaluate_agent(domain: Domain = None) -> None:
     adapter = _adapter(domain)
     config = adapter.config
     home = domain_dir(config.name)
-    case_files = [home / ROUTE_CASES_FILE, home / SQL_CASES_FILE, questions_path(home)]
+    case_files = [
+        case_file(home, file, cases) for file in (ROUTE_CASES_FILE, SQL_CASES_FILE, QUESTIONS_FILE)
+    ]
     truths = known_answers(
         load_cases(case_files[0], RouteCase),
         load_cases(case_files[1], SqlCase),
@@ -621,7 +640,7 @@ def evaluate_agent(domain: Domain = None) -> None:
     mlflow.set_experiment(f"{config.name}-agent-eval")
     with agent_session(adapter, settings) as (agent, generator), mlflow.start_run() as run:
         answers = run_evaluation(agent.ask, truths, agent.con)
-        table, previous = record(answers, _data_dir(config))
+        table, previous = record(answers, _data_dir(config), cases=cases)
         comparison = versus(previous, answers) if previous is not None else None
         version_ = code_version()
         mlflow.set_tags(version_.as_tags() if version_ else {})
@@ -637,6 +656,7 @@ def evaluate_agent(domain: Domain = None) -> None:
                 },
                 "cases": answers.height,
                 "cases_written_by": "assistant",
+                "case_set": cases or "default",
                 "case_files_sha256": case_digest(case_files),
             },
             table,
