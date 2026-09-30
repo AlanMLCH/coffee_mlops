@@ -1321,8 +1321,14 @@ a project's `.mcp.json`):
 | `query_tables(sql)` | One read-only SELECT over the layers - the agent's locked-down session, so the guardrails hold whatever model is calling |
 | `predict_review(item)`, `predict_offer(item)` | One tool per model the domain declares; the argument is the model's own request body, and its JSON schema, field descriptions included, is what the client sees and the server validates |
 | `search_documents(question, k)` | Dense search over the corpus, each passage with its publisher, title and page or section |
-| `draw(sql, chart)` | The result of one read-only SELECT as a chart, a PNG: bars, a line, a scatter, points on a map, or a map of the boroughs - chosen by the client's model, or by the result's shape |
+| `draw(sql, chart)` | The result of one read-only SELECT as a chart, a PNG: bars, a line, a scatter, points on a map, or a map of the boroughs - chosen by the client's model, or by the result's shape; a small result's Vega-Lite spec comes too |
+| `explore_segment(dataset, measure, by, color, filters)` | The explorer's segment tab without SQL: every name from the YAML's datasets, the same query, a summary sentence and the explorer's address for the same view |
+| `map_layer(name)` | One of the explorer's map layers as a PNG map, with what it shows and its address in the explorer |
 | `dictionary://tables` | The data dictionary: what the client's model writes its SQL against |
+| `findings://all`, `studies://index`, `studies://{name}` | What the data already says, each with its query; every study the analysis wrote, as CSV |
+| `models://{name}` | A model's card: what it predicts from what, its split, the monitor's last verdict, the partitions its studies came from |
+| `status://freshness` | When each table was last built, and from which raw partitions |
+| a prompt per finding | Reproduce the finding, draw it, say what it shows and what it does not |
 
 - **A wrapper, not a second agent.** Each tool calls the function the agent calls; no
   logic is new. The client brings its own model, so the tools take what that model can
@@ -1346,6 +1352,30 @@ a project's `.mcp.json`):
   itself without a browser (`vl-convert`), so the explorer below shows the same chart
   live. The boroughs' outlines come out of the area table's WKB, read in plain Python:
   the explorer needs no spatial extension to draw them.
+- **The agent's checks, for every client** (29 September). The agent's own SQL gets a
+  second look - a guarded table queried without the column it must filter on, a query
+  that found nothing - and until now a client over MCP got the rows alone. `query_tables`
+  now answers with `notes`: the domain's hint ("clean.coffee_shops holds juice stands...
+  filters kind = 'coffee'"), or which filtered values the data does not have and which it
+  does. Notes, not refusals: the client's model decides. Results come back structured as
+  well as text (`structured_output`), so a client reading JSON gets typed rows.
+- **The explorer's curated views, without SQL.** `explore_segment` and `map_layer` take
+  only names from the YAML (datasets, measures, dimensions, filters, layers), run what the
+  explorer runs, and return the explorer's address for the same view - `?view=segments&
+  dataset=...&by=...` or `?view=map&layer=...`, and `?q=...` asks the agent. The page reads
+  the link once per session and takes only names its lists have; a link can pick a view,
+  never write a query. Controlling a running page from a client was decided against on 28
+  September; a link a person opens is not that.
+- **What a client could not see before**: the findings (and a prompt per finding to
+  reproduce it), every study, each model's card with the monitor's verdict, and how fresh
+  each table is - read from the same partitions and manifests the explorer reads.
+- **`mlops mcp --http`** serves over streamable HTTP on 127.0.0.1 (port 8765), for a
+  client that connects to a running server; stdio stays the default. Bound to this
+  machine only: nothing in the server asks who is calling.
+- **Not done: asking the person for a prediction's missing fields** (MCP's elicitation).
+  The item's schema already says what each field is, and the client's model asks its
+  person in the conversation; a server-side question depends on the client supporting it,
+  and would stop a call that can answer with what it was given.
 
 ### The explorer: a map, questions and charts
 

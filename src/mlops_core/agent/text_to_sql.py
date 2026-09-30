@@ -90,7 +90,7 @@ def write_sql(
     if answer.result is None:
         return answer
     for guard in guards:
-        if _ignores(answer.sql, guard):
+        if ignores(answer.sql, guard):
             hint = GUARD.format(sql=answer.sql, hint=guard.hint)
             answer = _again(generator, con, prompt + hint, names, max_rows, answer)
             break
@@ -208,8 +208,9 @@ def _again(
         return kept
 
 
-def _ignores(sql: str, guard: SqlGuard) -> bool:
-    """The query reads the guarded table and never names the column it must filter on."""
+def ignores(sql: str, guard: SqlGuard) -> bool:
+    """The query reads the guarded table and never names the column it must filter on.
+    Public: the MCP server tells its clients the same thing."""
     text = sql.lower()
     reads = re.search(rf"\b{re.escape(guard.table.lower())}\b", text) is not None
     return reads and re.search(rf"\b{re.escape(guard.requires.lower())}\b", text) is None

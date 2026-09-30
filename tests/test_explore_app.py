@@ -202,6 +202,16 @@ def data_dir(coffee_adapter: CoffeeAdapter, raw_dir: Path) -> Path:
 def explorer(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch, agent: StoodIn | None = None, view: str = MAP
 ) -> AppTest:
+    page = prepared(data_dir, monkeypatch, agent)
+    page.session_state["view"] = view
+    page.run()
+    return page
+
+
+def prepared(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, agent: StoodIn | None = None
+) -> AppTest:
+    """The page, not yet run, over `data_dir` and with `agent` standing in."""
     stood_in = agent or StoodIn()
 
     @contextmanager
@@ -216,10 +226,7 @@ def explorer(
     monkeypatch.setenv("MLOPS_DATA_DIR", str(data_dir))
     monkeypatch.setenv("MLOPS_DOMAIN", "coffee")
     monkeypatch.setenv("MLOPS_MLFLOW_TRACKING_URI", f"sqlite:///{(data_dir / 'm.db').as_posix()}")
-    page = AppTest.from_file(str(APP), default_timeout=120)
-    page.session_state["view"] = view
-    page.run()
-    return page
+    return AppTest.from_file(str(APP), default_timeout=120)
 
 
 def test_the_page_opens_on_the_map_under_its_headline_numbers(
@@ -415,6 +422,48 @@ def test_an_empty_value_is_named_and_can_be_picked(
 
     assert not page.exception and page.get("vega_lite_chart")
     assert "outside Mexico City" in page.dataframe[-1].value["borough"].to_list()
+
+
+def linked(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, agent: StoodIn, **params: str
+) -> AppTest:
+    """The page as a link from the MCP server opens it."""
+    page = prepared(data_dir, monkeypatch, agent)
+    for key, value in params.items():
+        page.query_params[key] = value
+    page.run()
+    return page
+
+
+def test_a_link_opens_the_page_on_the_slice_it_names(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    name = "Shelf prices of packaged coffee (PROFECO)"
+
+    page = linked(data_dir, monkeypatch, StoodIn(), view="segments", dataset=name,
+                  measure="prices", by="borough", color="nonsense")  # fmt: skip
+
+    assert not page.exception and page.session_state["view"] == SEGMENTS
+    assert page.selectbox(key="dataset").value == name
+    assert page.selectbox(key=f"measure:{name}").value == "prices"
+    assert page.selectbox(key=f"by:{name}").value == "borough"
+    assert page.selectbox(key=f"color:{name}").value == app_module.NONE  # not a dimension
+
+
+def test_a_link_can_ask_a_question_or_open_a_map_layer(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent = StoodIn()
+
+    asked = linked(data_dir, monkeypatch, agent, q="Where are the coffee shops?")
+    mapped = linked(data_dir, monkeypatch, StoodIn(), view="map",
+                    layer="Median shelf price of ground coffee")  # fmt: skip
+    places = linked(data_dir, monkeypatch, StoodIn(), view="map", layer="Shelves PROFECO priced")
+
+    assert agent.asked == ["Where are the coffee shops?"]
+    assert asked.session_state["view"] == ASK
+    assert mapped.selectbox(key="map_area").value == "Median shelf price of ground coffee"
+    assert places.multiselect(key="map_places").value == ["Shelves PROFECO priced"]
 
 
 def test_the_findings_and_the_about_page_draw_from_the_tables(

@@ -749,6 +749,8 @@ def test_the_mcp_server_offers_the_agents_tools_all_read_only(
         "predict_green_price",
         "search_documents",
         "draw",
+        "explore_segment",
+        "map_layer",
     }
     assert all(t.annotations is not None and t.annotations.read_only_hint for t in tools.values())
     # A prediction tool's input is the model's own request body, descriptions included.
@@ -769,7 +771,9 @@ def test_mcp_sql_keeps_its_guardrails_whoever_calls(session: duckdb.DuckDBPyConn
         "columns": ["state"],
         "rows": [["Chiapas"], ["Puebla"]],
         "truncated": False,
+        "notes": [],
     }
+    assert result.structured_content == json.loads(result.content[0].text)
     with pytest.raises(ToolError, match="Only SELECT may run; this is COPY"):
         asyncio.run(server.call_tool("query_tables", {"sql": "COPY (SELECT 1) TO 'x.csv'"}))
 
@@ -814,11 +818,14 @@ def test_mcp_draws_a_result_as_its_shape_asks(session: duckdb.DuckDBPyConnection
 
     image, summary = drawn.content
     assert image.type == "image" and image.mime_type == "image/png"
-    assert json.loads(summary.text) == {
+    told = json.loads(summary.text)
+    assert {k: told[k] for k in ("chart", "rows", "truncated")} == {
         "chart": {"kind": "bar", "x": "state", "y": "production_t"},
         "rows": 2,
         "truncated": False,
     }
+    # Two rows: the spec comes too, for a client that draws its own charts.
+    assert told["vega_lite"]["mark"] == {"type": "bar"}
 
 
 def test_mcp_draws_the_chart_the_client_asks_for_if_the_result_can_carry_it(
@@ -862,24 +869,25 @@ def test_the_mcp_command_serves_on_stdio(
     stood_in(lambda shape: {})
     served: list[tuple[str, list[str]]] = []
 
-    def run(self: MCPServer, transport: str) -> None:
+    def run(self: MCPServer, transport: str, **options: Any) -> None:
         served.append((transport, [t.name for t in asyncio.run(self.list_tools())]))
+        assert options in ({}, {"host": "127.0.0.1", "port": 9000})  # never beyond this machine
 
     monkeypatch.setattr(MCPServer, "run", run)
 
     result = CliRunner().invoke(cli.app, ["mcp"])
+    over_http = CliRunner().invoke(cli.app, ["mcp", "--http", "--port", "9000"])
 
     assert result.exit_code == 0, result.output
-    assert served == [
-        (
-            "stdio",
-            [
-                "query_tables",
-                "draw",
-                "predict_review",
-                "predict_offer",
-                "predict_green_price",
-                "search_documents",
-            ],
-        )
+    assert over_http.exit_code == 0, over_http.output
+    tools = [
+        "query_tables",
+        "draw",
+        "predict_review",
+        "predict_offer",
+        "predict_green_price",
+        "search_documents",
+        "explore_segment",
+        "map_layer",
     ]
+    assert served == [("stdio", tools), ("streamable-http", tools)]

@@ -72,6 +72,8 @@ TABS = [
     ":material/info: About",
 ]
 MAP, ASK, SEGMENTS, FINDINGS, MODELS, ABOUT = TABS
+# A link's `view=`: what the MCP server's results point at (`mcp_server._link`).
+VIEWS = dict(zip(["map", "ask", "segments", "findings", "models", "about"], TABS, strict=True))
 DOTS, DENSITY = "dots", "density"
 ROUTES = {
     "data": "answered from the tables",
@@ -206,14 +208,13 @@ def map_tab() -> None:
     place_layers = [layer for layer in explore.layers if layer.kind == "points"]
     picks = st.columns([3, 3, 2])
     area_names = [NONE, *(layer.name for layer in area_layers)]
-    picked_area = picks[0].selectbox(
-        "Colour the areas by", area_names, index=1 if area_layers else 0, key="map_area"
-    )
+    # The first choice goes in the session, not in the box, so a link can make another
+    # (Streamlit warns when a box has a default and a value set for it both).
+    st.session_state.setdefault("map_area", area_names[1] if area_layers else NONE)
+    st.session_state.setdefault("map_places", [layer.name for layer in place_layers[:1]])
+    picked_area = picks[0].selectbox("Colour the areas by", area_names, key="map_area")
     picked_places = picks[1].multiselect(
-        "Places on the map",
-        [layer.name for layer in place_layers],
-        default=[layer.name for layer in place_layers[:1]],
-        key="map_places",
+        "Places on the map", [layer.name for layer in place_layers], key="map_places"
     )
     style = picks[2].segmented_control(
         "Places as", [DOTS, DENSITY], default=DENSITY, key="map_style", required=True
@@ -733,8 +734,40 @@ def about_tab() -> None:
     )
 
 
+def opened_from_link() -> None:
+    """A link opens the page on what it names - a tab, a dataset and its choices, a map
+    layer, a question to ask - once per session, before any box is drawn. Every name is
+    checked against the YAML's lists: a link can pick only what the page offers."""
+    if st.session_state.get("linked"):
+        return
+    st.session_state["linked"] = True
+    asked = st.query_params
+    view = VIEWS.get(asked.get("view", ""))
+    if view is not None:
+        st.session_state["view"] = view
+    datasets = {dataset.name: dataset for dataset in explore.datasets}
+    dataset = datasets.get(asked.get("dataset", ""))
+    if dataset is not None:
+        st.session_state["dataset"] = dataset.name
+        choices = {"measure": list(dataset.measures), "by": dataset.dimensions,
+                   "color": dataset.dimensions}  # fmt: skip
+        for role, allowed in choices.items():
+            if asked.get(role) in allowed:
+                st.session_state[f"{role}:{dataset.name}"] = asked[role]
+    layer = next((lay for lay in explore.layers if lay.name == asked.get("layer")), None)
+    if layer is not None and layer.kind == "areas":
+        st.session_state["map_area"] = layer.name
+    elif layer is not None:
+        st.session_state["map_places"] = [layer.name]
+    question = asked.get("q", "").strip()
+    if question:
+        st.session_state["pending"] = question
+        st.session_state["view"] = ASK
+
+
 # --- The page -----------------------------------------------------------------------------
 
+opened_from_link()
 header()
 views = st.tabs(TABS, key="view", on_change="rerun")
 for tab, render in zip(

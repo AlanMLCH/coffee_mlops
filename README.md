@@ -38,7 +38,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   (Gemini, Groq, Mistral, OpenRouter) can answer first, each set aside when its quota runs
   out; the local model is always the last, so the agent never runs dry.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
-  Desktop, Claude Code or an IDE, and an explorer app - the price ladder at a glance, a
+  Desktop, Claude Code or an IDE (the agent's tools with its own checks, the explorer's
+  slices and maps without SQL, the findings, studies and model cards as resources, each
+  result linked to the explorer), and an explorer app - the price ladder at a glance, a
   deck.gl map of the city, questions to the agent with a chart of every answer, the
   tables sliced by hand, the findings, and each model's evidence.
 

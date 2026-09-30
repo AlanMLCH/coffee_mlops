@@ -841,13 +841,25 @@ def monitor(
 
 
 @app.command("mcp")
-def mcp_server(domain: Domain = None) -> None:
+def mcp_server(
+    domain: Domain = None,
+    over_http: Annotated[
+        bool,
+        typer.Option(
+            "--http",
+            help="Serve over streamable HTTP on 127.0.0.1 instead of stdio, for a client that "
+            "connects to a running server rather than starting one",
+        ),
+    ] = False,
+    port: Annotated[int, typer.Option(help="The HTTP port, with --http")] = 8765,
+) -> None:
     """Serve the agent's tools over MCP, on stdio: for Claude Desktop, Claude Code or an IDE.
 
     The same tools the agent uses - locked-down SQL, one prediction per model, document
-    search - with the data dictionary as a resource. Needs Ollama, Qdrant with a built
-    index, and the prediction API; stdout is the protocol, so everything else goes to
-    stderr.
+    search - plus the explorer's segments and map layers, a chart of any query, and the
+    data dictionary, findings, studies, model cards and tables' freshness as resources.
+    Needs Ollama, Qdrant with a built index, and the prediction API; on stdio, stdout is
+    the protocol, so everything else goes to stderr.
     """
     with _needs_extra("mcp"):
         from mlops_core.agent.dictionary import dictionary_path, schema_context
@@ -881,8 +893,15 @@ def mcp_server(domain: Domain = None) -> None:
             api,
             lambda passage: cite(passage, titles),
             areas,
+            _data_dir(config),
+            settings.explore_url,
         )
-        server.run("stdio")
+        if over_http:
+            # Bound to this machine only: the tools read the data, and nothing here asks
+            # who is calling.
+            server.run("streamable-http", host="127.0.0.1", port=port)
+        else:
+            server.run("stdio")
 
 
 @contextmanager

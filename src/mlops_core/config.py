@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     # Keep every reply by its prompt, so a prompt asked before costs nothing
     # (`rag.providers.CachedGenerator`). Evaluations never use it: they measure the model.
     reply_cache: bool = True
+    # Where `make explore` serves the explorer: the MCP server's results link to it.
+    explore_url: str = "http://localhost:8502"
 
 
 def unread_settings(names: Iterable[str], domain: str) -> dict[str, str]:
