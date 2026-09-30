@@ -33,9 +33,21 @@ DOCS = Path(__file__).resolve().parents[1] / "docs"
 # Beside the domain's code: the agent reads it as the schema its SQL is written against.
 DATA_DICTIONARY = (domain_dir("coffee") / "data_dictionary.md").read_text(encoding="utf-8")
 MODEL_CARD = (DOCS / "model-card.md").read_text(encoding="utf-8")
-# The detailed record, stage by stage: it holds the full architecture diagram. The README
-# is the summary, with a diagram of the main pieces only.
-DEVELOPMENT_PLAN = (DOCS / "development_plan.md").read_text(encoding="utf-8")
+# The detailed record, stage by stage, with the full architecture diagram: private, kept in
+# a working copy and out of the repository. The README is the public summary, with a
+# diagram of the main pieces only. The plan's checks run wherever it exists.
+DEVELOPMENT_PLAN = DOCS / "development_plan.md"
+# What anyone who clones the repository reads.
+PUBLIC_DOCUMENTS = [
+    "README.md",
+    *(f"docs/{path.name}" for path in sorted(DOCS.glob("*.md")) if path != DEVELOPMENT_PLAN),
+]
+
+
+def private_plan() -> str:
+    if not DEVELOPMENT_PLAN.exists():
+        pytest.skip("the development plan is private: it lives in a working copy, not the repo")
+    return DEVELOPMENT_PLAN.read_text(encoding="utf-8")
 
 
 def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
@@ -118,7 +130,7 @@ def test_the_model_card_states_the_leakage_rule(coffee_config: DomainConfig) -> 
 
 
 def architecture_diagram() -> str:
-    return "\n".join(re.findall(r"```mermaid\n(.*?)```", DEVELOPMENT_PLAN, flags=re.DOTALL))
+    return "\n".join(re.findall(r"```mermaid\n(.*?)```", private_plan(), flags=re.DOTALL))
 
 
 @pytest.mark.parametrize("domain", available_domains())
@@ -146,13 +158,22 @@ def test_the_architecture_diagram_shows_every_source_and_table(domain: str) -> N
     assert missing == []
 
 
-@pytest.mark.parametrize("document", ["README.md", "docs/development_plan.md"])
+@pytest.mark.parametrize("document", ["README.md", "docs/sources.md", "docs/development_plan.md"])
 def test_every_relative_link_points_at_a_file(document: str) -> None:
     """A figure or a page moved without its links is a broken page on GitHub, and nothing
     else would notice."""
     path = DOCS.parent / document
-    links = re.findall(r"\]\(([^)#]+)(?:#[^)]*)?\)", path.read_text(encoding="utf-8"))
+    text = private_plan() if path == DEVELOPMENT_PLAN else path.read_text(encoding="utf-8")
+    links = re.findall(r"\]\(([^)#]+)(?:#[^)]*)?\)", text)
     local = [link for link in links if not link.startswith(("http://", "https://"))]
 
     assert local  # the documents link to each other and to their figures
     assert [link for link in local if not (path.parent / link).exists()] == []
+
+
+@pytest.mark.parametrize("document", PUBLIC_DOCUMENTS)
+def test_no_public_document_points_at_the_private_plan(document: str) -> None:
+    """The plan stays out of the repository: a link to it works in the working copy that
+    has it and is broken for everyone who clones - which the link check above, run here,
+    cannot see."""
+    assert "development_plan.md" not in (DOCS.parent / document).read_text(encoding="utf-8")

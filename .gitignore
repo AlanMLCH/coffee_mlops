@@ -12,6 +12,9 @@ secrets/
 CLAUDE.md
 .claude/
 
+# --- The detailed development record: private, kept in the working copy only --
+/docs/development_plan.md
+
 # --- Data and artifacts: rebuilt by running the pipeline ---------------------
 # Anchored with a leading slash: a bare `data/` also matches src/coffee_mlops/data/,
 # which silently kept source files out of the repository until CI failed on them.

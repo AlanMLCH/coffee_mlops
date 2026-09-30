@@ -5,7 +5,7 @@ reached, what the file really looks like and the traps found in it. Each fact wa
 checked with a real request on the date given. An address, a code, a column or a
 parameter not written here (or in the YAML's comments) was not verified, and is checked
 before it is used. What each source *says* - the findings, the tables, the figures - is in
-the [development plan](development_plan.md); the columns each clean table ends up with are
+the [README](../README.md) and the explorer; the columns each clean table ends up with are
 in the [data dictionary](../src/domains/coffee/data_dictionary.md).
 
 ## Rules every source follows

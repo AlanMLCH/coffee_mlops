@@ -13,9 +13,6 @@ or even name, a domain.
 
 Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring costs.
 
-**The full story, stage by stage - every source, decision, result and mistake - is in
-[docs/development_plan.md](docs/development_plan.md).**
-
 ## What it does
 
 - **Reads 15 sources of four kinds** - static files (CQI cupping scores, USDA's world
@@ -53,7 +50,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
 | The agent, 48 questions end to end | **79%** correct, 98% verified | 73% before the fixes of 29 September |
-| The agent, 25 held-out questions written before those fixes | **88%** correct, 100% verified | 52% before them; +12 measured blind, the rest optimistic (see the plan) |
+| The agent, 25 held-out questions written before those fixes | **88%** correct, 100% verified | 52% before them; +12 measured blind, the rest optimistic |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
@@ -130,8 +127,6 @@ flowchart LR
 ```
 
 Parquet is the source of truth for every layer and DuckDB the query engine over it.
-The complete diagram, every source and table in it, is in the
-[development plan](docs/development_plan.md#architecture).
 
 ## Quickstart
 
@@ -208,7 +203,6 @@ current month; run it before a month ends). `make help` lists every target.
 
 ## Documentation
 
-- [Development plan](docs/development_plan.md): the detailed record, stage by stage.
 - [Data sources](docs/sources.md): what was verified about each source - address,
   access, format and the traps in it - and the candidates not (yet) read.
 - [Data dictionary](src/domains/coffee/data_dictionary.md): every column of every table,
