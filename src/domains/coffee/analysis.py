@@ -119,6 +119,9 @@ def studies(
         "consumer_prices_by_borough": consumer_prices_by_borough(prices),
         "consumer_prices_by_state": consumer_prices_by_state(prices, production, states),
         "green_coffee_in_pesos": green,
+        "farmgate_prices": farmgate_prices(
+            clean["producer_prices"], context, clean["price_indicators"]
+        ),
         "price_ladder": price_ladder(
             prices, clean["roaster_offers"], production, green, shelves.city
         ),
@@ -1033,6 +1036,54 @@ def green_coffee_in_pesos(indicators: pl.DataFrame, rates: pl.DataFrame) -> pl.D
         )
         .sort("indicator", "period")
     )
+
+
+def farmgate_prices(
+    producer: pl.DataFrame, context: pl.DataFrame, indicators: pl.DataFrame
+) -> pl.DataFrame:
+    """What farmers are paid (FAOSTAT, dollars per tonne) against what their coffee is
+    worth at the port that year (the World Bank's yearly mean of the ICO group prices),
+    country by country: the export benchmark weighted by the country's own mix of arabica
+    and robusta (PSD, the same market year), since a robusta grower's benchmark is not an
+    arabica one. Countries priced by the cherry are left out: a tonne of cherry is not a
+    tonne of green coffee, and no conversion is assumed. A share far above one is a
+    niche (Hawaii) or a different product, and says so by itself."""
+    per_t = 1000 / CENTS_PER_LB_PER_USD_PER_KG  # cents per pound -> dollars per tonne
+    yearly = (
+        indicators.filter(pl.col("frequency") == "monthly")
+        .group_by(pl.col("period").dt.year().cast(pl.Int64).alias("year"))
+        .agg(
+            (pl.col("usd_cents_per_lb").filter(pl.col("indicator") == group).mean() * per_t).alias(
+                group
+            )
+            for group in ("other_milds", "robustas")
+        )
+    )
+    grown = pl.col("arabica_production") + pl.col("robusta_production")
+    species = context.select(
+        "country",
+        pl.col("market_year").alias("year"),
+        "production",
+        # No mix to weigh by where PSD reports no harvest (Sri Lanka).
+        pl.when(grown > 0).then(pl.col("arabica_production") / grown).alias("arabica_share"),
+    ).drop_nulls("arabica_share")
+    return (
+        producer.filter(~pl.col("cherry")).drop_nulls("usd_per_t")
+        .join(species, on=["country", "year"])
+        .join(yearly, on="year")
+        .with_columns(
+            (
+                pl.col("arabica_share") * pl.col("other_milds")
+                + (1 - pl.col("arabica_share")) * pl.col("robustas")
+            ).alias("benchmark_usd_per_t")
+        )
+        .select(
+            "country", "year", "usd_per_t", "flag", "production", "arabica_share",
+            "benchmark_usd_per_t",
+            (pl.col("usd_per_t") / pl.col("benchmark_usd_per_t")).alias("share_of_benchmark"),
+        )
+        .sort("country", "year")
+    )  # fmt: skip
 
 
 def price_ladder(

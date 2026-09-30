@@ -30,6 +30,7 @@ def test_every_built_table_is_queryable_by_layer(
         "clean.market_context",
         "clean.mexico_production",
         "clean.price_indicators",
+        "clean.producer_prices",
         "clean.roaster_coffees",
         "clean.roaster_flavors",
         "clean.roaster_offer_history",

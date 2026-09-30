@@ -18,8 +18,10 @@ from tests.fakes import ConstantModel
 AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
 # The recorded PSD excerpt stops at market year 2023 and SIAP's file is 2025, so there
 # is legitimately nothing to set side by side: the study must come out empty, not fail.
-# Turnover needs two reads of a register; the fixtures read each once.
-EMPTY_ON_THE_FIXTURES = {"production_crosscheck", "shop_turnover"}
+# Turnover needs two reads of a register; the fixtures read each once. The farmgate
+# needs a year in FAOSTAT, PSD and the World Bank's months at once, and the recorded
+# workbook holds only 2026 (the study is tested on its own in test_producer_prices).
+EMPTY_ON_THE_FIXTURES = {"production_crosscheck", "shop_turnover", "farmgate_prices"}
 # The core's studies are computed per model and named after it; the domain's are not.
 ALWAYS_WRITTEN = {
     "review_target_distribution",

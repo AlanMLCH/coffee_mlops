@@ -268,6 +268,24 @@ WHERE p.frequency = 'monthly'
 GROUP BY p.period, p.indicator, p.usd_cents_per_lb
 ```
 
+## `clean.producer_prices` — what one country's farmers were paid for coffee, one year (FAOSTAT)
+
+FAO's producer prices of green coffee, the year's value, 1991-2025; about 20 countries
+a year lately, not every grower. Countries use PSD's names (`Vietnam`, `Cote d'Ivoire`).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `country`, `year` | String, Int | The country and calendar year |
+| `usd_per_t` | Float? | US dollars per tonne |
+| `lcu_per_t` | Float? | Local currency per tonne |
+| `price_index` | Float? | FAO's index, 2014-2016 = 100 |
+| `flag` | String? | `A` official, `E` estimated, `X` from another organisation |
+| `cherry` | Bool | The tonne is of **cherry**, not green coffee (Mexico: its figure is SIAP's rural price) |
+
+A farmer's share of the port price is in `analysis.farmgate_prices`
+(`share_of_benchmark`: the price over the World Bank's yearly price for the country's
+mix of arabica and robusta); countries with `cherry` are not in it.
+
 ## `clean.roaster_offer_history` — one offer as one read of the catalogues found it
 
 Every read of the shops is kept (stage 4): the tables above are the catalogue as it is

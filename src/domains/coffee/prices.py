@@ -15,6 +15,10 @@ against the mean of the ICO's days - the way the PSD file and the FAS API are.
 The peso-dollar rate is what puts those dollars in the shelves' currency: the Federal
 Reserve's daily noon buying rate in New York, through FRED. A month's rate is the mean of
 its days, which is how FRED computes its own monthly series (checked to four decimals).
+
+At the other end of the chain, what farmers are paid: FAOSTAT's producer prices, a year
+per country. Not every country prices the same thing - Mexico's figure is its producers'
+price of the cherry, not of green coffee, and every build checks that it still is.
 """
 
 import logging
@@ -22,6 +26,7 @@ from datetime import datetime
 
 import polars as pl
 
+from domains.coffee.config import ProducerPricesConfig
 from domains.coffee.schemas import ICO_INDICATORS as INDICATORS
 
 logger = logging.getLogger(__name__)
@@ -107,3 +112,89 @@ def clean_exchange_rates(daily: pl.DataFrame) -> pl.DataFrame:
         rates.height, rates["date"].min(), rates["date"].max(), daily.height - rates.height,
     )  # fmt: skip
     return rates
+
+
+# FAOSTAT's elements of a producer price that the table keeps, by code. The "standard
+# local currency" (5531) is the local one before a redenomination: the dollar column
+# already makes years comparable.
+PRODUCER_ELEMENTS = {"5532": "usd_per_t", "5530": "lcu_per_t", "5539": "price_index"}
+ANNUAL = "Annual value"  # FAOSTAT's period for a whole year; the others are months
+CHERRY_TOLERANCE = 0.01  # a producer price is the rural price when this close to it
+
+
+def clean_producer_prices(fao: pl.DataFrame, config: ProducerPricesConfig) -> pl.DataFrame:
+    """A row per country and year of FAOSTAT's producer prices of coffee.
+
+    Only the year's value: monthly prices cover 21 countries in part. A price of zero
+    (one, Brazil's estimated index) is a price nobody reported, and a year left with no
+    price at all is left out. The flag is the dollar price's, or the local currency's
+    where there is no dollar price.
+    """
+    names = set(fao["Item"])
+    if names - {config.item}:
+        # Same code, another name: the numbers would silently mean something else.
+        raise ValueError(f"FAOSTAT item {config.item_code} is {sorted(names)}, not {config.item}")
+    annual = fao.filter(
+        (pl.col("Months") == ANNUAL) & pl.col("Element Code").is_in(list(PRODUCER_ELEMENTS))
+    ).with_columns(
+        pl.col("Area").replace(config.country_aliases).alias("country"),
+        pl.col("Element Code").replace_strict(PRODUCER_ELEMENTS).alias("element"),
+        pl.when(pl.col("Value") > 0).then("Value").alias("Value"),
+    )
+    wide = annual.pivot(on="element", index=["country", "Year"], values="Value")
+    flags = annual.pivot(on="element", index=["country", "Year"], values="Flag")
+    missing = [c for c in PRODUCER_ELEMENTS.values() if c not in wide.columns]
+    wide = wide.with_columns(pl.lit(None, pl.Float64).alias(c) for c in missing)
+    flags = flags.with_columns(pl.lit(None, pl.String).alias(c) for c in missing)
+    table = (
+        wide.join(
+            flags.select(
+                "country",
+                "Year",
+                pl.coalesce("usd_per_t", "lcu_per_t", "price_index").alias("flag"),
+            ),
+            on=["country", "Year"],
+        )
+        .select(
+            "country",
+            pl.col("Year").alias("year"),
+            *PRODUCER_ELEMENTS.values(),
+            "flag",
+            pl.col("country").is_in(config.cherry).alias("cherry"),
+        )
+        .filter(pl.any_horizontal(pl.col(c).is_not_null() for c in PRODUCER_ELEMENTS.values()))
+    )
+    logger.info(
+        "producer prices: %d countries, %d-%d; a dollar price for %d country-years",
+        table["country"].n_unique(), table["year"].min(), table["year"].max(),
+        table["usd_per_t"].count(),
+    )  # fmt: skip
+    return table.sort("country", "year")
+
+
+def reconcile_cherry(
+    prices: pl.DataFrame, production: pl.DataFrame, country: str
+) -> tuple[int, int]:
+    """How many years FAOSTAT's price for the home country is its producers' own rural
+    price of the cherry - the value of the harvest over its tonnes, within 1% - out of the
+    years both have. Said in the log: a country the YAML calls `cherry` that stops
+    agreeing is a figure that changed meaning. (Mexico, checked 2026-09-29: within five
+    centavos in 2005-2024, and 0.6-0.8% apart in 2003-2004.)"""
+    rural = production.group_by("year").agg(
+        (pl.col("value_mxn").sum() / pl.col("production_t").sum()).alias("rural")
+    )
+    both = (
+        prices.filter(pl.col("country") == country)
+        .join(rural, on="year")
+        .drop_nulls(["lcu_per_t", "rural"])
+    )
+    agree = both.filter(
+        (pl.col("lcu_per_t") - pl.col("rural")).abs() <= CHERRY_TOLERANCE * pl.col("rural")
+    ).height
+    level = logging.INFO if agree == both.height else logging.WARNING
+    logger.log(
+        level,
+        "producer prices: FAOSTAT's %s is the rural price of the cherry in %d of %d years",
+        country, agree, both.height,
+    )  # fmt: skip
+    return agree, both.height

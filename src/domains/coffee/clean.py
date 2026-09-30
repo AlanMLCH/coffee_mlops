@@ -32,11 +32,17 @@ from domains.coffee.config import (
     UNCLASSIFIED,
     CleaningConfig,
     ConsumerPricesConfig,
+    ProducerPricesConfig,
     ProductionConfig,
     ShopKindRule,
 )
 from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
-from domains.coffee.prices import clean_exchange_rates, clean_price_indicators
+from domains.coffee.prices import (
+    clean_exchange_rates,
+    clean_price_indicators,
+    clean_producer_prices,
+    reconcile_cherry,
+)
 from domains.coffee.reads import daily_reads, newest
 from domains.coffee.roaster_sheets import clean_roasters
 from domains.coffee.schemas import (
@@ -578,11 +584,16 @@ def clean_tables(
     rules: CleaningConfig,
     crop: ProductionConfig,
     shelves: ConsumerPricesConfig,
+    farmers: ProducerPricesConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
     if "fas_psd_coffee" in frames:  # absent without a key, and nothing depends on it
         reconcile_market_sources(frames["psd_coffee"], frames["fas_psd_coffee"])
+    production = clean_mexico_production(frames["siap_agricola"], crop)
+    producer_prices = clean_producer_prices(frames[farmers.source], farmers)
+    if crop.country in farmers.cherry:
+        reconcile_cherry(producer_prices, production, crop.country)
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
     shop_inputs = tuple(name for name in (*READERS, "cdmx_boroughs") if name in frames)
@@ -600,9 +611,8 @@ def clean_tables(
         "coffee_shop_history": CleanTable(
             clean_coffee_shop_history(frames, areas, rules, read_at), shop_inputs
         ),
-        "mexico_production": CleanTable(
-            clean_mexico_production(frames["siap_agricola"], crop), ("siap_agricola",)
-        ),
+        "mexico_production": CleanTable(production, ("siap_agricola",)),
+        "producer_prices": CleanTable(producer_prices, (farmers.source,)),
         **{name: CleanTable(table, ("roaster_catalogs",)) for name, table in roasters.items()},
         "price_indicators": CleanTable(
             clean_price_indicators(

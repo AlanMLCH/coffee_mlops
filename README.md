@@ -18,9 +18,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 14 sources of four kinds** - static files (CQI cupping scores, USDA's world
+- **Reads 15 sources of four kinds** - static files (CQI cupping scores, USDA's world
   coffee balance, SIAP's harvests, INEGI's borough polygons and 2020 Census, World Bank and ICO prices,
-  PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
+  FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first) - their tasting notes read into the SCA's flavour
   categories - and 17 documents for the agent to read.
@@ -69,7 +69,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
   of cherry (SIAP, every closing year since 2003), and was 1.07 million in 2025.
 - A kilogram of cherry earns a Mexican grower 8 pesos; the same weight of green coffee
   costs 136 at the port, plain ground coffee 380 on a supermarket shelf, and a specialty
-  roaster's coffee 1,080 - each step its own product, no conversion assumed.
+  roaster's coffee 1,080 - each step its own product, no conversion assumed. Elsewhere,
+  growers kept 51-87% of the port price of their own mix in 2024 (FAOSTAT: Peru 51%,
+  Colombia 66%, Brazil 72%, Kenya 87%).
 - Green coffee fell 27% in pesos from its February 2025 peak, but only 12% in dollars:
   for a Mexican roaster, the exchange rate moved the cost more than the market did. On
   the supermarket shelf, meanwhile, ground coffee rose 39% and instant 49% from January
@@ -98,7 +100,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["14 sources + 17 documents"]
+    subgraph SOURCES["15 sources + 17 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]

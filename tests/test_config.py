@@ -32,6 +32,7 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "profeco_prices_2025",
         "fred_usd_mxn",
         "census_2020",
+        "faostat_prices",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -250,6 +251,14 @@ def test_shelf_prices_come_from_a_source_that_downloads_their_folder() -> None:
     config["consumer_prices"]["source"] = "ico_prices"  # a PDF, not an archive of tables
 
     with pytest.raises(ValidationError, match="names the archive's folder of fortnights"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_producer_prices_come_from_a_source_that_names_the_csv_in_its_zip() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["producer_prices"]["source"] = "fred_usd_mxn"  # a CSV on its own
+
+    with pytest.raises(ValidationError, match="names the CSV inside FAOSTAT's ZIP"):
         CoffeeConfig.model_validate(config)
 
 

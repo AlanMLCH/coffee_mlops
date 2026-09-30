@@ -156,6 +156,20 @@ sources:
     member: iter_09_cpv2020/conjunto_de_datos/conjunto_de_datos_iter_09CSV20.csv
     refresh_hours: 8760 # the next census is 2030
 
+  # What farmers are paid for their coffee, country by country, year by year: FAOSTAT's
+  # producer prices, one bulk file for every crop. Verified 2026-09-29: 11.7 MB ZIP whose
+  # CSV is 214 MB unpacked (1.3 million rows, UTF-8, every field quoted); "Coffee, green"
+  # (item 656) is 6,291 rows, 59 countries, 1991-2025, in local currency, the local
+  # currency before a redenomination, US dollars (1991-2024, 52 countries) and an index
+  # (2014-2016 = 100); annual values and, for some countries, months. Licence CC BY 4.0
+  # (FAO's statistical data): cite FAO, the dataset and the date it was read. The bulk
+  # server has no robots.txt (403).
+  faostat_prices:
+    url: https://bulks-faostat.fao.org/production/Prices_E_All_Data_(Normalized).zip
+    filename: Prices_E_All_Data_(Normalized).zip
+    member: Prices_E_All_Data_(Normalized).csv
+    refresh_hours: 720 # revised once or twice a year
+
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
 # shows only the current month, each read of the roasters' catalogues is an observation
 # of what they sold then, and PROFECO's archive holds only the current year - when 2027's
@@ -990,6 +1004,27 @@ production:
   # municipal totals are set against.
   country: Mexico
 
+# FAOSTAT's producer prices of coffee (source `faostat_prices`), set against the world's
+# balance by country: FAO's names -> PSD's.
+producer_prices:
+  source: faostat_prices
+  item_code: "656"
+  item: Coffee, green
+  country_aliases:
+    Bolivia (Plurinational State of): Bolivia
+    China, mainland: China
+    Congo: Congo (Brazzaville)
+    Côte d'Ivoire: Cote d'Ivoire
+    Ethiopia PDR: Ethiopia # until 1992; the same country's series
+    Lao People's Democratic Republic: Laos
+    United States of America: United States
+    Venezuela (Bolivarian Republic of): Venezuela
+    Viet Nam: Vietnam
+  # Mexico's "green coffee" price is SIAP's rural price of the cherry: the value of the
+  # harvest over its tonnes, within five centavos in 2005-2024 and 1% in 2003-2004
+  # (checked on every build).
+  cherry: [Mexico]
+
 # The studies every domain gets: profiles, drift, feature evidence, residuals.
 # Stage 4: the data pipeline runs every morning in Dagster (make dagster). The ICO's page
 # holds only the current month, so it has to be read every day to build its history; the
@@ -1300,6 +1335,21 @@ explore:
       kind: scatter
       x: schooling_years
       y: per_10k_people
+    - title: What farmers keep of the port price
+      text: >-
+        FAOSTAT's producer prices against the World Bank's price of each country's own mix
+        of arabica and robusta, 2024: Kenya's growers were paid 87% of it, Brazil's 72%,
+        Colombia's 66%, Peru's 51%. Vietnam's 16% follows a series that halved in 2022 with
+        no flag to say why. About 20 countries report a year; Mexico's figure is the
+        cherry's, not green coffee's, and is left out.
+      sql: >-
+        SELECT country, round(100 * share_of_benchmark, 1) AS pct_of_port_price
+        FROM analysis.farmgate_prices
+        WHERE year = 2024 AND production >= 900
+        ORDER BY pct_of_port_price DESC
+      kind: bar
+      x: country
+      y: pct_of_port_price
     - title: By day, the spread shrinks
       text: >-
         Coffee shops per resident vary 6.6 times from borough to borough, and per job (DENUE's
@@ -1358,7 +1408,9 @@ explore:
       Cucurucho), read politely: what they sell, at what price, and what they say it
       tastes of.
     - **SIAP** (Mexico's harvest), **USDA PSD** (the world market), the **World Bank**
-      and the **ICO** (the price of green coffee), **FRED** (pesos per dollar).
+      and the **ICO** (the price of green coffee), **FAOSTAT** (what growers are paid),
+      **FRED** (pesos per dollar), and INEGI's 2020 Census and DENUE's count of every
+      workplace (who lives and works in each borough).
     - **The Coffee Quality Institute's cupping scores**, frozen in May 2023 - the only
       source here that is not current.
     - **17 documents** the agent reads: World Coffee Research's variety catalogues, the

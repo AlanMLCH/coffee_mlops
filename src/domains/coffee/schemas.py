@@ -354,6 +354,29 @@ DENUE_WORKPLACES = pa.DataFrameSchema(
     },
 )
 
+# FAOSTAT's producer prices of one item, as its bulk file writes them: a row per country,
+# year, period (the year's value or a month's) and element. Flags from the file's own
+# legend: A official, B a break in the series, E estimated, I imputed, X from another
+# organisation.
+FAOSTAT_PRICES = pa.DataFrameSchema(
+    name="faostat_prices",
+    coerce=True,
+    unique=["Area Code", "Element Code", "Year", "Months"],
+    columns={
+        "Area Code": pa.Column(pl.String, pa.Check.str_matches(r"^\d+$")),
+        "Area": _text(),
+        "Item Code": pa.Column(pl.String, pa.Check.str_matches(r"^\d+$")),
+        "Item": _text(),
+        "Element Code": pa.Column(pl.String, pa.Check.isin(["5530", "5531", "5532", "5539"])),
+        "Element": _text(),
+        "Year": pa.Column(pl.Int64, pa.Check.in_range(1960, 2100)),
+        "Months": _text(),
+        "Unit": pa.Column(pl.String, nullable=True),  # the index has none
+        "Value": pa.Column(pl.Float64, pa.Check.ge(0)),
+        "Flag": pa.Column(pl.String, pa.Check.isin(["A", "B", "E", "I", "X"])),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -371,6 +394,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "fred_usd_mxn": FRED_USD_MXN,
     "census_2020": CENSUS_2020,
     "denue_workplaces": DENUE_WORKPLACES,
+    "faostat_prices": FAOSTAT_PRICES,
 }
 
 
@@ -528,6 +552,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "coffee_shops": coffee_shops_schema(rules),
         "coffee_shop_history": coffee_shop_history_schema(rules),
         "mexico_production": MEXICO_PRODUCTION,
+        "producer_prices": PRODUCER_PRICES,
         "roaster_coffees": ROASTER_COFFEES,
         "roaster_origins": roaster_origins_schema(rules),
         "roaster_offers": ROASTER_OFFERS,
@@ -738,6 +763,23 @@ EXCHANGE_RATES = pa.DataFrameSchema(
     },
 )
 
+
+# FAOSTAT's producer prices of coffee: a row per country (PSD's name) and year. Every
+# price is per tonne; `cherry` marks the countries whose tonne is of cherry, checked.
+PRODUCER_PRICES = pa.DataFrameSchema(
+    name="producer_prices",
+    strict=True,
+    unique=["country", "year"],
+    columns={
+        "country": pa.Column(pl.String),
+        "year": pa.Column(pl.Int64, pa.Check.in_range(1960, 2100)),
+        "usd_per_t": pa.Column(pl.Float64, pa.Check.gt(0), nullable=True),
+        "lcu_per_t": pa.Column(pl.Float64, pa.Check.gt(0), nullable=True),
+        "price_index": pa.Column(pl.Float64, pa.Check.gt(0), nullable=True),  # 2014-2016 = 100
+        "flag": pa.Column(pl.String, pa.Check.isin(["A", "B", "E", "I", "X"]), nullable=True),
+        "cherry": pa.Column(pl.Boolean),
+    },
+)
 
 MEXICO_PRODUCTION = pa.DataFrameSchema(
     name="mexico_production",

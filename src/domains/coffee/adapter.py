@@ -123,11 +123,16 @@ class CoffeeAdapter:
         return readers
 
     def file_readers(self) -> Mapping[str, FileReader]:
+        from domains.coffee.sources.faostat import read_producer_prices
         from domains.coffee.sources.ico import read_indicator_prices
         from domains.coffee.sources.profeco import read_shelf_prices
 
-        shelves = self.config.consumer_prices
+        shelves, farmers = self.config.consumer_prices, self.config.producer_prices
         readers: dict[str, FileReader] = {"ico_prices": read_indicator_prices}
+        # CoffeeConfig refuses a producer price source without a member.
+        readers[farmers.source] = partial(read_producer_prices,
+                                          member=str(self.config.sources[farmers.source].member),
+                                          item_code=farmers.item_code)  # fmt: skip
         for name in (shelves.source, *shelves.closed_years):
             folder = self.config.sources[name].member
             if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
@@ -143,7 +148,12 @@ class CoffeeAdapter:
 
         config = self.config
         return clean_tables(
-            raw, config.cleaning, config.production, config.consumer_prices, read_at
+            raw,
+            config.cleaning,
+            config.production,
+            config.consumer_prices,
+            config.producer_prices,
+            read_at,
         )
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:

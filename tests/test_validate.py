@@ -59,6 +59,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "profeco_prices_2024": 1,
         "fred_usd_mxn": 5,  # days, one of them without a rate
         "census_2020": 5,  # the state, three alcaldias and a small locality
+        "faostat_prices": 9,  # coffee's rows; the other crop left in the file
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()

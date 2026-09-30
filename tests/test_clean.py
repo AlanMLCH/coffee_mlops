@@ -195,9 +195,10 @@ def test_attribute_missing_from_download_still_gets_a_null_column(frames: Frames
 
 
 def test_build_clean_writes_every_table_with_lineage(
-    coffee_adapter: CoffeeAdapter, raw_dir: Path
+    coffee_adapter: CoffeeAdapter, raw_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     data_dir = raw_dir.parent
+    caplog.set_level(logging.INFO)
     paths = build_clean(coffee_adapter, data_dir, at=datetime(2026, 9, 19, tzinfo=UTC))
 
     assert set(paths) == {
@@ -207,6 +208,7 @@ def test_build_clean_writes_every_table_with_lineage(
         "coffee_shops",
         "coffee_shop_history",
         "mexico_production",
+        "producer_prices",
         "roaster_coffees",
         "roaster_origins",
         "roaster_offers",
@@ -224,6 +226,8 @@ def test_build_clean_writes_every_table_with_lineage(
     manifest = json.loads((paths["coffee_reviews"].parent / MANIFEST_NAME).read_text())
     assert set(manifest["inputs"]) == {"cqi_2018", "cqi_2023"}
     assert all(p.startswith("ingested_at=") for p in manifest["inputs"].values())
+    # FAOSTAT's Mexico is still SIAP's price of the cherry (2,985.7 against 2,985.67).
+    assert "FAOSTAT's Mexico is the rural price of the cherry in 1 of 1 years" in caplog.text
 
 
 def shops(frames: Frames) -> pl.DataFrame:

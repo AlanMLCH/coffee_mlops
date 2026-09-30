@@ -105,6 +105,7 @@ flowchart TD
             world_bank_prices["world_bank_prices<br/>World Bank · workbook, monthly since 1960<br/>found by its link on the page"]
             ico_prices["ico_prices<br/>ICO · one-page PDF, this month only<br/>every download kept: accumulate"]
             fred_usd_mxn["fred_usd_mxn<br/>FRED · pesos per dollar, daily since 1993"]
+            faostat_prices["faostat_prices<br/>FAOSTAT · every crop's producer prices<br/>a 214 MB CSV streamed, coffee kept"]
             profeco_prices["profeco_prices<br/>PROFECO · ZIP of fortnightly CSVs, 195 MB<br/>found by its link's text · coffee kept"]
             profeco_prices_2024["profeco_prices_2024<br/>PROFECO · 2024, closed · a RAR 5<br/>opened with bsdtar"]
             profeco_prices_2025["profeco_prices_2025<br/>PROFECO · 2025, closed · a RAR 5<br/>opened with bsdtar"]
@@ -136,11 +137,12 @@ flowchart TD
         roaster_flavors["roaster_flavors<br/>tasting notes from the shops' words<br/>SCA-103 flavour categories"]
         price_indicators["price_indicators<br/>indicator × day or month, US cents/lb<br/>a day's latest reading wins"]
         exchange_rates["exchange_rates<br/>pesos per dollar × business day"]
+        producer_prices["producer_prices<br/>what farmers are paid: country × year<br/>USD and local currency per tonne"]
         consumer_prices["consumer_prices<br/>a shelf price · per kg · sweetened · decaf<br/>the city's in the borough they declare"]
         documents["documents<br/>built by the core: citation metadata<br/>and what cleaning kept"]
         document_chunks["document_chunks<br/>built by the core: prose only, ≤1,200 chars<br/>one page or section · topics"]
     end
-    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE and PROFECO<br/>World Bank months against ICO days"]
+    audits["audits on every build<br/>FAS against the PSD file<br/>spatial join against DENUE and PROFECO<br/>World Bank months against ICO days<br/>FAOSTAT's Mexico against SIAP's cherry"]
 
     review_features["features/review_features<br/>adapter.enrich: market context<br/>of the year before grading"]
     offer_features["features/offer_features<br/>adapter.enrich: the coffee's origin<br/>split by coffee, not by bag"]
@@ -225,6 +227,7 @@ flowchart TD
     class roaster_offer_history,roaster_origin_history,roaster_flavors domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,census_2020,denue_cafes,denue_workplaces,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices,profeco_prices_2024,profeco_prices_2025 domain
+    class faostat_prices,producer_prices domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp,explorer core
     class corpus_sources,questions domain
@@ -1657,6 +1660,51 @@ query). Its evaluation after this change: 78% correct, 100% verified, against 82
 The two questions that differ are two that flip between runs of the same prompts; routed
 on their own three times over, with the table offered and without it, the 20 price and
 data questions go where they should every time the table is there.
+
+### What farmers are paid (FAOSTAT)
+
+The chain had the port (the ICO's and the World Bank's indicators), the shelf (PROFECO)
+and the roaster (the shops), and one farm gate: Mexico's, from SIAP. FAOSTAT's producer
+prices add the other growers. FAO publishes every crop of every country in one bulk file
+(`Prices_E_All_Data_(Normalized).zip`, 11.7 MB, a 214 MB CSV of 1.3 million rows; CC BY
+4.0, cite FAO and the date it was read). The source `faostat_prices` streams the CSV
+line by line and keeps "Coffee, green" (item 656: 6,291 rows) in about a second, instead
+of holding 2 GB of text to keep 0.5% of it. `clean.producer_prices` is a row per country
+(PSD's names: "Viet Nam" is Vietnam, "Côte d'Ivoire" Cote d'Ivoire) and year: dollars
+and local currency per tonne, FAO's index (2014-2016 = 100) and the flag (A official, E
+estimated, X from another organisation). 58 countries, 1991-2025; a dollar price for
+977 country-years, 18 to 23 countries a year lately.
+
+Checked before it was trusted (29 September):
+
+- **Mexico's "green coffee" is the cherry.** FAO's figure for Mexico in pesos is SIAP's
+  rural price - the value of the harvest over its tonnes - within five centavos every
+  year from 2005 to 2024 (0.6-0.8% apart in 2003-2004). A tonne of cherry is a fifth of
+  a tonne of green coffee, so Mexico is marked `cherry` and compared with nothing priced
+  per tonne of green. Every build checks it still holds, and says so in the log.
+- **What else moves without a flag.** Vietnam's price halves in 2022 (1,386 to 605
+  dollars a tonne) with every flag "official"; Colombia's is above the port price in
+  2018-2020. A country's series is read against itself with care; FAOSTAT does not say
+  what changed.
+
+The study `farmgate_prices` sets each price against what the country's coffee is worth
+at the port that year: the World Bank's yearly mean of other mild Arabicas and Robustas,
+weighted by the country's own mix in PSD, since a robusta grower's benchmark is not an
+arabica one. In 2024 (dollars per tonne):
+
+| Country | Farmgate | Port, its mix | Share |
+|---|---:|---:|---:|
+| Kenya | 4,887 | 5,621 | 87% |
+| Brazil | 3,791 | 5,233 | 72% |
+| Costa Rica | 3,865 | 5,621 | 69% |
+| Colombia | 3,719 | 5,621 | 66% |
+| Honduras | 3,071 | 5,621 | 55% |
+| Indonesia | 2,446 | 4,571 | 54% |
+| Peru | 2,888 | 5,621 | 51% |
+
+Hawaii's growers (the United States in PSD) are paid ten times the benchmark: a niche,
+not an error. The explorer has the comparison as a finding, the dictionary the table,
+and a SQL case asks for Colombia's 2024 price (3,719.1 dollars a tonne).
 
 ### Where the price goes next month
 

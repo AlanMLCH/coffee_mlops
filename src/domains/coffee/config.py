@@ -330,6 +330,20 @@ class ConsumerPricesConfig(BaseModel):
         return self
 
 
+class ProducerPricesConfig(BaseModel):
+    """Which FAOSTAT item is coffee, and how its country names meet PSD's."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str  # the raw source that downloads FAOSTAT's bulk file of producer prices
+    item_code: str
+    item: str  # its name, checked: the same code under another name means something else
+    country_aliases: dict[str, str] = {}  # FAO's name -> PSD's
+    # Countries whose figure was checked to be the price of the cherry, not of green
+    # coffee: comparable with nothing priced per tonne of green.
+    cherry: list[str] = []
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -353,6 +367,7 @@ class CoffeeConfig(DomainConfig):
     production: ProductionConfig
     market_analysis: MarketAnalysisConfig
     consumer_prices: ConsumerPricesConfig
+    producer_prices: ProducerPricesConfig
 
     @model_validator(mode="after")
     def _title_notes_name_shops(self) -> Self:
@@ -375,4 +390,15 @@ class CoffeeConfig(DomainConfig):
                     f"`consumer_prices` reads {name!r}: it has to be a source whose "
                     "`member` names the archive's folder of fortnights"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _producer_prices_are_downloaded(self) -> Self:
+        name = self.producer_prices.source
+        source = self.sources.get(name)
+        if source is None or source.member is None:
+            raise ValueError(
+                f"`producer_prices` reads {name!r}: it has to be a source whose `member` "
+                "names the CSV inside FAOSTAT's ZIP"
+            )
         return self

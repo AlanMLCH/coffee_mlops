@@ -201,6 +201,58 @@ def census_archive(rows: list[str] = CENSUS_ROWS) -> bytes:
     return buffer.getvalue()
 
 
+# FAOSTAT's bulk file of producer prices, as it downloads: one CSV in a ZIP, every field
+# quoted. Coffee's year values, a month (left out), an estimated zero (a price nobody
+# reported), Mexico's cherry price (SIAP's fixture: 15,000,000 pesos over 5,024 t), a
+# country PSD calls otherwise, and another crop priced at exactly the coffee's item code,
+# which the reader's quick test lets through and its exact one does not.
+FAOSTAT_MEMBER = "Prices_E_All_Data_(Normalized).csv"
+FAOSTAT_HEADER = [
+    "Area Code", "Area Code (M49)", "Area", "Item Code", "Item Code (CPC)", "Item",
+    "Element Code", "Element", "Year Code", "Year", "Months Code", "Months", "Unit",
+    "Value", "Flag",
+]  # fmt: skip
+USD = ("5532", "Producer Price (USD/tonne)", "USD")
+LCU = ("5530", "Producer Price (LCU/tonne)", "LCU")
+INDEX = ("5539", "Producer Price Index (2014-2016 = 100)", "")
+
+
+def fao_row(area: tuple[str, str], element: tuple[str, str, str], year: int, value: str,
+            flag: str = "A", months: tuple[str, str] = ("7021", "Annual value"),
+            item: tuple[str, str] = ("656", "Coffee, green")) -> list[str]:  # fmt: skip
+    code, name = area
+    element_code, element_name, unit = element
+    return [code, f"'{code.zfill(3)}", name, item[0], "'01610", item[1], element_code,
+            element_name, str(year), str(year), *months, unit, value, flag]  # fmt: skip
+
+
+BRAZIL, COLOMBIA, MEXICO_FAO = ("21", "Brazil"), ("44", "Colombia"), ("138", "Mexico")
+FAOSTAT_ROWS = [
+    fao_row(BRAZIL, USD, 2022, "3163.200000"),
+    fao_row(BRAZIL, LCU, 2022, "16300.000000"),
+    fao_row(BRAZIL, INDEX, 2022, "0.000000", flag="E"),
+    fao_row(BRAZIL, USD, 2022, "3100.000000", months=("7001", "January")),
+    fao_row(COLOMBIA, USD, 2023, "3010.800000"),
+    fao_row(COLOMBIA, INDEX, 2024, "0.000000", flag="E"),
+    fao_row(MEXICO_FAO, LCU, 2024, "2985.700000"),
+    fao_row(MEXICO_FAO, USD, 2024, "163.100000"),
+    fao_row(("237", "Viet Nam"), LCU, 2023, "15033124.000000"),
+    fao_row(("2", "Afghanistan"), LCU, 2023, "656", item=("221", "Almonds, in shell")),
+]
+
+
+def faostat_archive(
+    rows: list[list[str]] = FAOSTAT_ROWS, header: list[str] = FAOSTAT_HEADER
+) -> bytes:
+    text = io.StringIO()
+    csv.writer(text, quoting=csv.QUOTE_ALL, lineterminator="\r\n").writerows(rows)
+    first = ",".join(header) + "\r\n"  # the header alone is not quoted
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(FAOSTAT_MEMBER, first + text.getvalue())
+    return buffer.getvalue()
+
+
 def siap_year(year: int) -> bytes:
     """An earlier year of SIAP's closing statistics, as it was published: its own headers
     ("Precio" until 2020, "Nomcultivo Sin Um" from 2015 to 2020), Latin-1, CRLF, and one
@@ -287,6 +339,7 @@ def recorded() -> dict[str, bytes]:
         "fred_usd_mxn": b"observation_date,DEXMXUS\n2026-07-01,17.4000\n2026-07-02,17.5000\n"
         b"2026-07-03,\n2026-08-03,17.0000\n2026-08-04,17.1000\n",
         "census_2020": census_archive(),
+        "faostat_prices": faostat_archive(),
     }
 
 

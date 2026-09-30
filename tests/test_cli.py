@@ -69,6 +69,7 @@ def test_extract_writes_raw_layer_under_the_domain(
         "profeco_prices_2024",
         "profeco_prices_2025",
         "fred_usd_mxn",
+        "faostat_prices",
         "census_2020",
         *served,
     }
@@ -117,6 +118,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "price_indicators",
         "consumer_prices",
         "exchange_rates",
+        "producer_prices",
         "documents",
         "document_chunks",
     }
@@ -153,6 +155,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "price_indicators",
         "consumer_prices",
         "exchange_rates",
+        "producer_prices",
         "documents",
         "document_chunks",
     }
