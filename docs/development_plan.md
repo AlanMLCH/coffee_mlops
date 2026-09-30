@@ -38,13 +38,13 @@ Next is the second domain, the test of whether the framework is reusable.
 | [DENUE](https://www.inegi.org.mx/servicios/api_denue.html) (stage 2) | Every coffee shop, soda fountain and ice-cream parlour in Mexico City, geolocated | 9,860 | INEGI API, free token |
 | [OpenStreetMap](https://overpass-api.de/) (stage 2) | Every place tagged `amenity=cafe` (1,125) or `ice_cream` (232) in Mexico City | 1,357 | Overpass API, no credential |
 | [USDA FAS Open Data](https://apps.fas.usda.gov/opendataweb/) (stage 2) | The same PSD coffee balance, by market year, through an API | 87,704 | API key in a header, free |
-| [SIAP cierre agrícola](https://nube.agricultura.gob.mx/datosAbiertos/Agricola.php) (stage 2) | Every crop in every Mexican municipality, 2025; coffee cherry in 489 of them | 35,902 | Direct download, Latin-1 |
+| [SIAP cierre agrícola](https://nube.agricultura.gob.mx/datosAbiertos/Agricola.php) (stage 2) | Every crop in every Mexican municipality, every closing year 2003-2025; coffee cherry in 444-489 of them a year | 23 files of ~36,000 | A download a year, Latin-1 |
 | Roasters' shops (stage 3): Almanegra, Buna, Café con Jiribilla, Cucurucho | Every coffee they sell, as their own shops list it: 168 coffees in 528 offers (a product in one size) | 528 | Shopify / Squarespace catalog JSON, product pages where needed, robots.txt first |
 | [INEGI Marco Geoestadístico](https://www.inegi.org.mx/temas/mg/) (stage 2) | The 16 borough polygons of Mexico City, official boundaries | 16 | Direct download, 83 MB |
 | [World Bank Pink Sheet](https://www.worldbank.org/en/research/commodity-markets) (stage 4) | Monthly price of other mild Arabicas and Robustas (the ICO's group indicators), 1960 to last month, $/kg | 800 months | Workbook found by its link on the page, which changes with each release |
 | [ICO indicator prices](https://ico.org/documents/I-CIP.pdf) (stage 4) | Daily I-CIP and its four group indicators, US cents/lb, **the current month only** | 18 days so far | A one-page PDF table, read and checked against its own averages; every download kept |
 | [FRED, Mexican pesos to one US dollar](https://fred.stlouisfed.org/series/DEXMXUS) (stage 4) | The Federal Reserve's daily noon buying rate in New York (H.10), since November 1993 | 8,239 days | CSV, no key |
-| [PROFECO, Quién es Quién en los Precios](https://datos.profeco.gob.mx/datos_abiertos/qqp.php) (stage 4) | Shelf prices of packaged instant and ground coffee in supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by fortnight, January-July 2026 | 64,451 | A 195 MB ZIP of fortnightly CSVs (2.5 GB unpacked), found by its link's text; coffee kept |
+| [PROFECO, Quién es Quién en los Precios](https://datos.profeco.gob.mx/datos_abiertos/qqp.php) (stage 4) | Shelf prices of packaged instant and ground coffee in supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by fortnight, January 2024 to July 2026 | 281,380 | A 195 MB ZIP of fortnightly CSVs (2.5 GB unpacked), found by its link's text; coffee kept |
 
 > **The CQI data is not current.** Both snapshots are scrapes of the Coffee Quality
 > Institute database; the newest is frozen at **May 2023** and no newer public
@@ -85,7 +85,7 @@ flowchart TD
             cqi_2018["cqi_2018<br/>CQI 2018 · CSV"]
             cqi_2023["cqi_2023<br/>CQI 2023 · ZIP"]
             psd_coffee["psd_coffee<br/>USDA PSD · ZIP"]
-            siap_agricola["siap_agricola<br/>SIAP · CSV in Latin-1"]
+            siap_agricola["siap_agricola<br/>SIAP · a CSV a year since 2003, Latin-1<br/>a closed year downloaded once"]
             cdmx_boroughs["cdmx_boroughs<br/>INEGI · shapefile ZIP"]
             census_2020["census_2020<br/>INEGI · 2020 Census, CSV in a ZIP"]
         end
@@ -105,6 +105,8 @@ flowchart TD
             ico_prices["ico_prices<br/>ICO · one-page PDF, this month only<br/>every download kept: accumulate"]
             fred_usd_mxn["fred_usd_mxn<br/>FRED · pesos per dollar, daily since 1993"]
             profeco_prices["profeco_prices<br/>PROFECO · ZIP of fortnightly CSVs, 195 MB<br/>found by its link's text · coffee kept"]
+            profeco_prices_2024["profeco_prices_2024<br/>PROFECO · 2024, closed · a RAR 5<br/>opened with bsdtar"]
+            profeco_prices_2025["profeco_prices_2025<br/>PROFECO · 2025, closed · a RAR 5<br/>opened with bsdtar"]
         end
         subgraph CORPUS["Documents: text, never figures"]
             direction TB
@@ -221,7 +223,7 @@ flowchart TD
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
     class roaster_offer_history,roaster_origin_history,roaster_flavors domain
     class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,census_2020,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
-    class world_bank_prices,ico_prices domain
+    class world_bank_prices,ico_prices,profeco_prices_2024,profeco_prices_2025 domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp,explorer core
     class corpus_sources,questions domain
@@ -1919,6 +1921,41 @@ What it took to read, and what the core gained:
   correct, 98% verified, routing 95%** (80% and 98% before PROFECO). The wording was fixed
   because it was ambiguous, but it was measured on the same 40 questions that exposed it,
   so read the 82% as optimistic.
+
+### The years the survey has closed
+
+PROFECO publishes 2024 and 2025 whole, as RAR 5 archives - which Python cannot open.
+libarchive's `bsdtar` can, and ships with Windows 10+ and macOS as their own `tar`
+(`libarchive-tools` on Linux): a core module (`data/archives.py`) opens a ZIP with
+Python and a RAR with bsdtar, telling them apart by their first bytes. On this machine
+the first `tar` on the path was Git's GNU tar, which cannot; every `tar` is asked what it
+is, and Windows' own is tried last. A 173 MB fortnight streams out in under half a
+second.
+
+Checked before it was read (29 September), every fortnight of both years through the
+reader's own checks: 24 files a year, named `05-2025_01.csv` rather than `_Q1` (the
+reader takes both), UTF-8 with a mark, the fifteen documented columns, every date inside
+its fortnight - 117,981 coffee prices in 2024 and 98,948 in 2025. One thing more, found
+when the city's shelves came out empty: **until November 2025 the files write seven
+states and a chain without their accents** ("Ciudad de Mexico", "Yucatan"), so the city
+was not the city. A value takes the accented spelling the same column also has, when
+exactly one fits - the rule the lost letters already follow.
+
+Each closed year is a source of its own (`consumer_prices.closed_years`), read with the
+reads of the year in course as one stack, so a fortnight still comes from the latest read
+that carries it. With three years in, where a figure is one price rather than a series
+it is the last twelve months' (`recent_shelves`: the price ladder, the boroughs, the
+states, the explorer's map); the fortnightly series keeps everything:
+
+| Median per kilogram, across Mexico | January 2024 | July 2026 | |
+|---|---:|---:|---:|
+| Plain ground coffee | 272.5 | 380.0 | +39% |
+| Instant coffee | 645.0 | 958.3 | +49% |
+
+In the city, over the last twelve months: ground 380, ground with sugar 240, instant 833
+(the ladder said 900 for instant over January-July 2026 alone). The shelf kept rising
+while green coffee fell 27% in pesos from February 2025: what a supermarket charges is
+not the bean's price passed on.
 
 ## What a kilo costs (stage 3)
 

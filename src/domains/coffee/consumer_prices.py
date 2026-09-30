@@ -12,11 +12,15 @@ far, so the archive of January 2027 will no longer hold 2026. Each fortnight's r
 from the latest read that carries that fortnight's file - a correction can only come
 later - and a fortnight no newer read carries is kept from the read that had it.
 
-One thing in the files is repaired, from what the files themselves say: June's wrote
-some accented letters as a question mark ("Nescafé. Cl?sico", "Naucalpan de Ju?rez").
-A value is restored only when the same column spells it whole somewhere else, and
-only one spelling fits. Otherwise brands, chains and presentations stay as PROFECO
-writes them.
+Two things in the files are repaired, from what the files themselves say. June 2026's
+wrote some accented letters as a question mark ("Nescafé. Cl?sico", "Naucalpan de
+Ju?rez"); and the closed years, until November 2025, wrote seven states and a chain
+without their accents ("Ciudad de Mexico", "Yucatan"). A value is restored only when
+the same column spells it whole somewhere else, and only one spelling fits. Otherwise
+brands, chains and presentations stay as PROFECO writes them.
+
+The years the survey has closed (2024, 2025) are an archive each, read with the year in
+course as one stack of reads (`shelf_reads`).
 
 The borough is the one the store declares, matched to INEGI's names, and its
 coordinates are checked against it rather than trusted over it. DENUE's coordinates
@@ -29,6 +33,9 @@ log says how often the two agree.
 
 import logging
 import re
+import unicodedata
+from collections.abc import Mapping
+from datetime import datetime
 
 import polars as pl
 
@@ -42,6 +49,9 @@ logger = logging.getLogger(__name__)
 
 # The columns some of whose values lost letters.
 LOST_LETTERS = ("marca", "presentacion", "nombre_comercial", "municipio")
+# And the columns a closed year wrote without accents (verified 2026-09-29: 7 states and a
+# chain differ from the later files by their accents alone).
+UNACCENTED = ("estado", "cadena_comercial")
 _LOST = "?"
 _NON_ASCII = "[^\\x00-\\x7f]"  # the one letter a "?" stands for
 _KEY = "__borough_key"  # a name folded, to meet INEGI's spelling of it
@@ -54,6 +64,9 @@ def clean_consumer_prices(
     """The survey's coffee rows, per kilogram, each placed in a borough if it is in one."""
     raw = latest_fortnights(raw)
     restored = raw.with_columns(restore_lost_letters(raw[column]) for column in LOST_LETTERS)
+    restored = restored.with_columns(
+        restore_accents(restored[column]) for column in (*LOST_LETTERS, *UNACCENTED)
+    )
     date = record_date(pl.col("fecha_registro"))
     month = date.dt.truncate("1mo")
     presentation = folded(pl.col("presentacion"))
@@ -88,6 +101,20 @@ def clean_consumer_prices(
     return in_boroughs.select(*CONSUMER_PRICES.columns).sort(
         "date", "state", "store", "brand", "presentation", "price_mxn"
     )
+
+
+def shelf_reads(
+    frames: Mapping[str, pl.DataFrame],
+    shelves: ConsumerPricesConfig,
+    read_at: Mapping[str, datetime],
+) -> pl.DataFrame:
+    """The year in course's reads and each closed year's archive, as one stack of reads:
+    a closed year's rows carry the time it was read, as any read of the year in course
+    does, so each fortnight still comes from the latest read that carries it."""
+    stacked = [frames[shelves.source]]
+    for name in shelves.closed_years:
+        stacked.append(frames[name].with_columns(pl.lit(read_at[name]).alias(READ_AT)))
+    return pl.concat(stacked, how="diagonal_relaxed")
 
 
 def latest_fortnights(raw: pl.DataFrame) -> pl.DataFrame:
@@ -127,6 +154,32 @@ def restore_lost_letters(values: pl.Series) -> pl.Series:
         values.name, len(restored), len(left), sorted(left)[:5],
     )  # fmt: skip
     return values.replace(restored)
+
+
+def restore_accents(values: pl.Series) -> pl.Series:
+    """Put back accents a year left off: 2024's and 2025's files write "Ciudad de Mexico"
+    and "Yucatan" until December 2025, the later ones "Ciudad de México" and "Yucatán".
+    A value takes the accented spelling the column also has, when exactly one folds to
+    it; the city's shelves are found by its name, and would be lost otherwise."""
+    spellings = values.unique().drop_nulls().to_list()
+    accented: dict[str, list[str]] = {}
+    for value in spellings:
+        if not value.isascii():
+            accented.setdefault(fold_text(value), []).append(value)
+    restored = {
+        value: accented[fold_text(value)][0]
+        for value in spellings
+        if value.isascii() and len(accented.get(fold_text(value), [])) == 1
+    }
+    if restored:
+        logger.info("%s: restored the accents of %d values: %s", values.name, len(restored),
+                    sorted(restored)[:5])  # fmt: skip
+    return values.replace(restored)
+
+
+def fold_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
 def folded(text: pl.Expr) -> pl.Expr:

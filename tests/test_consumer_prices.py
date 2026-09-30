@@ -12,8 +12,13 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from domains.coffee.analysis import recent_shelves
 from domains.coffee.config import CoffeeConfig, ConsumerPricesConfig
-from domains.coffee.consumer_prices import clean_consumer_prices, restore_lost_letters
+from domains.coffee.consumer_prices import (
+    clean_consumer_prices,
+    restore_accents,
+    restore_lost_letters,
+)
 from domains.coffee.schemas import CONSUMER_PRICES, PROFECO_PRICES
 from domains.coffee.sources.profeco import read_shelf_prices
 from mlops_core.config import SpatialConfig
@@ -181,6 +186,34 @@ def test_a_letter_is_restored_only_where_one_whole_spelling_fits(
     assert "municipio: restored 1 values with lost letters; 2 have no single" in caplog.text
     clean = pl.Series("marca", ["Legal"])
     assert restore_lost_letters(clean) is clean  # nothing lost, nothing done
+
+
+def test_an_accent_is_restored_only_where_one_accented_spelling_fits(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """2024's files write "Ciudad de Mexico"; 2026's, "Ciudad de México"."""
+    caplog.set_level(logging.INFO)
+    values = pl.Series(
+        "estado", ["Ciudad de Mexico", "Ciudad de México", "Leon", "León", "Léon", "Colima", None]
+    )
+
+    restored = restore_accents(values)
+
+    assert restored.to_list() == [
+        "Ciudad de México", "Ciudad de México", "Leon", "León", "Léon", "Colima", None
+    ]  # fmt: skip
+    assert "estado: restored the accents of 1 values: ['Ciudad de Mexico']" in caplog.text
+    plain = pl.Series("marca", ["Legal"])
+    assert restore_accents(plain).to_list() == ["Legal"]
+
+
+def test_a_single_price_is_the_last_twelve_months_and_a_series_keeps_them_all() -> None:
+    prices = pl.DataFrame(
+        {"date": [date(2024, 1, 5), date(2025, 7, 31), date(2025, 8, 1), date(2026, 7, 31)]}
+    )
+
+    assert recent_shelves(prices)["date"].to_list() == [date(2025, 8, 1), date(2026, 7, 31)]
+    assert recent_shelves(prices.clear()).is_empty()
 
 
 def test_each_fortnight_comes_from_the_latest_read_that_carries_it(

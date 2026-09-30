@@ -101,7 +101,9 @@ class CoffeeAdapter:
         return extract(self.config, self.keys, data_dir, client, now)
 
     def raw_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
-        return RAW_SCHEMAS
+        # A closed year of the shelf survey is the same file as the year in course.
+        closed = self.config.consumer_prices.closed_years
+        return {**RAW_SCHEMAS, **dict.fromkeys(closed, RAW_SCHEMAS["profeco_prices"])}
 
     def json_readers(self) -> Mapping[str, JsonReader]:
         from domains.coffee.sources import denue, fas, overpass, roasters
@@ -123,15 +125,14 @@ class CoffeeAdapter:
         from domains.coffee.sources.profeco import read_shelf_prices
 
         shelves = self.config.consumer_prices
-        folder = self.config.sources[shelves.source].member
-        if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
-            raise ValueError(f"{shelves.source} names no folder of fortnights")
-        return {
-            "ico_prices": read_indicator_prices,
-            shelves.source: partial(
-                read_shelf_prices, folder=folder, products=list(shelves.products)
-            ),
-        }
+        readers: dict[str, FileReader] = {"ico_prices": read_indicator_prices}
+        for name in (shelves.source, *shelves.closed_years):
+            folder = self.config.sources[name].member
+            if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
+                raise ValueError(f"{name} names no folder of fortnights")
+            readers[name] = partial(read_shelf_prices, folder=folder,
+                                    products=list(shelves.products))  # fmt: skip
+        return readers
 
     def clean(
         self, raw: Mapping[str, pl.DataFrame], read_at: Mapping[str, datetime]

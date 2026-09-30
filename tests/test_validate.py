@@ -20,12 +20,17 @@ def read(coffee_config: DomainConfig, raw_dir: Path, source: str) -> pl.DataFram
     return read_raw(artifact, coffee_config.sources[source])
 
 
-def test_every_configured_source_has_a_contract(coffee_config: DomainConfig) -> None:
-    """Including the API sources, which are configured apart from the file downloads."""
-    apis = (coffee_config.denue, coffee_config.overpass, coffee_config.fas, coffee_config.roasters)
+def test_every_configured_source_has_a_contract(coffee_adapter: CoffeeAdapter) -> None:
+    """Including the API sources, which are configured apart from the file downloads, and
+    the shelf survey's closed years, which share the year in course's."""
+    config = coffee_adapter.config
+    apis = (config.denue, config.overpass, config.fas, config.roasters)
     api = {source.name for source in apis if source}
+    contracts = coffee_adapter.raw_contracts()
 
-    assert coffee_config.sources.keys() | api == RAW_SCHEMAS.keys()
+    assert config.sources.keys() | api == contracts.keys()
+    assert RAW_SCHEMAS.keys() < contracts.keys()
+    assert contracts["profeco_prices_2025"] is RAW_SCHEMAS["profeco_prices"]
 
 
 def test_recorded_sources_pass_and_come_out_typed(
@@ -48,6 +53,8 @@ def test_recorded_sources_pass_and_come_out_typed(
         "world_bank_prices": 3,  # months, read from a workbook's sheet
         "ico_prices": 3,  # days, read from a PDF page by the domain
         "profeco_prices": 10,  # coffee, from three fortnights of everything PROFECO prices
+        "profeco_prices_2025": 2,  # a closed year's archive, read the same way
+        "profeco_prices_2024": 1,
         "fred_usd_mxn": 5,  # days, one of them without a rate
         "census_2020": 5,  # the state, three alcaldias and a small locality
     }

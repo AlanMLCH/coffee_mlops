@@ -28,6 +28,8 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "world_bank_prices",
         "ico_prices",
         "profeco_prices",
+        "profeco_prices_2024",
+        "profeco_prices_2025",
         "fred_usd_mxn",
         "census_2020",
     }

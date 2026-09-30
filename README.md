@@ -71,7 +71,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
   costs 136 at the port, plain ground coffee 380 on a supermarket shelf, and a specialty
   roaster's coffee 1,080 - each step its own product, no conversion assumed.
 - Green coffee fell 27% in pesos from its February 2025 peak, but only 12% in dollars:
-  for a Mexican roaster, the exchange rate moved the cost more than the market did.
+  for a Mexican roaster, the exchange rate moved the cost more than the market did. On
+  the supermarket shelf, meanwhile, ground coffee rose 39% and instant 49% from January
+  2024 to July 2026 (PROFECO).
 - Of the 9,860 places INEGI registers as "cafeterías" in Mexico City, 38% are named as
   coffee shops; a quarter sell juice. Per resident, they follow schooling: 12.5 per
   10,000 people in Cuauhtémoc, 1.9 in La Magdalena Contreras (Spearman 0.93 with the

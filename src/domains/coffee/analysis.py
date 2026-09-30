@@ -938,23 +938,37 @@ def consumer_prices_by_fortnight(prices: pl.DataFrame, city: str) -> pl.DataFram
     return _shelf_summary(scoped, "scope", "line", "fortnight").sort("scope", "line", "fortnight")
 
 
+def recent_shelves(prices: pl.DataFrame) -> pl.DataFrame:
+    """The last twelve months of shelf prices, to the latest one recorded. The survey
+    reaches back to January 2024, and a median over all of it would set 2024's prices
+    beside 2026's: where a figure is one price rather than a series, it is this year's."""
+    if prices.is_empty():
+        return prices
+    latest = prices["date"].max()
+    return prices.filter(pl.col("date") > pl.lit(latest).dt.offset_by("-1y"))
+
+
 def consumer_prices_by_borough(prices: pl.DataFrame) -> pl.DataFrame:
-    """Where in the city a kilogram costs what, per borough and line, over every
-    fortnight so far. PROFECO visits few stores per borough - `stores` says how few -
-    so a borough's figure is its supermarkets' prices, not its residents' spending."""
-    in_city = prices.filter(pl.col("borough_id").is_not_null()).with_columns(shelf_line())
+    """Where in the city a kilogram costs what, per borough and line, over the last
+    twelve months (`recent_shelves`). PROFECO visits few stores per borough - `stores`
+    says how few - so a borough's figure is its supermarkets' prices, not its residents'
+    spending."""
+    in_city = (
+        recent_shelves(prices).filter(pl.col("borough_id").is_not_null()).with_columns(shelf_line())
+    )
     return _shelf_summary(in_city, "borough_id", "borough", "line").sort("borough", "line")
 
 
 def consumer_prices_by_state(
     prices: pl.DataFrame, production: pl.DataFrame, states: Mapping[str, str]
 ) -> pl.DataFrame:
-    """What shoppers pay for a kilogram of plain ground or instant coffee in each state,
-    beside what the state's growers were paid for a kilogram of cherry in SIAP's latest
-    year, where it grows coffee. Cherry is not what the shelf sells: it takes several
-    kilograms of it to make one of roasted coffee, a factor this table does not assume.
+    """What shoppers pay for a kilogram of plain ground or instant coffee in each state
+    over the last twelve months, beside what the state's growers were paid for a kilogram
+    of cherry in SIAP's latest year, where it grows coffee. Cherry is not what the shelf
+    sells: it takes several kilograms of it to make one of roasted coffee, a factor this
+    table does not assume.
     """
-    plain = prices.filter(~pl.col("sweetened") & ~pl.col("decaf"))
+    plain = recent_shelves(prices).filter(~pl.col("sweetened") & ~pl.col("decaf"))
     shelves = _shelf_summary(plain, "state", "product")
     spelling = {state: states.get(fold(state)) for state in shelves["state"].unique().to_list()}
     growers = (
@@ -1018,8 +1032,8 @@ def price_ladder(
 ) -> pl.DataFrame:
     """A kilogram of coffee at each step the data reaches, in pesos: the cherry at the
     farm gate (Mexico, SIAP's latest year), green coffee at the port (the latest month
-    of other mild Arabicas, in pesos), the supermarket's shelf and the specialty
-    roaster's shop (both in the city). Each step's unit is its own - a kilogram of
+    of other mild Arabicas, in pesos), the supermarket's shelf (the last twelve months)
+    and the specialty roaster's shop (both in the city). Each step's unit is its own - a kilogram of
     cherry, of green coffee, of instant, of coffee and sugar - and is said beside it:
     the steps are not one product marked up, and no conversion between them is assumed.
     Nor is each step's figure the same statistic, and `measure` says which it is."""
@@ -1040,7 +1054,7 @@ def price_ladder(
             ("green coffee at the port", "World Bank, FRED", "kg of green coffee",
              "the month's price", month["mxn_per_kg"], 1, month["period"].strftime("%Y-%m"))
         )  # fmt: skip
-    shelf = prices.filter(pl.col("state") == city).with_columns(shelf_line())
+    shelf = recent_shelves(prices).filter(pl.col("state") == city).with_columns(shelf_line())
     for line, (step, unit) in SHELF_STEPS.items():
         on_shelf = shelf.filter(pl.col("line") == line)
         if not on_shelf.is_empty():

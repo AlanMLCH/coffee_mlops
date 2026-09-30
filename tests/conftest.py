@@ -75,10 +75,16 @@ ICO_PAGE = [
 # PROFECO's page names its files only in its links' text; the addresses are tokens, and
 # last year's is listed first.
 PROFECO_FILE = "https://datos.profeco.gob.mx/datos_abiertos/file.php?t=9d62"
+# The closed years' archives, found by their links' text like the year in course.
+PROFECO_CLOSED = {
+    "profeco_prices_2025": "https://datos.profeco.gob.mx/datos_abiertos/file.php?t=b954",
+    "profeco_prices_2024": "https://datos.profeco.gob.mx/datos_abiertos/file.php?t=2de3",
+}
 PROFECO_PAGE = (
     b'<a href="https://www.gob.mx/profeco">PROFECO</a><a href="index.php"><img src="l.png"></a>'
     b'<a href="file.php?t=b954">\n  Quien es Quien en los Precios 2025</a>'
     b'<a href="file.php?t=9d62"><span>Quien es Quien en los</span> Precios 2026</a>'
+    b'<a href="file.php?t=2de3">Quien es Quien en los Precios 2024</a>'
     b'<a href="file.php?t=42ed">Metadatos dataset</a>'
 )
 # Stores: chain, kind, name, address, state, municipality, latitude, longitude. The two
@@ -143,6 +149,19 @@ QQP_FORTNIGHTS: dict[str, tuple[str, list[str], list[list[str]]]] = {
         shelf("Café en Cápsulas", "Caja 10 Pzas.", "Dolce Gusto", "150", "2026/07/20",
               POLANCO),
     ]),
+}  # fmt: skip
+
+
+# The closed years name a fortnight `_01` and `_02`, not `_Q1` and `_Q2`.
+QQP_CLOSED: dict[str, dict[str, tuple[str, list[str], list[list[str]]]]] = {
+    "2025": {"QQP_2025/12-2025_02.csv": ("utf-8-sig", QQP_COLUMNS, [
+        shelf(INSTANT, "Frasco 120 Gr.", "Nescafé. Clásico", "105", "2025/12/17", POLANCO),
+        shelf(GROUND, "Bolsa 400 Gr.", "Internacional Americano", "150", "2025/12/18",
+              CONTRERAS),
+    ])},
+    "2024": {"QQP_2024/03-2024_01.csv": ("utf-8-sig", QQP_COLUMNS, [
+        shelf(INSTANT, "Frasco 120 Gr.", "Nescafé. Clásico", "95", "2024/03/05", POLANCO),
+    ])},
 }  # fmt: skip
 
 
@@ -258,6 +277,11 @@ def recorded() -> dict[str, bytes]:
         "world_bank_prices": xlsx("Monthly Prices", WORLD_BANK_SHEET),
         "ico_prices": pdf(ICO_PAGE),
         "profeco_prices": qqp_archive(QQP_FORTNIGHTS),
+        # A closed year's archive is a RAR, which no fixture can be written as: the reader
+        # tells an archive by its bytes, so a ZIP stands in for it (the RAR path is
+        # tested against bsdtar on its own).
+        "profeco_prices_2025": qqp_archive(QQP_CLOSED["2025"]),
+        "profeco_prices_2024": qqp_archive(QQP_CLOSED["2024"]),
         # FRED's layout: a day a row, empty where no rate was set. Two of the workbook's
         # months have rates; September has none yet.
         "fred_usd_mxn": b"observation_date,DEXMXUS\n2026-07-01,17.4000\n2026-07-02,17.5000\n"
@@ -270,13 +294,15 @@ def recorded() -> dict[str, bytes]:
 def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedServer:
     urls = {name: str(source.url) for name, source in coffee_config.sources.items()}
     # Behind a redirect, and behind a link.
-    elsewhere = {"cqi_2023", "world_bank_prices", "profeco_prices"}
+    elsewhere = {"cqi_2023", "world_bank_prices", "profeco_prices", *PROFECO_CLOSED}
     payloads = {urls[name]: body for name, body in recorded.items() if name not in elsewhere}
     payloads[SIGNED_URL] = recorded["cqi_2023"]
     payloads[urls["world_bank_prices"]] = WORLD_BANK_PAGE
     payloads[WORLD_BANK_FILE] = recorded["world_bank_prices"]
     payloads[urls["profeco_prices"]] = PROFECO_PAGE
     payloads[PROFECO_FILE] = recorded["profeco_prices"]
+    for name, url in PROFECO_CLOSED.items():
+        payloads[url] = recorded[name]
     # A file a year: the recorded one is the last year's; the earlier ones are made.
     siap = coffee_config.sources["siap_agricola"].editions()
     payloads |= {url: siap_year(year) for year, url, _ in siap[:-1]}

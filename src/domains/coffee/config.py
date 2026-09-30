@@ -296,7 +296,10 @@ class ConsumerPricesConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source: str  # the raw source that downloads the survey
+    source: str  # the raw source that downloads the survey, the year in course
+    # The years the survey has closed, a source each: an archive published once, read
+    # with the year in course as one table.
+    closed_years: list[str] = []
     products: dict[str, Literal["ground", "instant"]] = Field(min_length=1)
     # Patterns over the presentation, accents dropped and lower-cased.
     sweetened: str  # a blend of coffee with sugar or caramel
@@ -352,10 +355,12 @@ class CoffeeConfig(DomainConfig):
 
     @model_validator(mode="after")
     def _shelf_prices_are_downloaded(self) -> Self:
-        source = self.sources.get(self.consumer_prices.source)
-        if source is None or source.member is None:
-            raise ValueError(
-                f"`consumer_prices.source` is {self.consumer_prices.source!r}: it has to be a "
-                "source whose `member` names the archive's folder of fortnights"
-            )
+        shelves = self.consumer_prices
+        for name in (shelves.source, *shelves.closed_years):
+            source = self.sources.get(name)
+            if source is None or source.member is None:
+                raise ValueError(
+                    f"`consumer_prices` reads {name!r}: it has to be a source whose "
+                    "`member` names the archive's folder of fortnights"
+                )
         return self

@@ -21,7 +21,7 @@ from mlops_core.data.extract import (
     latest_ingestion,
     user_agent,
 )
-from tests.conftest import PROFECO_FILE, PROFECO_PAGE
+from tests.conftest import PROFECO_CLOSED, PROFECO_FILE, PROFECO_PAGE
 from tests.fakes import RecordedServer
 
 T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
@@ -105,7 +105,8 @@ def test_every_source_is_stored_byte_for_byte(
         if source.link is not None:  # the file the page links, which names the release
             assert re.search(source.link, artifact.manifest.url)
         elif source.link_text is not None:  # the one whose link says so
-            assert artifact.manifest.url == PROFECO_FILE
+            assert artifact.manifest.url == {"profeco_prices": PROFECO_FILE,
+                                              **PROFECO_CLOSED}[name]  # fmt: skip
         elif source.years is not None:  # the last year's, addressed by its year
             assert artifact.manifest.url == source.editions()[-1][1]
         else:

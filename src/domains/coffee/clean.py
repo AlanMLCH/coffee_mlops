@@ -35,7 +35,7 @@ from domains.coffee.config import (
     ProductionConfig,
     ShopKindRule,
 )
-from domains.coffee.consumer_prices import clean_consumer_prices
+from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
 from domains.coffee.prices import clean_exchange_rates, clean_price_indicators
 from domains.coffee.reads import daily_reads, newest
 from domains.coffee.roaster_sheets import clean_roasters
@@ -580,7 +580,7 @@ def clean_tables(
             clean_exchange_rates(frames["fred_usd_mxn"]), ("fred_usd_mxn",)
         ),
         "consumer_prices": CleanTable(
-            clean_consumer_prices(frames[shelves.source], areas, shelves),
-            (shelves.source, "cdmx_boroughs"),
+            clean_consumer_prices(shelf_reads(frames, shelves, read_at), areas, shelves),
+            (shelves.source, *shelves.closed_years, "cdmx_boroughs"),
         ),
     }

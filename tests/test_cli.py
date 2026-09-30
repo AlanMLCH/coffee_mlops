@@ -66,6 +66,8 @@ def test_extract_writes_raw_layer_under_the_domain(
         "world_bank_prices",
         "ico_prices",
         "profeco_prices",
+        "profeco_prices_2024",
+        "profeco_prices_2025",
         "fred_usd_mxn",
         "census_2020",
         *served,

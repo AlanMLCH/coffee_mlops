@@ -290,7 +290,9 @@ PROFECO's *Quién es Quién en los Precios* (stage 4): its staff price packaged 
 supermarkets, convenience stores, markets and pharmacies across Mexico, fortnight by
 fortnight. Instant and roasted-and-ground coffee from national brands (Nescafé, Legal,
 Internacional, Los Portales, store brands), not specialty coffee: that is
-`clean.roaster_offers`. The current year's survey, January to the month before last.
+`clean.roaster_offers`. **Every fortnight since January 2024** (2024 and 2025 whole, the
+current year to the month before last): a question about today's price filters `date`
+(the last twelve months, say); a median over every row sets 2024 beside 2026.
 
 | Column | Type | Meaning |
 |---|---|---|

@@ -115,14 +115,33 @@ sources:
   # unpacked, 64,451 rows of coffee; no robots.txt (404); no licence stated on the page
   # or in the metadata. The page's links are opaque tokens (file.php?t=...), so the file
   # is found by what its link says, and the page lists 2025 before 2026, so the year is
-  # named: a new year is a change here. 2024 and 2025 are RAR archives, which Python
-  # does not open without an outside tool.
+  # named: a new year is a change here.
   profeco_prices:
     url: https://datos.profeco.gob.mx/datos_abiertos/qqp.php
     link_text: ^Quien es Quien en los Precios 2026$
     filename: QQP_2026.zip
     member: QQP_2026 # the folder of fortnights: the domain's reader reads them all
     refresh_hours: 168 # a monthly release of 195 MB, not fetched every day
+
+  # The years the survey has closed: one RAR 5 archive each, the whole year, published
+  # once. Verified 2026-09-29, every fortnight of both: 24 files a year named
+  # `<month>-<year>_01.csv` and `_02.csv` (not `_Q1`), UTF-8 with a mark, the fifteen
+  # documented columns, every date inside its fortnight; 117,981 coffee prices in 2024
+  # and 98,948 in 2025. Python has no RAR reader: the core opens it with libarchive's
+  # bsdtar (Windows' and macOS's own tar; `libarchive-tools` on Linux).
+  profeco_prices_2025:
+    url: https://datos.profeco.gob.mx/datos_abiertos/qqp.php
+    link_text: ^Quien es Quien en los Precios 2025$
+    filename: QQP_2025.rar
+    member: QQP_2025
+    refresh_hours: 8760 # closed: asked once a year, in case it is ever corrected
+
+  profeco_prices_2024:
+    url: https://datos.profeco.gob.mx/datos_abiertos/qqp.php
+    link_text: ^Quien es Quien en los Precios 2024$
+    filename: QQP_2024.rar
+    member: QQP_2024
+    refresh_hours: 8760
 
   # INEGI's 2020 Census, principal results by locality (ITER), for Mexico City: who lives
   # in each alcaldia, to set the coffee shops against people as well as square
@@ -1003,6 +1022,7 @@ analysis:
 # name: the category is spelled "Cafe" in some months and "Café" in others.
 consumer_prices:
   source: profeco_prices
+  closed_years: [profeco_prices_2024, profeco_prices_2025]
   products: # PROFECO's product -> which coffee it is
     Café Soluble: instant
     Café Tostado y Molido: ground
@@ -1061,7 +1081,7 @@ explore:
     - label: Ground coffee on a shelf
       sql: SELECT mxn_per_kg FROM analysis.price_ladder WHERE step = 'supermarket, ground'
       unit: MXN/kg
-      help: Median shelf price of plain ground coffee across Mexico, January to July 2026 (PROFECO); the line is fortnight by fortnight
+      help: Median shelf price of plain ground coffee in Mexico City over the last twelve months (PROFECO); the line is the country's median, fortnight by fortnight since 2024
       trend: >-
         SELECT median_mxn_per_kg FROM analysis.consumer_prices_by_fortnight
         WHERE scope = 'national' AND line = 'ground' ORDER BY fortnight
@@ -1092,11 +1112,12 @@ explore:
     - name: Median shelf price of ground coffee
       kind: areas
       unit: MXN/kg
-      description: PROFECO, plain ground coffee, pesos per kilogram, January to July 2026; 13 of the 16 boroughs have shelves in the survey
+      description: PROFECO, plain ground coffee, pesos per kilogram, the last twelve months of the survey; 13 of the 16 boroughs have shelves in it
       sql: >-
         SELECT borough_id, median(price_mxn_per_kg) AS median_mxn_per_kg, count(*) AS prices
         FROM clean.consumer_prices
         WHERE borough_id IS NOT NULL AND product = 'ground' AND NOT sweetened AND NOT decaf
+          AND date > (SELECT max(date) FROM clean.consumer_prices) - INTERVAL 1 YEAR
         GROUP BY borough_id
     - name: Coffee shops
       kind: points
@@ -1124,7 +1145,7 @@ explore:
     - name: Shelf prices of packaged coffee (PROFECO)
       description: >-
         Every price PROFECO's staff recorded for ground and instant coffee across Mexico,
-        January to July 2026, per kilogram of what the jar or bag holds.
+        January 2024 to July 2026, per kilogram of what the jar or bag holds.
       table: clean.consumer_prices
       measures:
         median_mxn_per_kg: median(price_mxn_per_kg)
@@ -1219,8 +1240,9 @@ explore:
       color: origin
     - title: Packaged coffee on the shelf, fortnight by fortnight
       text: >-
-        Median price per kilogram across Mexico. Instant coffee rose through 2026; plain
-        ground coffee barely moved.
+        Median price per kilogram across Mexico since January 2024: plain ground coffee
+        from 273 to 380 pesos (+39%), instant from 645 to 958 (+49%) - while green coffee
+        fell from its February 2025 peak.
       sql: >-
         SELECT fortnight, line, median_mxn_per_kg FROM analysis.consumer_prices_by_fortnight
         WHERE scope = 'national' AND line IN ('ground', 'instant', 'ground, sweetened')
@@ -1301,7 +1323,7 @@ explore:
     - **OpenStreetMap**: coffee shops mapped by volunteers (ODbL). Thorough in the centre,
       thin in the east: a map of OSM alone measures where mappers live.
     - **PROFECO's "Quién es Quién en los Precios"**: supermarket and market shelf prices,
-      every fortnight since January 2026.
+      every fortnight since January 2024.
     - **Four specialty roasters' online shops** (Almanegra, Buna, Café con Jiribilla,
       Cucurucho), read politely: what they sell, at what price, and what they say it
       tastes of.
