@@ -1,0 +1,73 @@
+# The hosted models the agent may ask before its local one, in the order they are asked.
+#
+# A provider is used only when its key's variable is set (in the environment or in .env);
+# with no key set, the agent runs on the local model alone, as a fresh clone does. When a
+# provider runs out of quota it is set aside until it says it will answer again, and the
+# next one is asked; the local model (Ollama, qwen3.5:4b) is always the last. Paid
+# providers join only with MLOPS_PAID_PROVIDERS=true. `mlops agent providers` shows the
+# chain, which keys are set, who is set aside and what each spent today.
+#
+# Verified 2026-09-29: each address answered 401 to a request without a key, and the
+# models and free limits are the ones each provider documented that day. Limits change:
+# a model a provider drops shows up as an error, and the chain moves on.
+
+providers:
+  - name: gemini
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    model: gemini-3.8-flash
+    key: GEMINI_API_KEY
+    note: >-
+      Google AI Studio's free tier; per-model limits at aistudio.google.com/rate-limit.
+      Outside the EU, UK and EEA, free-tier prompts may be used to improve Google's products.
+
+  - name: groq
+    base_url: https://api.groq.com/openai/v1
+    model: openai/gpt-oss-120b
+    key: GROQ_API_KEY
+    note: >-
+      Free: 30 requests a minute, 1,000 a day, 8,000 tokens a minute and 200,000 a day.
+      A SQL prompt is ~5,500 tokens, so about one SQL question a minute.
+
+  - name: gemini-lite
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    model: gemini-3.5-flash-lite
+    key: GEMINI_API_KEY
+    note: The same key as gemini, a separate daily quota for a smaller model.
+
+  - name: mistral
+    base_url: https://api.mistral.ai/v1
+    model: mistral-small-latest
+    key: MISTRAL_API_KEY
+    note: >-
+      Free mode, monthly limits in the admin panel; the free tier may train on the prompts.
+
+  - name: openrouter
+    base_url: https://openrouter.ai/api/v1
+    model: openrouter/free
+    key: OPENROUTER_API_KEY
+    note: >-
+      Free models, 20 requests a minute and 50 a day (1,000 after a one-off $10 top-up);
+      openrouter/free routes to a free model that takes a schema.
+
+  - name: cerebras
+    base_url: https://api.cerebras.ai/v1
+    model: gpt-oss-120b
+    key: CEREBRAS_API_KEY
+    note: >-
+      A trial, not a free tier: $5 of credits for 30 days, and the account asks for a card.
+      5 requests a minute, 1,000,000 tokens a day.
+
+  - name: anthropic
+    kind: anthropic
+    base_url: https://api.anthropic.com/v1
+    model: claude-haiku-4-5-20251001
+    key: ANTHROPIC_API_KEY
+    paid: true
+    note: Paid. The data dictionary is cached (cache_control), read at a tenth of the price.
+
+  - name: openai
+    base_url: https://api.openai.com/v1
+    model: gpt-6-luna
+    key: OPENAI_API_KEY
+    paid: true
+    note: Paid; OpenAI caches a long prompt's prefix on its own.

@@ -166,7 +166,7 @@ flowchart TD
         qdrant[("Qdrant, alias coffee-chunks<br/>dense vector + BM25 weights<br/>rebuilt from Parquet, swapped atomically")]
         ladder{{"mlops rag evaluate<br/>BM25 → dense → hybrid<br/>each paired against the ones before it"}}
         retrieval_runs[("evaluations/retrieval_*<br/>per question · one MLflow run each")]
-        agent["mlops agent ask: LangGraph workflow, qwen3.5:4b<br/>route + second opinion · SQL · predict · retrieve<br/>gate: no evidence, no answer · answer · verify · a trace each"]
+        agent["mlops agent ask: LangGraph workflow: free hosted tiers first, qwen3.5:4b last<br/>route + second opinion · SQL · predict · retrieve<br/>gate: no evidence, no answer · answer · verify · a trace each"]
         mcp["mlops mcp: MCP server on stdio<br/>query_tables · predict_&lt;model&gt; · search_documents · draw<br/>dictionary://tables · guardrails server-side"]
         explorer["mlops explore: Streamlit + deck.gl<br/>headline numbers · map · ask · segments · findings · models<br/>each answer's rows as a chart you can change"]
         agent_eval{{"mlops agent evaluate<br/>40 questions: route · tools · SQL · passage · item<br/>paired against the previous run"}}
@@ -953,6 +953,13 @@ instructions of its own. Each was checked against DuckDB 1.5.5 before it was rel
 - The schema the model writes against is the [data dictionary](../src/domains/coffee/data_dictionary.md),
   the sections of the tables that exist, verbatim - units, nulls and traps ("null means
   not reported, never zero") are what a model gets wrong unless it is told.
+- **Many at once, no lock** (29 September). A DuckDB connection runs one query at a time,
+  and the explorer's tabs, the agent and an MCP client's calls come together: the app and
+  the MCP server queued them behind a lock. Every query now runs on a cursor of its own -
+  another connection to the same database, with the same settings. Checked before it was
+  relied on: a cursor refuses the raw layer, URLs, installs and setting changes as the
+  session does, four run side by side, and interrupting one stops only its own query.
+  The lock is gone; `run_select` is safe from any thread.
 
 ### Which model drives the agent
 
@@ -1238,6 +1245,59 @@ is the usual remedy for a long schema (`agent.schema_sections`, `dictionary.Sche
 whole dictionary 88%, four sections 85% (18% sure it is better), six 79%; the held-out
 set's nine questions cannot tell. The setting stays unset.
 
+### Hosted models first, the local one last
+
+The local model stays the standard - free, private, offline, and what every result here
+was measured with. But a hosted model answers more questions right, and several give a
+free tier. So the agent can ask them first (`rag/providers.py`, `providers.yaml`), in
+order, while their quota lasts, and fall back to the local model, which is always last
+and never set aside: the chain cannot run dry, and with no key set it is the local model
+alone, as a fresh clone has it.
+
+- **Verified before written** (29 September): each endpoint answered a request without a
+  key with 401 (the address is right, nothing spent), and the free limits are each
+  provider's documentation of that day. Gemini (Flash and Flash-Lite; free-tier prompts
+  may train Google's models outside the EU), Groq (`openai/gpt-oss-120b`: 30 requests a
+  minute, 1,000 a day, 8,000 tokens a minute and 200,000 a day - about one SQL question a
+  minute), Mistral (free mode), OpenRouter (50 requests a day on its free models).
+  Cerebras is a 30-day trial that asks for a card. Anthropic and OpenAI are paid, and
+  join only with `MLOPS_PAID_PROVIDERS=true`. NVIDIA's address answered 404, and GitHub
+  Models was retired in July: not listed.
+- **When a provider runs out** - a 429, or a quota named in a 402 or 403 - it is set aside
+  until the moment it says (`retry-after`, Gemini's `retryDelay`), else until the next
+  UTC day for a daily quota and a minute for the rest; a limit that clears within 20
+  seconds is waited out once. A key refused is set aside for a day, a provider down or a
+  reply of the wrong shape (twice) for ten minutes. The set-asides and the tokens each
+  provider spent are written to `data/llm/providers.json`, so the next run does not ask a
+  provider whose day is over. `mlops agent providers` shows the chain, whose key is set,
+  who is set aside and why, and what each spent; `--check` asks each a one-word question.
+- **Two APIs cover them.** The OpenAI-compatible one takes the reply's JSON schema as
+  `response_format` (a provider that refuses it is asked in plain JSON mode from then
+  on); Anthropic's is asked through a tool whose input is the schema. The schema is also
+  in the prompt, and the reply is validated either way. A key travels in a header, never
+  a URL, and is never printed: the command says only whether it is set.
+- **Prompt caching, cheap because of an order already there.** 72% of what the agent
+  sends is the SQL prompt, and most of it is the data dictionary, before the question. A
+  provider that caches a prompt's prefix on its own (OpenAI, Gemini) reuses it; Anthropic
+  is told to (`cache_control` on everything before the question). Locally, llama.cpp
+  already reuses the prefix of the prompt before (measured: 6,500 tokens evaluated in 3.1 s
+  cold, 0.36 s when the previous prompt shared the dictionary), so a repair or a rewrite
+  of the same question costs little; between two questions the router's prompt comes in
+  between and the dictionary is read again.
+- **Replies kept** (`CachedGenerator`, `data/llm/replies.sqlite`, 30 days): a prompt asked
+  before, for the same shape of reply, is answered from the file and costs nothing - at
+  temperature 0 it would be the same answer. On for `ask`, the explorer and MCP
+  (`MLOPS_REPLY_CACHE`); never for an evaluation or the benchmark, which measure a model.
+- **Measurement stays one model.** `mlops agent evaluate` and `benchmark` answer with the
+  local model unless told otherwise (`--generator groq`, or `chain`), with no fallback: a
+  measurement of one model is of that model. Each trace's model span says who answered
+  (`answered_by`: a provider, the local model, or the cache).
+
+What it cannot do yet: no provider has been asked a real question here - there are no keys
+on this machine. The requests are what each API documents, and the tests stand in for
+every refusal, but whether a hosted model passes the benchmark's bar is a measurement
+still to make, once the keys exist.
+
 ### The same tools over MCP
 
 `mlops mcp` serves the agent's tools over the Model Context Protocol, on stdio, for
@@ -1398,6 +1458,31 @@ reader, takes the newest *complete* partition, so it found none and quietly show
 tables alone. The analysis now writes the manifest after the last PNG (the partitions of
 each table it read as its inputs), and the catalog skips a folder with no Parquet in it,
 so the figures never become a view.
+
+### What some choices got wrong
+
+A sweep of every choice the explorer offers, over the real data (29 September): 515
+combinations of a table, a measure, a split and a colour; 32 of the map's layers and
+styles; the 19 studies; every model and every period; and an answer the agent could not
+give. None raised, and these were wrong all the same:
+
+- **An answer with no evidence was badged as checked**: "answered from the tables · every
+  figure checked" over "I found no answer". The page reads `answered` now and says "no
+  answer found".
+- **Years counted as whole numbers were cut like names.** The world market by `market_year`
+  showed the 25 years with the largest value, as bars sorted by height. A year is time
+  (`charts.is_period`, the rule the charts already used): a line, never cut.
+- **Picking the empty value of a filter found nothing**, because `x IN (NULL)` is never
+  true: 83 of the roasters' offers have no country, 105 no process. It is asked for as
+  `IS NULL`.
+- **A bar called "null"**, 137 combinations, and in one it was most of the rows: PROFECO's
+  prices by borough put the whole country outside the city in a borough with no name. A
+  dataset names what an empty value means (`null_labels`: "outside Mexico City", "origin
+  not stated"); other text is "(no value)", and rows empty in a number are counted out.
+- The Models tab told `green_price`, which has no champion and so no predictions, to run
+  `make data`, under a raw catalog error; an answer put on the map could not be taken
+  off; bars of grams stood sorted by height; rows past the map's limit were dropped
+  without a word. Each fixed, each with a test.
 
 ## The price of green coffee (stage 4)
 

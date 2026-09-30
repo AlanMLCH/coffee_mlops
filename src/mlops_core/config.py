@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # by hand, and opening the orchestrator's UI starts nothing. A deployment meant to keep
     # its own history (the ICO's month, the shops' catalogues) sets MLOPS_AUTOMATE=true.
     automate: bool = False
+    # The hosted models the agent may ask before its local one (`rag.providers`), each
+    # used only when its key is set. No file, or no key: the local model alone.
+    providers_file: Path = Path("providers.yaml")
+    # Ask only one: "local", or a provider's name. Unset, the whole chain answers.
+    generator: str | None = None
+    # Providers that bill (Anthropic, OpenAI) join the chain only when this is true.
+    paid_providers: bool = False
+    # Keep every reply by its prompt, so a prompt asked before costs nothing
+    # (`rag.providers.CachedGenerator`). Evaluations never use it: they measure the model.
+    reply_cache: bool = True
 
 
 def unread_settings(names: Iterable[str], domain: str) -> dict[str, str]:

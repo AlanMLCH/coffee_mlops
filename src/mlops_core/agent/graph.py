@@ -101,7 +101,8 @@ class Reply:
 
 
 class TracedGenerator:
-    """A generator whose every call is a span: the prompt in, the reply out."""
+    """A generator whose every call is a span: the prompt in, the reply out, and - for a
+    chain of providers - which one answered (or "cache")."""
 
     def __init__(self, inner: Generator):
         self._inner = inner
@@ -111,6 +112,9 @@ class TracedGenerator:
             span.set_inputs({"prompt": prompt})
             answer = self._inner.ask(prompt, reply)
             span.set_outputs(answer.model_dump(mode="json"))
+            answered_by = getattr(self._inner, "last", None)
+            if answered_by:
+                span.set_attribute("answered_by", answered_by)
             return answer
 
 

@@ -13,7 +13,7 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import UTC, date, datetime
 from functools import cache
 from pathlib import Path
@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 import click
 import polars as pl
 import typer
+from pydantic import SecretStr
 
 from mlops_core.adapter import DomainAdapter, domain_dir, load_adapter
 from mlops_core.config import (
@@ -57,6 +58,7 @@ if TYPE_CHECKING:  # the `rag` extra's; imported where used, for installs withou
 
     from mlops_core.agent.graph import Agent
     from mlops_core.rag.llm import LocalModel
+    from mlops_core.rag.providers import Generator
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="ETL: external sources -> clean tables.")
@@ -506,11 +508,14 @@ def benchmark(
     domain: Domain = None,
     generator: Annotated[
         list[str] | None,
-        typer.Option(help="An Ollama model to measure; repeat it. Defaults to the candidates"),
+        typer.Option(
+            help="A model to measure - an Ollama model, or a provider's name from "
+            "providers.yaml; repeat it. Defaults to the local candidates"
+        ),
     ] = None,
     cases: Cases = None,
 ) -> None:
-    """Measure how well each local model writes the SQL and routes the questions.
+    """Measure how well each model writes the SQL and routes the questions.
 
     The bar - 70% of SQL questions right with repairs, 90% routed right - was set before
     any model was measured. Each model's verdicts land in `evaluations.agent_*` and one
@@ -534,6 +539,7 @@ def benchmark(
         from mlops_core.agent.routing import routing_context
         from mlops_core.agent.sql import read_only, views
         from mlops_core.rag.llm import LocalModel, ollama_client
+        from mlops_core.rag.providers import load_providers
         from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
 
     config = _adapter(domain).config
@@ -547,10 +553,16 @@ def benchmark(
     sql_cases = load_cases(case_files[0], SqlCase)
     route_cases = load_cases(case_files[1], RouteCase)
     settings = Settings()
+    hosted = {provider.name for provider in load_providers(settings.providers_file)}
     for name in generator or CANDIDATES:
-        with ollama_client(settings.ollama_url) as http:
-            model = LocalModel(http, name, GENERATOR_OPTIONS)
-            identity = _identified(model)
+        with ollama_client(settings.ollama_url) as http, ExitStack() as stack:
+            local = LocalModel(http, name, GENERATOR_OPTIONS)
+            # A provider alone, with no fallback and no cache: the model measured is it.
+            model, identity = (
+                hosted_chain(settings, stack, local, only=name)
+                if name in hosted
+                else (local, _identified(local))
+            )
             embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
             linker = _linker(config, dictionary, views(con), embedder)
             sql, routes = run_benchmark(
@@ -605,8 +617,79 @@ def ask(
     typer.echo(f"route: {reply.route} | trace: {mlflow.get_last_active_trace_id()}")
 
 
+@agent_app.command("providers")
+def providers_command(
+    check: Annotated[
+        bool, typer.Option(help="Ask each provider with a key one tiny question: is the key good?")
+    ] = False,
+) -> None:
+    """The chain of models the agent asks, in order: each hosted provider, whether its key
+    is set, whether it is set aside and until when, and what it spent the last days; the
+    local model is always last. Nothing is printed of a key but whether it is set."""
+    with _needs_extra("rag"):
+        from mlops_core.rag.providers import (
+            ApiModel,
+            Cooldowns,
+            Ping,
+            environment,
+            load_providers,
+            provider_client,
+        )
+
+    settings = Settings()
+    configs = load_providers(settings.providers_file)
+    env = environment()
+    cooldowns = Cooldowns(settings.data_dir / "llm" / "providers.json")
+    aside = cooldowns.report()["aside"]
+    now = datetime.now(UTC)
+    if not configs:
+        typer.echo(f"{settings.providers_file}: no providers; the agent asks its local model.")
+    ready = []
+    for number, config in enumerate(configs, start=1):
+        until = cooldowns.until(config.name, now)
+        if not env.get(config.key):
+            state = f"no key ({config.key} is not set)"
+        elif config.paid and not settings.paid_providers:
+            state = "paid: left out (MLOPS_PAID_PROVIDERS is not true)"
+        elif until is not None:
+            state = f"set aside until {until:%Y-%m-%d %H:%M} UTC: {aside[config.name]['reason']}"
+        else:
+            state = "ready"
+            ready.append(config)
+        only = settings.generator == config.name
+        pinned = " (the only one asked: MLOPS_GENERATOR)" if only else ""
+        typer.echo(f"{number}. {config.name} - {config.model}: {state}{pinned}")
+    typer.echo(f"{len(configs) + 1}. local - the Ollama model: always last, never set aside")
+    for day, spent in sorted(cooldowns.report()["spent"].items())[-3:]:
+        for name, usage in spent.items():
+            typer.echo(f"   {day} {name}: {usage.get('calls', 0)} calls, "
+                       f"{usage.get('input', 0):,} tokens in ({usage.get('cached', 0):,} cached), "
+                       f"{usage.get('output', 0):,} out")  # fmt: skip
+    if not check:
+        return
+    for config in ready:
+        with provider_client(config) as client:
+            model = ApiModel(client, config, SecretStr(env[config.key]))
+            try:
+                model.ask("Reply with ok set to true.", Ping)
+            except Exception as failed:  # a check reports; it does not stop at the first
+                typer.echo(f"check {config.name}: FAILED - {failed}")
+            else:
+                typer.echo(f"check {config.name}: answered ({model.spent.get('input', 0)} tokens)")
+
+
 @agent_app.command("evaluate")
-def evaluate_agent(domain: Domain = None, cases: Cases = None) -> None:
+def evaluate_agent(
+    domain: Domain = None,
+    cases: Cases = None,
+    generator: Annotated[
+        str,
+        typer.Option(
+            help="Which model answers: local (the default, comparable with earlier runs), "
+            "a provider's name from providers.yaml, or chain (the whole chain)"
+        ),
+    ] = "local",
+) -> None:
     """Ask the agent every routing question and check each answer end to end.
 
     Checks the tools that ran, verification, the query's answer against the SQL set's
@@ -651,7 +734,12 @@ def evaluate_agent(domain: Domain = None, cases: Cases = None) -> None:
     settings = Settings()
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(f"{config.name}-agent-eval")
-    with agent_session(adapter, settings) as (agent, generator), mlflow.start_run() as run:
+    # Never from the reply cache: an evaluation measures the model, not what it said before.
+    only = None if generator == "chain" else generator
+    with (
+        agent_session(adapter, settings, only, cache=False) as (agent, identity),
+        mlflow.start_run() as run,
+    ):
         answers = run_evaluation(agent.ask, truths, agent.con)
         table, previous = record(answers, _data_dir(config), cases=cases)
         comparison = versus(previous, answers) if previous is not None else None
@@ -661,7 +749,7 @@ def evaluate_agent(domain: Domain = None, cases: Cases = None) -> None:
             answers,
             comparison,
             {
-                "generator": generator,
+                "generator": identity,
                 **{f"option_{k}": v for k, v in GENERATOR_OPTIONS.items()},
                 **{
                     f"prompt_{name}": version(template, reply) if reply else "domain"
@@ -798,10 +886,18 @@ def mcp_server(domain: Domain = None) -> None:
 
 
 @contextmanager
-def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple["Agent", str]]:
+def agent_session(
+    adapter: DomainAdapter,
+    settings: Settings,
+    generator: str | None = None,
+    cache: bool | None = None,
+) -> Iterator[tuple["Agent", str]]:
     """The agent with every service it needs - Ollama, the index, the prediction API -
-    and its generator's identity (model@digest). Tracking must already point at MLflow:
-    the prompts are registered there. Public: the explorer app asks this same agent."""
+    and its generator's identity. The generator is the chain of hosted models whose keys
+    are set, then the local one (`rag.providers`); `generator` (else the setting) asks
+    only one of them. `cache` (else the setting) keeps replies by prompt. Tracking must
+    already point at MLflow: the prompts are registered there. Public: the explorer app
+    asks this same agent."""
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
     from mlops_core.agent.dictionary import dictionary_path, schema_context
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
@@ -818,9 +914,19 @@ def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple[
     chunks, documents = _corpus_tables(config)
     client, _ = _current_index(config, settings, chunks)
     prompts = register_prompts(settings.mlflow_tracking_uri)
-    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
-        generator = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
-        identity = _identified(generator)
+    with (
+        ollama_client(settings.ollama_url) as http,
+        _api_client(settings.api_url) as api,
+        ExitStack() as stack,
+    ):
+        local = LocalModel(http, AGENT_GENERATOR, GENERATOR_OPTIONS)
+        chosen, identity = hosted_chain(
+            settings,
+            stack,
+            local,
+            generator if generator is not None else settings.generator,
+            settings.reply_cache if cache is None else cache,
+        )
         embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
         search = IndexSearch(
             client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
@@ -828,7 +934,7 @@ def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple[
         linker = _linker(config, dictionary, views(con), embedder)
         yield (
             Agent(
-                generator,
+                chosen,
                 adapter,
                 con,
                 schema_context(dictionary, views(con)),
@@ -842,6 +948,50 @@ def agent_session(adapter: DomainAdapter, settings: Settings) -> Iterator[tuple[
             ),
             identity,
         )
+
+
+def hosted_chain(
+    settings: Settings,
+    stack: ExitStack,
+    local: "LocalModel",
+    only: str | None = None,
+    cache: bool = False,
+) -> tuple["Generator", str]:
+    """The generator the agent asks, and its identity: the hosted models whose keys are
+    set, in `providers.yaml`'s order (paid ones only if the setting allows), then the local
+    model. `only` asks just one: "local", or a provider's name - then there is no fallback,
+    so a measurement of one model is of that model. Public: the benchmark uses it too."""
+    from mlops_core.rag.providers import (
+        LOCAL,
+        ApiModel,
+        CachedGenerator,
+        Chain,
+        Cooldowns,
+        ReplyCache,
+        environment,
+        load_providers,
+        provider_client,
+        usable,
+    )
+
+    configs = load_providers(settings.providers_file)
+    found = usable(configs, environment(), settings.paid_providers, only)
+    members = [
+        ApiModel(stack.enter_context(provider_client(config)), config, key) for config, key in found
+    ]
+    local_identity = _identified(local) if only in (None, LOCAL) else None
+    generator: Generator = local
+    if members:
+        state = settings.data_dir / "llm" / "providers.json"
+        chain = Chain(members, local if local_identity else None, Cooldowns(state),
+                      local_name=local_identity or LOCAL)  # fmt: skip
+        generator = chain
+    if cache:
+        replies = ReplyCache(settings.data_dir / "llm" / "replies.sqlite")
+        stack.callback(replies.close)
+        generator = CachedGenerator(generator, replies)
+    names = [member.model for member in members] + ([local_identity] if local_identity else [])
+    return generator, " > ".join(names)
 
 
 def _linker(

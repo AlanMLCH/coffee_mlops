@@ -38,7 +38,7 @@ from mlops_core.agent.prompts import ROUTES, RouteReply, SqlReply
 from mlops_core.agent.routing import route, routing_context
 from mlops_core.agent.sql import QueryResult, read_only
 from mlops_core.agent.text_to_sql import MAX_ATTEMPTS, write_sql
-from mlops_core.rag import llm
+from mlops_core.rag import llm, providers
 from mlops_core.rag.llm import ollama_client
 from mlops_core.storage import read_table, write_table
 
@@ -273,6 +273,28 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
     assert result.exit_code == 0, result.output
     assert "qwen3.5:4b@2a654d98e6fb: SQL 100% right" in result.output
     assert "meets the bar" in result.output
+
+    # A provider's name measures that hosted model, alone.
+    (tmp_path / "providers.yaml").write_text(
+        "providers:\n  - {name: groq, base_url: 'https://llm.test/v1', model: m-1, key: G_KEY}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("G_KEY", "k")
+
+    def hosted(request: httpx.Request) -> httpx.Response:
+        shape = json.loads(request.content)["response_format"]["json_schema"]["name"]
+        reply = SqlReply(sql=READS) if shape == "SqlReply" else RouteReply(route="data")
+        content = {"message": {"content": reply.model_dump_json()}}
+        return httpx.Response(200, json={"choices": [content]})
+
+    original = providers.provider_client
+    monkeypatch.setattr(providers, "provider_client",
+                        lambda config: original(config, httpx.MockTransport(hosted)))  # fmt: skip
+
+    measured = CliRunner().invoke(cli.app, ["agent", "benchmark", "--generator", "groq"])
+
+    assert measured.exit_code == 0, measured.output
+    assert "groq/m-1: SQL 100% right" in measured.output
 
 
 def test_a_named_case_set_lives_beside_the_domains() -> None:

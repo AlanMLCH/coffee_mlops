@@ -34,7 +34,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 - **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`) over three tools:
   locked-down text-to-SQL, the prediction API, and dense retrieval in Qdrant. Every
   figure in an answer is checked against its evidence before it is shown, and when the
-  tools find nothing it says so instead of writing an answer.
+  tools find nothing it says so instead of writing an answer. Free tiers of hosted models
+  (Gemini, Groq, Mistral, OpenRouter) can answer first, each set aside when its quota runs
+  out; the local model is always the last, so the agent never runs dry.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
   Desktop, Claude Code or an IDE, and an explorer app - the price ladder at a glance, a
   deck.gl map of the city, questions to the agent with a chart of every answer, the
@@ -139,7 +141,8 @@ make check                    # lint + types + tests: offline, no services neede
 
 **2. Credentials: optional.** Without them everything builds except DENUE's register of
 establishments and the USDA API's cross-check of the PSD file; `make extract` says which it
-skipped and why.
+skipped and why. The hosted models' keys are optional too: without them the agent runs on
+the local model; `uv run mlops agent providers` shows which are set and who is out of quota.
 
 ```bash
 cp .env.example .env          # then fill in what you have (the file says where to get each)
@@ -189,7 +192,7 @@ current month; run it before a month ends). `make help` lists every target.
 | Models | scikit-learn, LightGBM, Optuna, MLflow (tracking and registry) |
 | Serving | FastAPI (Docker), batch predictions as Parquet |
 | Monitoring | Evidently |
-| Agent | Ollama (`qwen3.5:4b`, `qwen3-embedding:0.6b`), LangGraph, Qdrant, MCP |
+| Agent | Ollama (`qwen3.5:4b`, `qwen3-embedding:0.6b`), free tiers of hosted models first, LangGraph, Qdrant, MCP |
 | Explorer | Streamlit, deck.gl (pydeck), Vega-Lite |
 | Quality | uv, ruff, mypy --strict, pytest (100% coverage), pre-commit + gitleaks, GitHub Actions |
 

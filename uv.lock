@@ -335,6 +335,7 @@ dependencies = [
     { name = "polars" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "typer" },
 ]
@@ -497,6 +498,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "pydeck", marker = "extra == 'explore'", specifier = ">=0.9.3" },
     { name = "pypdf", marker = "extra == 'data'", specifier = ">=6.19.0" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qdrant-client", marker = "extra == 'rag'", specifier = ">=1.19.1" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.9.1" },
