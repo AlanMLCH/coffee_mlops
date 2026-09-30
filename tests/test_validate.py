@@ -43,7 +43,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "denue_cafes": 3,
         "osm_places": 7,
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
-        "siap_agricola": 13,
+        "siap_agricola": 57,  # 2025's 13 rows and two for each year from 2003
         "roaster_catalogs": 33,  # offers: a product in one size
         "world_bank_prices": 3,  # months, read from a workbook's sheet
         "ico_prices": 3,  # days, read from a PDF page by the domain
@@ -53,6 +53,13 @@ def test_recorded_sources_pass_and_come_out_typed(
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()
+    # Every year, each under the headers it was published with, read as one table.
+    siap = frames["siap_agricola"]
+    assert sorted(set(siap["Anio"].to_list())) == list(range(2003, 2026))
+    assert siap.filter(pl.col("Anio") == 2016)["Nomcultivo"].to_list() == [
+        "Café cereza", "Maíz grano"
+    ]  # fmt: skip
+    assert siap.filter(pl.col("Anio") == 2010)["Preciomediorural"].null_count() == 0
     assert frames["cdmx_boroughs"]["area_km2"].dtype == pl.Float64
     assert frames["denue_cafes"]["Latitud"].dtype == pl.Float64  # text upstream
     assert frames["osm_places"]["id"].dtype == pl.Int64
@@ -72,6 +79,31 @@ def test_r_style_na_is_read_as_null(coffee_config: DomainConfig, raw_dir: Path) 
 
     assert "NA" not in df["altitude_mean_meters"].to_list()
     assert df["altitude_mean_meters"].null_count() > 0
+
+
+def test_an_old_header_is_renamed_and_a_thousands_comma_taken_out_of_numbers_only(
+    tmp_path: Path,
+) -> None:
+    from mlops_core.config import SourceConfig
+    from mlops_core.data.extract import Manifest, RawArtifact
+
+    partition = tmp_path / "ingested_at=20260929T000000Z"
+    partition.mkdir()
+    (partition / "t.csv").write_text(
+        'place,Precio,Sembrada\n"Frontera, Corozal","3,350.00",10271\nOcosingo,12.5,"10,271"\n',
+        encoding="utf-8",
+    )
+    manifest = Manifest(source="t", url="https://s.test/", filename="t.csv", sha256="x",
+                        size_bytes=1, ingested_at=datetime(2026, 9, 29, tzinfo=UTC))  # fmt: skip
+    source = SourceConfig(url="https://s.test/", filename="t.csv", thousands=",",
+                          renamed={"Precio": "price", "absent": "x"})  # fmt: skip
+
+    frame = read_raw(RawArtifact(partition, manifest), source)
+
+    assert frame.columns == ["place", "price", "Sembrada"]
+    assert frame["price"].to_list() == ["3350.00", "12.5"]
+    assert frame["Sembrada"].to_list() == ["10271", "10271"]
+    assert frame["place"].to_list() == ["Frontera, Corozal", "Ocosingo"]  # a name keeps it
 
 
 def test_missing_ingestion_fails_with_a_hint(coffee_adapter: CoffeeAdapter, tmp_path: Path) -> None:

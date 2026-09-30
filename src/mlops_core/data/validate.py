@@ -18,6 +18,7 @@ stacked with the time of its download. One such download can also be checked alo
 
 import json
 import logging
+import re
 import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -67,7 +68,26 @@ def read_raw(artifact: RawArtifact, source: SourceConfig) -> pl.DataFrame:
             data = archive.read(source.member)
     if source.encoding.replace("-", "").lower() != "utf8":
         data = data.decode(source.encoding).encode("utf-8")
-    return pl.read_csv(data, infer_schema_length=0, null_values=source.null_values or None)
+    frame = pl.read_csv(data, infer_schema_length=0, null_values=source.null_values or None)
+    frame = frame.rename({old: new for old, new in source.renamed.items() if old in frame.columns})
+    if source.thousands is not None:
+        frame = frame.with_columns(_without_thousands(frame, source.thousands))
+    return frame
+
+
+def _without_thousands(frame: pl.DataFrame, separator: str) -> list[pl.Expr]:
+    """Each text column with the separator taken out of the cells that are a number
+    written with it ("3,350.00"), and nothing else touched."""
+    mark = re.escape(separator)
+    number = rf"^-?\d{{1,3}}({mark}\d{{3}})+(\.\d+)?$"
+    return [
+        pl.when(pl.col(c).str.contains(number))
+        .then(pl.col(c).str.replace_all(separator, "", literal=True))
+        .otherwise(pl.col(c))
+        .alias(c)
+        for c in frame.columns
+        if frame.schema[c] == pl.String
+    ]
 
 
 def read_sheet(path: Path, source: SourceConfig) -> pl.DataFrame:
@@ -110,7 +130,10 @@ def validate_raw(adapter: DomainAdapter, raw_dir: Path) -> dict[str, ValidatedSo
                 f"No raw ingestion for '{name}' in {raw_dir}; run extract first"
             )
         read = _reader(adapter, name, readers, json_readers)
-        validated[name] = _validated(name, raw_dir, contracts[name], name in history, read)
+        yearly = config.sources[name].years is not None
+        validated[name] = _validated(
+            name, raw_dir, contracts[name], name in history, read, yearly=yearly
+        )
 
     for name in json_readers:
         if latest_ingestion(raw_dir, name) is None:
@@ -159,10 +182,16 @@ def _validated(
     contract: pa.DataFrameSchema,
     accumulate: bool,
     read: Callable[[RawArtifact], pl.DataFrame],
+    yearly: bool = False,
 ) -> ValidatedSource:
     """The latest download, checked; or, for a source whose history is its downloads,
-    every one of them checked on its own and stacked with the time it was read."""
+    every one of them checked on its own and stacked with the time it was read; or, for a
+    source of one file a year, each year's latest download, checked and stacked."""
     downloads = ingestions(raw_dir, name)
+    if yearly:
+        by_year = list({artifact.manifest.url: artifact for artifact in downloads}.values())
+        frames = [_checked(contract, artifact, read(artifact)).frame for artifact in by_year]
+        return ValidatedSource(downloads[-1], pl.concat(frames), len(by_year))
     if not accumulate:
         return _checked(contract, downloads[-1], read(downloads[-1]))
     frames = [

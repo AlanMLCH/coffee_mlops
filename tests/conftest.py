@@ -182,6 +182,27 @@ def census_archive(rows: list[str] = CENSUS_ROWS) -> bytes:
     return buffer.getvalue()
 
 
+def siap_year(year: int) -> bytes:
+    """An earlier year of SIAP's closing statistics, as it was published: its own headers
+    ("Precio" until 2020, "Nomcultivo Sin Um" from 2015 to 2020), Latin-1, CRLF, and one
+    coffee row (Ocosingo) beside another crop."""
+    crop = "Nomcultivo Sin Um" if 2015 <= year <= 2020 else "Nomcultivo"
+    price = "Precio" if year <= 2020 else "Preciomediorural"
+    header = (
+        "Anio,Idestado,Nomestado,Idddr,Nomddr,Idcader,Nomcader,Idmunicipio,Nommunicipio,"
+        "Idciclo,Nomcicloproductivo,Idmodalidad,Nommodalidad,Idunidadmedida,Nomunidad,"
+        f"Idcultivo,{crop},Sembrada,Cosechada,Siniestrada,Volumenproduccion,Rendimiento,"
+        f"{price},Valorproduccion"
+    )
+    rows = [
+        f"{year},7,Chiapas,23,Palenque,4,Ocosingo,59,Ocosingo,3,Perennes,2,Temporal,200201,"
+        f"Tonelada,5710000,Café cereza,2800,2800,0,{3000 + year},1.1,5000,15000000",
+        f"{year},7,Chiapas,23,Palenque,4,Ocosingo,59,Ocosingo,1,Primavera-Verano,2,Temporal,"
+        "200201,Tonelada,2800000,Maíz grano,100,100,0,200,2,4000,800000",
+    ]
+    return "\r\n".join([header, *rows, ""]).encode("latin-1")
+
+
 def zip_fixture(fixture: str, member: str) -> bytes:
     """Rebuild the upstream ZIP envelope around a recorded CSV excerpt."""
     buffer = io.BytesIO()
@@ -256,6 +277,10 @@ def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedS
     payloads[WORLD_BANK_FILE] = recorded["world_bank_prices"]
     payloads[urls["profeco_prices"]] = PROFECO_PAGE
     payloads[PROFECO_FILE] = recorded["profeco_prices"]
+    # A file a year: the recorded one is the last year's; the earlier ones are made.
+    siap = coffee_config.sources["siap_agricola"].editions()
+    payloads |= {url: siap_year(year) for year, url, _ in siap[:-1]}
+    payloads[siap[-1][1]] = recorded["siap_agricola"]
     # The corpus a publisher serves to anyone. The ones behind a 403 are not here: they
     # are handed over by a person, and their absence is what the extract step reports.
     documents = {

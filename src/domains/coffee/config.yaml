@@ -48,16 +48,27 @@ sources:
       expected_features: 16 # the 16 alcaldias
     refresh_hours: 8760 # 83 MB, and the 2020 framework does not change
 
-  # SIAP's closing agricultural statistics for 2025: every crop in every municipality,
-  # the definitive figures (not the monthly advance). Verified 2026-09-21: 35,902 rows,
-  # 314 crops; coffee is crop 5710000 "Café cereza" in tonnes, 501 rows in 489
-  # municipalities of 15 states. One file per year (2003-2025) at the same URL with a
-  # different ANIO; this is the latest.
+  # SIAP's closing agricultural statistics: every crop in every municipality, the
+  # definitive figures of each year (not the monthly advance), one file a year at the same
+  # address but for ANIO. Verified 2026-09-21 for 2025 (35,902 rows, 314 crops) and
+  # 2026-09-29 for every year 2003-2025: coffee is crop 5710000 "Café cereza" in tonnes,
+  # 457 to 501 rows a year. A closed year is downloaded once; when 2026 closes, `last`
+  # moves.
   siap_agricola:
-    url: https://nube.agricultura.gob.mx/index.php?view=10AE434F-A2158368-A120BC5A-EDF4AFAA&ANIO=2025
-    filename: Cierre_agricola_mun_2025.csv
-    # Latin-1, and nothing in the file says so. Read as UTF-8 it fails on "Otoño".
+    url: https://nube.agricultura.gob.mx/index.php?view=10AE434F-A2158368-A120BC5A-EDF4AFAA&ANIO={year}
+    filename: Cierre_agricola_mun_{year}.csv
+    years: {first: 2003, last: 2025}
+    # Latin-1 every year, and nothing in the file says so. Read as UTF-8 it fails on "Otoño".
     encoding: latin-1
+    # The headers changed twice (verified 2026-09-29): "Precio" until 2020, and
+    # "Nomcultivo Sin Um" from 2015 to 2020. The same columns, by their name since 2021.
+    renamed: {Precio: Preciomediorural, Nomcultivo Sin Um: Nomcultivo}
+    # Three cells in 2021 and 2022 write a thousands comma ("10,271", "3,350.00") among
+    # every other number written bare (verified 2026-09-29).
+    thousands: ","
+    # And two cells of 2009 (the yield of two bean fields) hold a spreadsheet's error
+    # where a number would be: no value, as SIAP computed it.
+    null_values: ["#¡NUM!"]
     refresh_hours: 720 # the closing statistics of a year come out once
 
   # Stage 4: the international price of green coffee. The World Bank's Pink Sheet, monthly
@@ -1161,16 +1172,19 @@ explore:
       dimensions: [country, processing_method, variety, snapshot, color]
       filters: [snapshot, processing_method, country]
       null_labels: {processing_method: not stated, variety: not stated, color: not stated}
-    - name: Mexico's harvest (SIAP, 2025)
-      description: Coffee cherry by state and municipality, the closing figures of the year.
+    - name: Mexico's harvest (SIAP, 2003-2025)
+      description: >-
+        Coffee cherry by state and municipality, the closing figures of every year since
+        2003; split by year for the series, and filter a year for one harvest.
       table: clean.mexico_production
       measures:
         production_t: sum(production_t)
         value_mxn: sum(value_mxn)
         rural_mxn_per_t: sum(value_mxn) / sum(production_t)
+        harvested_ha: sum(harvested_ha)
         municipalities: count(DISTINCT municipality_id)
-      dimensions: [state, municipality, year]
-      filters: [state]
+      dimensions: [year, state, municipality]
+      filters: [year, state]
     - name: The world market (USDA PSD)
       description: Production, exports and consumption by country and market year, thousands of 60 kg bags.
       table: clean.market_context
@@ -1257,11 +1271,23 @@ explore:
       kind: bar
       x: edition
       y: places
+    - title: Mexico's harvest since 2003
+      text: >-
+        Tonnes of coffee cherry, every closing year of SIAP's statistics: Mexico grew 1.7
+        million in 2004 and less than half of that in 2016, and 1.07 million in 2025.
+      sql: >-
+        SELECT year, sum(production_t) / 1000 AS thousand_t
+        FROM clean.mexico_production GROUP BY year ORDER BY year
+      kind: line
+      x: year
+      y: thousand_t
     - title: Who grows Mexico's coffee
       text: >-
         Share of the 2025 harvest of coffee cherry by state: Chiapas, Veracruz, Puebla and
         Oaxaca grow nine kilograms in ten.
-      sql: SELECT state, share_pct FROM analysis.production_by_state
+      sql: >-
+        SELECT state, share_pct FROM analysis.production_by_state
+        WHERE year = (SELECT max(year) FROM analysis.production_by_state)
       kind: bar
       x: state
       y: share_pct

@@ -115,6 +115,24 @@ class SpatialConfig(BaseModel):
     expected_features: int
 
 
+YEAR = "{year}"
+
+
+class YearRange(BaseModel):
+    """The years a statistic has a file for, both included."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    first: int
+    last: int
+
+    @model_validator(mode="after")
+    def _in_order(self) -> Self:
+        if self.first > self.last:
+            raise ValueError(f"years run from first to last: {self.first} > {self.last}")
+        return self
+
+
 class SourceConfig(BaseModel):
     """A file the domain downloads as it is: a table (CSV, or a workbook's sheet), a map
     layer inside an archive, or a file only the domain can read."""
@@ -152,6 +170,37 @@ class SourceConfig(BaseModel):
     # scheduled daily run would otherwise fetch an 83 MB boundary file that last
     # changed in 2020, every day.
     refresh_hours: float | None = Field(None, gt=0)
+    # A statistic published one file a year at the same address but for the year, written
+    # `{year}` in `url` and `filename`: each year is its own download, a closed year -
+    # every one but the last - is downloaded once and kept, and the years are read as
+    # one table. The next year closes by moving `last`.
+    years: YearRange | None = None
+    # A column's older header -> its name now, for a file whose headers changed between
+    # editions ("Precio" before 2021, "Preciomediorural" since). Applied when read.
+    renamed: dict[str, str] = {}
+    # A thousands separator some cells use ("10,271" among thousands of "10271"): taken
+    # out when read, from a cell that is a number and nothing else, so a name keeps it.
+    thousands: str | None = Field(None, min_length=1, max_length=1)
+
+    def editions(self) -> list[tuple[int, str, str]]:
+        """Each year's (year, url, filename); none for a source that is one file."""
+        if self.years is None:
+            return []
+        return [
+            (year, str(self.url).replace(YEAR, str(year)), self.filename.replace(YEAR, str(year)))
+            for year in range(self.years.first, self.years.last + 1)
+        ]
+
+    @model_validator(mode="after")
+    def _a_year_is_written_where_it_changes(self) -> Self:
+        named = YEAR in str(self.url) and YEAR in self.filename
+        if (self.years is not None) != named:
+            raise ValueError(
+                f"`years` and {YEAR} in both `url` and `filename` go together: '{self.filename}'"
+            )
+        if self.years is not None and (self.link or self.link_text):
+            raise ValueError("A file a year is addressed by its year, not found by a link")
+        return self
 
     @model_validator(mode="after")
     def _zip_needs_member(self) -> Self:

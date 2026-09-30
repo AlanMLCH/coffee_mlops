@@ -169,6 +169,8 @@ def ingest(
     client: httpx.Client,
     now: datetime | None = None,
 ) -> RawArtifact:
+    if source.years is not None:
+        return _ingest_years(name, source, raw_dir, client, now)
     fresh = _fresh(raw_dir, name, source.refresh_hours, now)
     if fresh is not None:  # before the page is read too: that is a request as well
         return fresh
@@ -178,6 +180,39 @@ def ingest(
     elif source.link_text is not None:
         url = find_link(client, url, source.link_text, on="text")
     return ingest_file(name, url, source.filename, raw_dir, client, now)
+
+
+def _ingest_years(
+    name: str,
+    source: SourceConfig,
+    raw_dir: Path,
+    client: httpx.Client,
+    now: datetime | None,
+) -> RawArtifact:
+    """A statistic published one file a year: each year its own download, recognised by
+    its address. A closed year - any but the last - is downloaded once and kept; the last
+    one is checked again when `refresh_hours` says. Returns the last year's download."""
+    fresh = _fresh(raw_dir, name, source.refresh_hours, now) is not None
+    stored = {artifact.manifest.url: artifact for artifact in ingestions(raw_dir, name)}
+    editions = source.editions()
+    latest: RawArtifact | None = None
+    failed = []
+    for order, (year, url, filename) in enumerate(editions):
+        closed = year != editions[-1][0]
+        if url in stored and (closed or fresh):
+            latest = stored[url]
+            continue
+        # A partition is named by its moment: given one, each year's is a microsecond
+        # later, so the years of one run never collide and sort in order.
+        at = now + timedelta(microseconds=order) if now is not None else None
+        try:
+            latest = ingest_file(name, url, filename, raw_dir, client, at, by_url=True)
+        except (httpx.HTTPError, ValueError) as error:  # one year down: the others still
+            failed.append(f"{year} ({type(error).__name__})")
+    if failed:
+        raise LookupError(f"{name}: not downloaded for {', '.join(failed)}; the rest is stored")
+    assert latest is not None  # a year range has at least one year
+    return latest
 
 
 def find_link(
@@ -230,9 +265,12 @@ def ingest_file(
     client: httpx.Client,
     now: datetime | None = None,
     refresh_hours: float | None = None,
+    by_url: bool = False,
 ) -> RawArtifact:
     """Stream a file into a raw partition: a table, a map layer, a document, any bytes -
-    unless it was checked within `refresh_hours`."""
+    unless it was checked within `refresh_hours`. `by_url`: an unchanged download is one
+    that matches the last one from the same address, not the source's last (a source of
+    one file a year)."""
     fresh = _fresh(raw_dir, name, refresh_hours, now)
     if fresh is not None:
         return fresh
@@ -241,7 +279,7 @@ def ingest_file(
     part_file = source_dir / f".{filename}.part"
 
     sha256, size, last_modified = _download(client, url, part_file)
-    return _store(name, filename, part_file, raw_dir, url, sha256, size, last_modified, now)
+    return _store(name, filename, part_file, raw_dir, url, sha256, size, last_modified, now, by_url)
 
 
 def store_payload(
@@ -275,11 +313,16 @@ def _store(
     size: int,
     last_modified: str | None,
     now: datetime | None,
+    by_url: bool = False,
 ) -> RawArtifact:
     """The one place a raw partition is created, whatever produced the bytes."""
     ingested_at = now or datetime.now(UTC)
     (raw_dir / name / CHECKED_AT).write_text(ingested_at.isoformat(), encoding="utf-8")
-    previous = latest_ingestion(raw_dir, name)
+    previous = (
+        next((a for a in reversed(ingestions(raw_dir, name)) if a.manifest.url == source_url), None)
+        if by_url
+        else latest_ingestion(raw_dir, name)
+    )
     if previous is not None and previous.manifest.sha256 == sha256:
         part_file.unlink()
         logger.info("%s unchanged since %s", name, previous.manifest.ingested_at)

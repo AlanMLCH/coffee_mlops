@@ -492,11 +492,14 @@ CROP = domains.coffee.adapter().config.production
 
 
 def test_a_municipality_split_across_districts_becomes_one_row(frames: Frames) -> None:
-    """Ocosingo sits in three CADERs of two districts: one municipality, summed."""
-    production = clean_mexico_production(frames["siap_agricola"], CROP)
+    """Ocosingo sits in three CADERs of two districts: one municipality a year, summed."""
+    everything = clean_mexico_production(frames["siap_agricola"], CROP)
+    production = everything.filter(pl.col("year") == 2025)
 
     ocosingo = production.filter(pl.col("municipality_id") == "07059").row(0, named=True)
     assert production["municipality_id"].is_unique().all()
+    assert everything.select("municipality_id", "year").is_unique().all()
+    assert everything["year"].n_unique() == 23  # every closing year, 2003 to 2025
     assert ocosingo["planted_ha"] == 2870 + 1008 + 1860
     # Yield from the totals, not an average of the rows' own yields.
     assert ocosingo["yield_t_per_ha"] == pytest.approx(

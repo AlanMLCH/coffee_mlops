@@ -15,6 +15,7 @@
 {"id": "production-01", "question": "Which Mexican state produced the most coffee cherry in 2025?", "sql": "SELECT state FROM clean.mexico_production WHERE year = 2025 GROUP BY state ORDER BY sum(production_t) DESC LIMIT 1"}
 {"id": "production-02", "question": "What was Puebla's rural price per tonne of coffee cherry in 2025, taken as its total value over its total production?", "sql": "SELECT sum(value_mxn) / sum(production_t) FROM clean.mexico_production WHERE state = 'Puebla' AND year = 2025"}
 {"id": "production-03", "question": "How many municipalities of Veracruz grew coffee in 2025?", "sql": "SELECT count(DISTINCT municipality_id) FROM clean.mexico_production WHERE state = 'Veracruz' AND year = 2025"}
+{"id": "production-04", "question": "In which year since 2003 did Mexico harvest the least coffee cherry?", "sql": "SELECT year FROM clean.mexico_production GROUP BY year ORDER BY sum(production_t) LIMIT 1"}
 {"id": "roasters-01", "question": "Which roaster sells the most coffees?", "sql": "SELECT shop FROM clean.roaster_coffees GROUP BY shop ORDER BY count(*) DESC LIMIT 1"}
 {"id": "roasters-02", "question": "What is the median price per kilogram of the roasters' offers, leaving out flagged outliers?", "sql": "SELECT median(price_mxn_per_kg) FROM clean.roaster_offers WHERE price_outlier IS NOT TRUE"}
 {"id": "roasters-03", "question": "Which country appears most often as an origin of the roasters' coffees?", "sql": "SELECT country FROM clean.roaster_origins WHERE country IS NOT NULL GROUP BY country ORDER BY count(*) DESC LIMIT 1"}

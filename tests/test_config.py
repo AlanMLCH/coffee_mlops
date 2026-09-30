@@ -209,6 +209,29 @@ def test_a_workbook_names_its_sheet_and_a_link_is_a_pattern() -> None:
         SourceConfig(url="https://b.test/", filename="p.csv", link=r"prices-(\d+")
 
 
+def test_a_file_a_year_writes_its_year_where_it_changes() -> None:
+    from mlops_core.config import SourceConfig
+
+    yearly = {"url": "https://s.test/?ANIO={year}", "filename": "cierre_{year}.csv"}
+    source = SourceConfig(**yearly, years={"first": 2023, "last": 2025})
+
+    assert [(y, f) for y, _, f in source.editions()] == [
+        (2023, "cierre_2023.csv"), (2024, "cierre_2024.csv"), (2025, "cierre_2025.csv")
+    ]  # fmt: skip
+    assert source.editions()[0][1] == "https://s.test/?ANIO=2023"
+    assert SourceConfig(url="https://s.test/", filename="one.csv").editions() == []
+    with pytest.raises(ValidationError, match="go together"):
+        SourceConfig(**yearly)  # a year in the address, and no years
+    with pytest.raises(ValidationError, match="go together"):
+        SourceConfig(url="https://s.test/", filename="one.csv", years={"first": 1, "last": 2})
+    with pytest.raises(ValidationError, match="not found by a link"):
+        SourceConfig(**yearly, years={"first": 2023, "last": 2025}, link="x")
+    with pytest.raises(ValidationError, match="2025 > 2023"):
+        SourceConfig(**yearly, years={"first": 2025, "last": 2023})
+    with pytest.raises(ValidationError, match="thousands"):
+        SourceConfig(url="https://s.test/", filename="one.csv", thousands=",,")
+
+
 def test_a_link_is_found_by_where_it_points_or_by_what_it_says_not_both() -> None:
     from mlops_core.config import SourceConfig
 

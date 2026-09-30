@@ -65,6 +65,8 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 
 ![A kilogram of coffee, from the farm to the shelf](docs/figures/price_ladder.png)
 
+- Mexico's coffee harvest halved between 2004 and 2016, from 1.7 to 0.82 million tonnes
+  of cherry (SIAP, every closing year since 2003), and was 1.07 million in 2025.
 - A kilogram of cherry earns a Mexican grower 8 pesos; the same weight of green coffee
   costs 136 at the port, plain ground coffee 380 on a supermarket shelf, and a specialty
   roaster's coffee 1,080 - each step its own product, no conversion assumed.

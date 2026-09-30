@@ -542,6 +542,42 @@ SIAP weighs cherry as picked; PSD counts green coffee ready to export. Set side 
 whether PSD's market year is aligned with SIAP's year or with the one before. That is
 the factor the two would need for both to be right; it is shown, not assumed.
 
+### Every closing year since 2003
+
+SIAP publishes one file a year at the same address but for the year, 2003 to 2025, and
+the project read only the last. A core capability now reads a statistic published that
+way (`SourceConfig.years`, with `{year}` in the address and the file's name): each year
+is its own download and partition, a closed year - any but the last - is downloaded once
+and kept, the last one is checked when `refresh_hours` says, and the years are read as
+one table. A year that fails is named, and the rest are stored. Recognised by its
+address, so the 2025 file already on disk counted as 2025.
+
+Read before it was written (29 September, every year downloaded): 23 files, Latin-1, 4.6
+to 6.7 MB, 457 to 501 rows of *Café cereza* in tonnes a year. And three things the one
+file never showed:
+
+- **The headers changed twice**: `Precio` until 2020, `Nomcultivo Sin Um` from 2015 to
+  2020. `renamed` (a core capability) reads the older header as today's.
+- **Three numbers with a thousands comma** among a million written bare (`"10,271"` in
+  2021, `"3,350.00"` in 2022): `thousands` takes it out of a cell that is a number and
+  nothing else, so "Frontera, Corozal" keeps its comma.
+- **A spreadsheet's error in two cells** (`#¡NUM!`, the yield of two bean fields in
+  2009): no value, declared as a null.
+
+The raw layer keeps every file as SIAP served it (137 MB); only the reading changed.
+`clean.mexico_production` needed nothing new - it already summed by year.
+
+| | 2004 | 2016 | 2025 |
+|---|---:|---:|---:|
+| Coffee cherry, tonnes | 1,696,978 | 824,082 | 1,069,464 |
+| Rural price, pesos a tonne (of each year) | 1,689 | 5,490 | 8,161 |
+
+Mexico's harvest halved between 2004 and 2016 and has recovered by a third since; the
+price is nominal (INEGI's consumer price index would deflate it, a source not yet
+verified). The explorer's dataset splits by year and its findings show the series; the
+agent's dictionary says a question about one harvest filters the year, and a new SQL
+case asks for the year of the smallest harvest (2016).
+
 ## What the roasters sell (stage 3)
 
 The CQI stops in 2023. Four Mexico City roasters - Almanegra, Buna, Café con Jiribilla

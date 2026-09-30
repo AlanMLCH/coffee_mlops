@@ -287,13 +287,13 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
 def test_extract_stores_what_it_reached_and_fails_naming_what_it_did_not(
     data_dir: Path, server: RecordedServer
 ) -> None:
-    siap = str(domains.coffee.adapter().config.sources["siap_agricola"].url)
-    del server.payloads[siap]
+    cqi = str(domains.coffee.adapter().config.sources["cqi_2018"].url)
+    del server.payloads[cqi]
 
     result = CliRunner().invoke(cli.app, ["data", "extract"])
 
     assert result.exit_code == 1
-    assert "siap_agricola: FAILED, HTTPStatusError" in result.output
+    assert "cqi_2018: FAILED, HTTPStatusError" in result.output
     assert "run `make extract` again" in result.output
     assert (data_dir / "coffee" / "raw" / "census_2020").is_dir()  # the rest was stored
 

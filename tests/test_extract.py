@@ -33,16 +33,57 @@ def test_a_source_that_cannot_be_reached_does_not_stop_the_others(
 ) -> None:
     """A government host that times out, or a page whose link moved: said, and the rest
     stored. SIAP's host did time out on a fresh clone's first extract."""
-    del server.payloads[str(coffee_config.sources["siap_agricola"].url)]
+    del server.payloads[str(coffee_config.sources["cqi_2018"].url)]
     server.payloads[str(coffee_config.sources["world_bank_prices"].url)] = b"<html>moved</html>"
 
     extraction = extract_all(coffee_config, tmp_path, client)
 
-    assert extraction.failed.keys() == {"siap_agricola", "world_bank_prices"}
-    assert extraction.failed["siap_agricola"].startswith("HTTPStatusError: Client error '404")
+    assert extraction.failed.keys() == {"cqi_2018", "world_bank_prices"}
+    assert extraction.failed["cqi_2018"].startswith("HTTPStatusError: Client error '404")
     assert extraction.failed["world_bank_prices"].startswith("LookupError: No link on")
     assert "fred_usd_mxn" in extraction.artifacts  # after both in the config's order
-    assert latest_ingestion(tmp_path, "siap_agricola") is None
+    assert latest_ingestion(tmp_path, "cqi_2018") is None
+
+
+def test_a_file_a_year_is_a_download_a_year_and_a_closed_year_is_kept(
+    tmp_path: Path, coffee_config: DomainConfig, server: RecordedServer, client: httpx.Client
+) -> None:
+    """SIAP's closing statistics, one file a year: each its own partition. Asked again,
+    only the last year is checked, and only when due; a year that fails is said, and the
+    rest are stored."""
+    source = coffee_config.sources["siap_agricola"]
+    editions = source.editions()
+    last = ingest("siap_agricola", source, tmp_path, client, now=T0)
+    urls = [artifact.manifest.url for artifact in ingestions(tmp_path, "siap_agricola")]
+    for _, url, _ in editions:
+        server.payloads[url] = b"revised"
+    soon = ingest("siap_agricola", source, tmp_path, client, now=T0 + timedelta(days=1))
+    due = ingest("siap_agricola", source, tmp_path, client, now=T0 + timedelta(days=31))
+
+    assert urls == [url for _, url, _ in editions]
+    assert last.manifest.filename == "Cierre_agricola_mun_2025.csv"
+    assert soon == last  # not due: nothing asked
+    assert due.path.read_bytes() == b"revised" and due.manifest.url == editions[-1][1]
+    assert len(ingestions(tmp_path, "siap_agricola")) == len(editions) + 1  # 2025 twice
+    # A closed year is downloaded once, however often it is asked for.
+    again = ingest("siap_agricola", source, tmp_path, client, now=T0 + timedelta(days=62))
+    assert again == due and len(ingestions(tmp_path, "siap_agricola")) == len(editions) + 1
+
+
+def test_a_year_that_fails_is_named_and_the_others_are_stored(
+    tmp_path: Path, coffee_config: DomainConfig, server: RecordedServer, client: httpx.Client
+) -> None:
+    source = coffee_config.sources["siap_agricola"]
+    year, url, _ = source.editions()[5]
+    del server.payloads[url]
+
+    extraction = extract_all(coffee_config, tmp_path, client)
+
+    assert extraction.failed["siap_agricola"] == (
+        f"LookupError: siap_agricola: not downloaded for {year} (HTTPStatusError); "
+        "the rest is stored"
+    )
+    assert len(ingestions(tmp_path, "siap_agricola")) == len(source.editions()) - 1
 
 
 def test_every_source_is_stored_byte_for_byte(
@@ -65,6 +106,8 @@ def test_every_source_is_stored_byte_for_byte(
             assert re.search(source.link, artifact.manifest.url)
         elif source.link_text is not None:  # the one whose link says so
             assert artifact.manifest.url == PROFECO_FILE
+        elif source.years is not None:  # the last year's, addressed by its year
+            assert artifact.manifest.url == source.editions()[-1][1]
         else:
             assert artifact.manifest.url == str(source.url)
         assert artifact.partition.name.startswith("ingested_at=")

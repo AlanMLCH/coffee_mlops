@@ -115,8 +115,11 @@ read. `analysis.shop_turnover` counts what appeared and disappeared between read
 ## `clean.mexico_production` — coffee grown in one Mexican municipality, one year
 
 SIAP's closing agricultural statistics (definitive, not the monthly advance), crop
-5710000 *Café cereza*. 489 rows for 2025. SIAP splits a municipality by district, CADER
-and water regime; those rows are summed, and yield and price derived from the totals.
+5710000 *Café cereza*, **every year from 2003 to 2025** - about 480 municipalities a year.
+A question about one harvest filters `year` (the latest is 2025); a total over every
+year is rarely what is asked. SIAP splits a municipality by district, CADER and water
+regime; those rows are summed, and yield and price derived from the totals. Prices are
+pesos of each year, not adjusted for inflation.
 
 | Column | Type | Meaning |
 |---|---|---|
