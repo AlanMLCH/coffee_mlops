@@ -377,6 +377,19 @@ def test_boroughs_know_who_lives_in_them_from_the_census(frames: Frames) -> None
     assert table.filter(pl.col("population").is_null()).height == 13
 
 
+def test_boroughs_know_their_workplaces_and_roughly_the_jobs_in_them(frames: Frames) -> None:
+    """Counted at the sector level - the service repeats each count at every level below
+    it - and the jobs from each staff band's middle (`tests.fakes.workplaces`)."""
+    table = check_contract(
+        BOROUGHS, clean_boroughs(frames["cdmx_boroughs"], None, frames["denue_workplaces"])
+    )
+    alone = check_contract(BOROUGHS, clean_boroughs(frames["cdmx_boroughs"]))
+
+    centro = table.filter(pl.col("borough_id") == "09015").row(0, named=True)
+    assert (centro["workplaces"], centro["jobs_estimate"]) == (23, 1677.5)
+    assert alone["workplaces"].null_count() == alone["jobs_estimate"].null_count() == 16
+
+
 def test_a_census_whose_boroughs_do_not_add_up_to_the_state_is_refused(frames: Frames) -> None:
     """A row misread, or missing, and the counts no longer come to the state's own total."""
     short = frames["census_2020"].filter(pl.col("MUN") != "016")

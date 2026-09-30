@@ -51,8 +51,24 @@ DENUE_ESTABLISHMENTS = [
 ]
 
 
+def workplaces(area: str, stratum: str) -> list[dict[str, str]]:
+    """What `Cuantificar` answers for every activity: a count per SCIAN level. Stratum s
+    has s shops in sector 46 (none of the largest, 7), two restaurants in sector 72 only
+    among the smallest, and a subsector row that repeats part of its sector - so an area
+    holds 23 workplaces and an estimated 1,677.5 jobs."""
+    level = int(stratum)
+    shops = level if level < 7 else 0
+    return [
+        {"AE": "46", "AG": area, "Total": str(shops)},
+        {"AE": "461", "AG": area, "Total": str(shops)},
+        {"AE": "72", "AG": area, "Total": "2" if level == 1 else "0"},
+    ]
+
+
 def denue_response(path: str) -> httpx.Response | None:
-    """Answer the two DENUE endpoints the extractor calls, or None if it is not DENUE."""
+    """Answer the DENUE endpoints the extractor calls, or None if it is not DENUE."""
+    if "/Cuantificar/0/" in path:  # every activity, in one area and staff-size stratum
+        return httpx.Response(200, json=workplaces(*path.split("/")[-3:-1]))
     if "/Cuantificar/" in path:
         return httpx.Response(200, json=[{"AE": "722515", "AG": "09", "Total": "3"}])
     if "/BuscarAreaAct/" in path:

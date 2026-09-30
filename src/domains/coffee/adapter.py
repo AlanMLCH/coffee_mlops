@@ -112,6 +112,8 @@ class CoffeeAdapter:
         readers: dict[str, JsonReader] = {}
         if config.denue is not None:
             readers[config.denue.name] = denue.to_frame
+            if config.denue.workplaces is not None:
+                readers[config.denue.workplaces.name] = denue.workplaces_frame
         if config.overpass is not None:
             readers[config.overpass.name] = overpass.to_frame
         if config.fas is not None:

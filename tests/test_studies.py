@@ -284,6 +284,8 @@ def test_coffee_shops_are_counted_per_borough_against_area_and_residents() -> No
             "area_km2": [2.0, 4.0, 10.0],
             "population": [20_000, 40_000, None],
             "schooling_years": [13.0, 11.0, None],
+            "workplaces": [500, 100, None],
+            "jobs_estimate": [4_000.0, 800.0, None],
         }
     )
 
@@ -292,6 +294,8 @@ def test_coffee_shops_are_counted_per_borough_against_area_and_residents() -> No
     centro = table.row(0, named=True)
     assert (centro["borough"], centro["coffee_shops"], centro["per_km2"]) == ("Centro", 2, 1.0)
     assert centro["per_10k_people"] == 1.0
+    # By day the centre holds 4,000 jobs for its 20,000 residents: two shops per 4,000.
+    assert (centro["per_1k_jobs"], centro["jobs_per_resident"]) == (0.5, 0.2)
     assert table.filter(pl.col("borough") == "Norte")["coffee_shops"].item() == 0  # OSM's
     assert table.row(-1, named=True)["per_10k_people"] is None
 
@@ -307,12 +311,16 @@ def test_without_the_register_no_borough_has_a_count_rather_than_zero() -> None:
             "area_km2": [2.0, 4.0],
             "population": [20_000, 40_000],
             "schooling_years": [13.0, 11.0],
-        }
+            "workplaces": [None, None],
+            "jobs_estimate": [None, None],
+        },
+        schema_overrides={"workplaces": pl.Int64, "jobs_estimate": pl.Float64},
     )
 
     table = borough_coffee_shops(shops, boroughs)
 
     assert table["coffee_shops"].null_count() == table["per_10k_people"].null_count() == 2
+    assert table["per_1k_jobs"].null_count() == 2
 
 
 def test_coffee_and_schooling_is_drawn_with_its_rank_correlation() -> None:

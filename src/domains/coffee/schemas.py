@@ -340,6 +340,20 @@ CENSUS_2020 = pa.DataFrameSchema(
     },
 )
 
+# DENUE's count of every activity, per area and staff-size stratum: a row per activity
+# code at every level of SCIAN (sector 2 digits, down to class 6), as the service answers.
+DENUE_WORKPLACES = pa.DataFrameSchema(
+    name="denue_workplaces",
+    coerce=True,
+    unique=["area", "stratum", "activity"],
+    columns={
+        "area": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+        "stratum": pa.Column(pl.Int64, pa.Check.in_range(1, 7)),
+        "activity": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2,6}$")),
+        "establishments": pa.Column(pl.Int64, pa.Check.ge(0)),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -356,6 +370,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "profeco_prices": PROFECO_PRICES,
     "fred_usd_mxn": FRED_USD_MXN,
     "census_2020": CENSUS_2020,
+    "denue_workplaces": DENUE_WORKPLACES,
 }
 
 
@@ -422,6 +437,11 @@ BOROUGHS = pa.DataFrameSchema(
         "households": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
         "schooling_years": pa.Column(pl.Float64, pa.Check.in_range(0, 25), nullable=True),
         "economically_active": pa.Column(pl.Int64, pa.Check.gt(0), nullable=True),
+        # DENUE's workplaces of every activity (null without a token), and the jobs they
+        # hold estimated from their staff-size bands: each band's midpoint, and 251 for
+        # "251 or more" - a floor for the largest.
+        "workplaces": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "jobs_estimate": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
     },
 )
 

@@ -47,6 +47,7 @@ from domains.coffee.schemas import (
     coffee_shop_history_schema,
     coffee_shops_schema,
 )
+from domains.coffee.sources.denue import STRATA
 from mlops_core.adapter import CleanTable
 from mlops_core.data.geo import attribute_points, match_places
 
@@ -57,6 +58,7 @@ TEXT_COLUMNS = ["country", "region", "variety", "processing_method", "color", "g
 # DENUE packs entity + municipality + locality into `AreaGeo`; the first five characters
 # are the borough's official CVEGEO, the same key INEGI's polygons carry.
 BOROUGH_ID_LENGTH = 5
+WORKPLACES = "denue_workplaces"  # DENUE's count of every activity, per staff size
 
 
 def altitude_from_text(text: pl.Expr) -> pl.Expr:
@@ -241,18 +243,50 @@ CENSUS = {
 STATE, TOTAL = "000", "0000"  # the census' municipality code for the state; its total rows
 
 
-def clean_boroughs(areas: pl.DataFrame, census: pl.DataFrame | None = None) -> pl.DataFrame:
+def clean_boroughs(
+    areas: pl.DataFrame,
+    census: pl.DataFrame | None = None,
+    workplaces: pl.DataFrame | None = None,
+) -> pl.DataFrame:
     """The boundary layer as the domain's own table: alcaldias, with their polygons and,
-    once the census is downloaded, who lives in them."""
+    once the census is downloaded, who lives in them; once DENUE's workplaces are, how
+    many there are and roughly how many people work in them."""
     boroughs = areas.rename({"area_id": "borough_id", "area_name": "borough"}).select(
         "borough_id", "borough", "area_km2", "boundary"
     )
     if census is None:
         logger.info("census_2020 was never ingested: the boroughs have no population yet")
-        return boroughs.with_columns(
+        boroughs = boroughs.with_columns(
             pl.lit(None, dtype).alias(name) for name, dtype in CENSUS.values()
         )
-    return boroughs.join(borough_census(census), on="borough_id", how="left")
+    else:
+        boroughs = boroughs.join(borough_census(census), on="borough_id", how="left")
+    if workplaces is None:
+        logger.info("DENUE's workplaces were never ingested (no token?): no jobs per borough")
+        return boroughs.with_columns(
+            pl.lit(None, pl.Int64).alias("workplaces"),
+            pl.lit(None, pl.Float64).alias("jobs_estimate"),
+        )
+    return boroughs.join(borough_workplaces(workplaces), on="borough_id", how="left")
+
+
+def borough_workplaces(counts: pl.DataFrame) -> pl.DataFrame:
+    """Each alcaldia's workplaces of every activity, and the jobs they hold estimated from
+    their staff-size bands (each band's midpoint; the open "251 or more" at 251, so the
+    estimate is a floor where large employers are). Counted at the sector level (two
+    digits of SCIAN): the service answers every level, and each lower one repeats it."""
+    middle = {stratum: (low + (high if high is not None else low)) / 2
+              for stratum, (low, high, _) in STRATA.items()}  # fmt: skip
+    sectors = counts.filter(pl.col("activity").str.len_chars() == 2)
+    return sectors.group_by(pl.col("area").alias("borough_id")).agg(
+        pl.col("establishments").sum().alias("workplaces"),
+        (
+            pl.col("establishments")
+            * pl.col("stratum").replace_strict(middle, return_dtype=pl.Float64)
+        )
+        .sum()
+        .alias("jobs_estimate"),
+    )
 
 
 def borough_census(census: pl.DataFrame) -> pl.DataFrame:
@@ -559,8 +593,8 @@ def clean_tables(
         "coffee_reviews": CleanTable(clean_reviews(frames, rules), ("cqi_2018", "cqi_2023")),
         "market_context": CleanTable(clean_market_context(frames["psd_coffee"]), ("psd_coffee",)),
         "boroughs": CleanTable(
-            clean_boroughs(areas, frames.get("census_2020")),
-            tuple(name for name in ("cdmx_boroughs", "census_2020") if name in frames),
+            clean_boroughs(areas, frames.get("census_2020"), frames.get(WORKPLACES)),
+            tuple(n for n in ("cdmx_boroughs", "census_2020", WORKPLACES) if n in frames),
         ),
         "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
         "coffee_shop_history": CleanTable(

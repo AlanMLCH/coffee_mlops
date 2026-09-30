@@ -77,7 +77,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Of the 9,860 places INEGI registers as "cafeterías" in Mexico City, 38% are named as
   coffee shops; a quarter sell juice. Per resident, they follow schooling: 12.5 per
   10,000 people in Cuauhtémoc, 1.9 in La Magdalena Contreras (Spearman 0.93 with the
-  average years of schooling, 16 boroughs).
+  average years of schooling, 16 boroughs). Per job - DENUE's workplaces of every
+  activity - the boroughs are three times more alike: much of the centre's density is
+  where people work.
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.

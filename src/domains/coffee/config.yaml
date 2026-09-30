@@ -180,6 +180,15 @@ denue:
   # Re-runs within a day replay from disk; the next day asks again. The register is
   # updated a few times a year, so a day costs nothing and a forever cache costs truth.
   cache_hours: 24
+  # Where people work, not only where they live: every establishment of every activity
+  # in each alcaldia, counted per staff-size stratum by `Cuantificar` with activity 0
+  # (verified 2026-09-29: a count for every SCIAN level, and the strata match the
+  # records' own staff bands). 16 alcaldias x 7 strata = 112 requests, same token.
+  workplaces:
+    name: denue_workplaces
+    filename: denue_workplaces.json
+    areas: ["09002", "09003", "09004", "09005", "09006", "09007", "09008", "09009",
+            "09010", "09011", "09012", "09013", "09014", "09015", "09016", "09017"]
 
 # Stage 2, no credential. Verified against the live API on 2026-09-21: 1,125 elements
 # tagged amenity=cafe in Mexico City (1,031 nodes, 94 ways, 0 relations) and 232 tagged
@@ -1109,6 +1118,15 @@ explore:
         SELECT b.borough_id, count(*) * 10000.0 / any_value(b.population) AS coffee_shops_per_10k
         FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
         WHERE s.kind = 'coffee' AND s.source = 'denue' GROUP BY b.borough_id
+    - name: Coffee shops per 1,000 jobs (DENUE)
+      kind: areas
+      unit: per 1,000 jobs
+      description: The same coffee shops, per job there (DENUE's workplaces of every activity, staff estimated from their bands). By day the spread shrinks
+      sql: >-
+        SELECT b.borough_id, count(*) * 1000.0 / any_value(b.jobs_estimate) AS coffee_shops_per_1k_jobs
+        FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
+        WHERE s.kind = 'coffee' AND s.source = 'denue' AND b.jobs_estimate > 0
+        GROUP BY b.borough_id
     - name: Median shelf price of ground coffee
       kind: areas
       unit: MXN/kg
@@ -1282,6 +1300,18 @@ explore:
       kind: scatter
       x: schooling_years
       y: per_10k_people
+    - title: By day, the spread shrinks
+      text: >-
+        Coffee shops per resident vary 6.6 times from borough to borough, and per job (DENUE's
+        workplaces of every activity) 2.7 times: 0.67 to 1.82 per 1,000 jobs. Cuauhtémoc
+        and Miguel Hidalgo hold as many jobs as residents; where people work explains much
+        of the centre.
+      sql: >-
+        SELECT borough, per_10k_people, per_1k_jobs FROM analysis.borough_coffee_shops
+        WHERE per_1k_jobs IS NOT NULL
+      kind: scatter
+      x: per_10k_people
+      y: per_1k_jobs
     - title: Most places entered the register with a census
       text: >-
         DENUE's places today, by the edition each entered the register. Nine in ten came

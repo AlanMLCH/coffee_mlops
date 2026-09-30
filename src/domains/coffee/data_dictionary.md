@@ -63,8 +63,11 @@ the state's own total, which the build checks). 16 rows.
 | `households` | Int? | Inhabited private dwellings |
 | `schooling_years` | Float? | Average years of schooling of people aged 15 and over |
 | `economically_active` | Int? | People aged 12 and over working or looking for work |
+| `workplaces` | Int? | DENUE's establishments of every activity in the borough (null without a DENUE token) |
+| `jobs_estimate` | Float? | People working there, estimated from DENUE's staff-size bands (each band's middle; "251 or more" counted as 251, so a floor) - who is there by day, not who lives there |
 
-Per inhabitant: divide by `population` (per 10,000: `* 10000.0 / population`).
+Per inhabitant: divide by `population` (per 10,000: `* 10000.0 / population`). Per job:
+divide by `jobs_estimate` (per 1,000: `* 1000.0 / jobs_estimate`).
 
 ## `clean.coffee_shops` — one place in DENUE's cafeterías class or OSM's cafés and ice-cream parlours
 

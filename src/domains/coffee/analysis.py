@@ -157,13 +157,15 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
 
 
 def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.DataFrame:
-    """Each borough's coffee shops against its area and the people who live there.
+    """Each borough's coffee shops against its area, the people who live there and the
+    jobs that are there.
 
     The official register's (DENUE): OpenStreetMap's count where its volunteers map. Per
     10,000 inhabitants counts residents, so a borough people commute into - the centre -
-    serves many more than it houses; read it as where coffee shops are, per resident, not
-    as demand. A borough the census has not reached yet has no rate, and without the
-    register (no DENUE token) no borough has a count: unknown, not zero.
+    serves many more than it houses; per 1,000 jobs (DENUE's workplaces of every activity,
+    their staff estimated from its bands) counts who is there by day. Read either as where
+    coffee shops are, not as demand. A borough the census has not reached yet has no rate,
+    and without the register (no DENUE token) no borough has a count: unknown, not zero.
     """
     register = shops.filter(pl.col("source") == "denue")
     counted = (
@@ -172,12 +174,22 @@ def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.Data
         .agg(pl.len().alias("coffee_shops"))
     )
     return (
-        boroughs.select("borough_id", "borough", "area_km2", "population", "schooling_years")
+        boroughs.select(
+            "borough_id",
+            "borough",
+            "area_km2",
+            "population",
+            "schooling_years",
+            "workplaces",
+            "jobs_estimate",
+        )
         .join(counted, on="borough_id", how="left")
         .with_columns(pl.col("coffee_shops").fill_null(pl.lit(None if register.is_empty() else 0)))
         .with_columns(
             (pl.col("coffee_shops") / pl.col("area_km2")).alias("per_km2"),
             (pl.col("coffee_shops") * 10_000 / pl.col("population")).alias("per_10k_people"),
+            (pl.col("coffee_shops") * 1_000 / pl.col("jobs_estimate")).alias("per_1k_jobs"),
+            (pl.col("jobs_estimate") / pl.col("population")).alias("jobs_per_resident"),
         )
         .sort("per_10k_people", "per_km2", descending=True, nulls_last=True)
     )

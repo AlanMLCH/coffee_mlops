@@ -83,6 +83,56 @@ def ingest_establishments(
     return store_payload(config.name, config.filename, payload, raw_dir, DOCUMENTED_URL, now)
 
 
+# DENUE's staff-size strata, as its records name them (verified 2026-09-29: the counts per
+# stratum of class 722515 in Cuauhtémoc match the records' `Estrato` band by band).
+STRATA = {
+    1: (0, 5, "0 a 5 personas"),
+    2: (6, 10, "6 a 10 personas"),
+    3: (11, 30, "11 a 30 personas"),
+    4: (31, 50, "31 a 50 personas"),
+    5: (51, 100, "51 a 100 personas"),
+    6: (101, 250, "101 a 250 personas"),
+    7: (251, None, "251 y más personas"),
+}
+COUNT_URL = "https://www.inegi.org.mx/app/api/denue/v1/consulta/Cuantificar"
+
+
+def ingest_workplaces(
+    client: ApiClient,
+    config: DenueConfig,
+    token: str,
+    raw_dir: Path,
+    now: datetime | None = None,
+) -> RawArtifact:
+    """Every establishment of every activity in each area, counted per staff-size stratum:
+    `Cuantificar` with activity 0 answers a count for every sector, subsector, branch and
+    class, without a record downloaded. Each answer is kept whole, in a canonical order."""
+    workplaces = config.workplaces
+    assert workplaces is not None  # the caller asks only when the config declares it
+    answers = {}
+    for area in workplaces.areas:
+        for stratum in STRATA:
+            url = f"{config.base_url}/Cuantificar/{ALL}/{area}/{stratum}/{token}"
+            rows = client.get_json(url, cache_key=f"denue:workplaces:{area}:{stratum}")
+            answers[f"{area}/{stratum}"] = sorted(rows, key=lambda row: row["AE"])
+    payload = json.dumps(answers, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    logger.info("DENUE: every activity counted in %d areas, %d strata", len(workplaces.areas),
+                len(STRATA))  # fmt: skip
+    return store_payload(workplaces.name, workplaces.filename, payload, raw_dir, COUNT_URL, now)
+
+
+def workplaces_frame(answers: dict[str, list[dict[str, str]]]) -> pl.DataFrame:
+    """The stored counts as rows: area, stratum, activity code and how many there are."""
+    rows = [
+        (key.split("/")[0], int(key.split("/")[1]), row["AE"], row["Total"])
+        for key, counted in answers.items()
+        for row in counted
+    ]
+    return pl.DataFrame(
+        rows, schema=["area", "stratum", "activity", "establishments"], orient="row"
+    )
+
+
 def to_frame(records: list[dict[str, str]]) -> pl.DataFrame:
     """The stored inventory as a frame, reshaped and not edited.
 

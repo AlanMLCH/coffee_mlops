@@ -92,6 +92,7 @@ flowchart TD
         subgraph APIS["APIs, which need code"]
             direction TB
             denue_cafes["denue_cafes<br/>DENUE · token in path, paged<br/>every read kept"]
+            denue_workplaces["denue_workplaces<br/>DENUE · every activity counted<br/>per alcaldia and staff band"]
             osm_places["osm_places<br/>Overpass · one query<br/>every read kept"]
             fas_psd_coffee["fas_psd_coffee<br/>USDA FAS · key in header, by year"]
         end
@@ -222,7 +223,7 @@ flowchart TD
     class green_price_predictions planned
     class roaster_coffees,roaster_origins,roaster_offers,price_indicators domain
     class roaster_offer_history,roaster_origin_history,roaster_flavors domain
-    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,census_2020,denue_cafes,osm_places,fas_psd_coffee,roaster_catalogs domain
+    class cqi_2018,cqi_2023,psd_coffee,siap_agricola,cdmx_boroughs,census_2020,denue_cafes,denue_workplaces,osm_places,fas_psd_coffee,roaster_catalogs domain
     class world_bank_prices,ico_prices,profeco_prices_2024,profeco_prices_2025 domain
     class raw,mlflow,review_predictions,offer_predictions,catalog store
     class agent,mcp,explorer core
@@ -490,6 +491,35 @@ would not add up, and is refused rather than stored.
   more people than live there, since it is where people commute to work.
 - In the explorer: a layer of coffee shops per 10,000 residents and a finding with the
   scatter (`analysis.borough_coffee_shops`).
+
+### Who works there (DENUE, every activity)
+
+"The centre serves far more people than live there" was a sentence; now it is a number.
+DENUE's `Cuantificar`, asked for activity 0, counts every establishment of every
+activity - at every level of SCIAN, sector down to class - without a record downloaded,
+and its stratum narrows the count to one staff-size band. Checked before it was used
+(29 September): the counts per stratum of class 722515 in Cuauhtémoc match the records'
+own `Estrato` band by band (1 = 0-5 people ... 6 = 101-250, 7 = 251 or more). A new API
+source, `denue_workplaces` (16 alcaldias x 7 strata = 112 requests, the same token),
+keeps every answer whole; `clean.boroughs` gains `workplaces` (summed at the sector
+level: each lower level repeats it) and `jobs_estimate` (each band's middle, and 251 for
+the open band - a floor where the large employers are). Without a token, both are null.
+
+Mexico City: 462,732 workplaces and about 3.36 million jobs by this estimate.
+Cuauhtémoc and Miguel Hidalgo hold about as many jobs as residents (0.98 each); the
+outer boroughs, a fifth of one.
+
+| Coffee shops (DENUE) | Per 10,000 residents | Per 1,000 jobs |
+|---|---:|---:|
+| Highest | Cuauhtémoc 12.5 | Azcapotzalco 1.82 |
+| Lowest | La Magdalena Contreras 1.9 | Cuajimalpa 0.67 |
+| Spread, highest over lowest | 6.6x | 2.7x |
+| Coefficient of variation | 0.75 | 0.27 |
+
+Per job, the boroughs are three times more alike than per resident: much of the centre's
+density is where people are by day. It is an estimate from bands, and a job is not a
+customer; the explorer has both layers and the finding, the dictionary the columns, and
+a SQL case asks which borough has the most workplaces (Iztapalapa, 88,581).
 
 ### Every read of the registers (stage 4)
 

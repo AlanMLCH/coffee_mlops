@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 
 from domains.coffee.config import CoffeeConfig, CoffeeCredentials
-from domains.coffee.sources.denue import ingest_establishments
+from domains.coffee.sources.denue import ingest_establishments, ingest_workplaces
 from domains.coffee.sources.fas import ingest_balance
 from domains.coffee.sources.overpass import ingest_places
 from domains.coffee.sources.roasters import ingest_catalogs
@@ -38,12 +38,18 @@ def extract(
     raw_dir = data_dir / "raw"
 
     if (denue := config.denue) is not None:
+        names = [denue.name, *([denue.workplaces.name] if denue.workplaces else [])]
         if credentials.denue_token is None:
-            result.skipped[denue.name] = "COFFEE_DENUE_TOKEN is not set"
+            for name in names:
+                result.skipped[name] = "COFFEE_DENUE_TOKEN is not set"
         else:
             api = _client(client, data_dir, denue.name, denue.rate_limit_seconds, denue.cache_hours)
             token = credentials.denue_token.get_secret_value()
             result.artifacts[denue.name] = ingest_establishments(api, denue, token, raw_dir, now)
+            if denue.workplaces is not None:
+                result.artifacts[denue.workplaces.name] = ingest_workplaces(
+                    api, denue, token, raw_dir, now
+                )
 
     if (overpass := config.overpass) is not None:
         api = _client(

@@ -9,7 +9,7 @@ balance.
 """
 
 import re
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +31,17 @@ class CoffeeCredentials(BaseSettings):
     usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
 
 
+class WorkplacesConfig(BaseModel):
+    """Every establishment of every activity in each area, counted per staff-size stratum:
+    where people work, as a register of workplaces can tell it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str  # the raw source name
+    filename: str
+    areas: list[Annotated[str, Field(pattern=r"^\d{5}$")]] = Field(min_length=1)  # CVEGEO
+
+
 class DenueConfig(BaseModel):
     """The DENUE inventory to pull: one activity class in one state."""
 
@@ -46,6 +57,7 @@ class DenueConfig(BaseModel):
     # How long a cached page stays true. Required on purpose: the default that needs no
     # thought is "forever", which silently turns a live register into a snapshot.
     cache_hours: float
+    workplaces: WorkplacesConfig | None = None
 
 
 class OverpassConfig(BaseModel):

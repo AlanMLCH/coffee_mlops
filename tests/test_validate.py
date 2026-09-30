@@ -26,6 +26,7 @@ def test_every_configured_source_has_a_contract(coffee_adapter: CoffeeAdapter) -
     config = coffee_adapter.config
     apis = (config.denue, config.overpass, config.fas, config.roasters)
     api = {source.name for source in apis if source}
+    api |= {config.denue.workplaces.name} if config.denue and config.denue.workplaces else set()
     contracts = coffee_adapter.raw_contracts()
 
     assert config.sources.keys() | api == contracts.keys()
@@ -46,6 +47,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "psd_coffee": 114,
         "cdmx_boroughs": 16,
         "denue_cafes": 3,
+        "denue_workplaces": 336,  # 16 areas, 7 strata, 3 activity codes each
         "osm_places": 7,
         "fas_psd_coffee": 114,  # the same rows as psd_coffee, by the other road
         "siap_agricola": 57,  # 2025's 13 rows and two for each year from 2003

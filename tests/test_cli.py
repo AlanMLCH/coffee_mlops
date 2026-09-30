@@ -281,6 +281,7 @@ def test_extract_says_when_it_skips_a_source_for_want_of_a_credential(
 
     assert result.exit_code == 0, result.output
     assert "denue_cafes: skipped, COFFEE_DENUE_TOKEN is not set" in result.output
+    assert "denue_workplaces: skipped, COFFEE_DENUE_TOKEN is not set" in result.output
     assert "fas_psd_coffee: skipped, COFFEE_USDA_FAS_API_KEY is not set" in result.output
     assert not (data_dir / "coffee" / "raw" / "denue_cafes").exists()
     assert "cqi_2018:" in result.output  # the file sources still ran
