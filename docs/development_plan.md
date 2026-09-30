@@ -339,6 +339,50 @@ Most of coffee's lines are knowledge no framework can supply: six sources, their
 contracts, and how two CQI scrapes that disagree about spelling become one table. The
 number to watch is the second domain's, and whether `mlops_core` had to change for it.
 
+### Choices, and what was left out
+
+Tools are chosen for the capability they add, not for novelty; each choice below was
+weighed against the leaner option before anything was built (22 September, for the RAG
+and the agent).
+
+- **Dagster orchestrates** because its assets are the layers: raw, clean and features as
+  assets, the Pandera contracts as asset checks, partitions for the sources that
+  accumulate. It runs natively on Windows in the same `uv` environment, and it is a thin
+  layer: every step is a Python function the CLI also runs.
+- **MLflow traces the agent, not Langfuse.** Self-hosted Langfuse v3 needs Postgres,
+  ClickHouse, Redis, MinIO, a web server and a worker; MLflow is already here and covers
+  tracing, LangChain's autolog and evaluation. One tool fewer.
+- **Qdrant, not DuckDB's full-text and vector extensions.** The leaner option existed;
+  the market standard for the category was chosen, and it earns its place: dense and
+  sparse search fused on the server, payload filters for routing by topic, and aliases
+  for swapping an index atomically. Parquet stays the source of truth; the index is
+  derived and can be rebuilt from it.
+- **One model of each, not a zoo.** About 4.9 GB of the laptop's 6 GB of VRAM are free:
+  one generator (`qwen3.5:4b`, after `granite4.2:3b` - chosen first for its tool-calling
+  scores - missed the benchmark's bar) and one embedding model (`qwen3-embedding:0.6b`,
+  multilingual, so the roasters' Spanish descriptions are found without translating them).
+  No guard model: there is no VRAM for one, and no tool writes.
+- **Questions and corpus in English.** A document that exists only in Spanish would be
+  translated before embedding, the original kept in raw; none has needed it yet.
+- **Left out, and why.** Elasticsearch, OpenSearch or Solr: a few thousand chunks and one
+  user, and Qdrant already does the lexical part. Neo4j or GraphRAG: the only graph here,
+  the varieties' genealogy, fits in a recursive CTE, and GraphRAG would take thousands of
+  calls to a 4B model. HyDE or query rewriting by default: an extra model call per
+  question, which enters only if it passes the retrieval gate.
+- **A/B tests offline only.** A paired bootstrap on the same questions is the gate; an
+  online A/B with no traffic is not defensible. Each trace records its variant (prompt
+  versions, search settings): the hook a real A/B would use.
+- **Guardrails are controls, not a framework**: one parsed `SELECT`, the published layers
+  as the only readable directories, no external access, a locked configuration, a row
+  cap, a timeout and a memory limit (see [the agent's SQL](#the-agents-sql-locked-down)).
+- **Three tools, no more** - SQL over the tables, the prediction API, the documents -
+  until the three work well.
+- **MCP closes stage 3, not stage 4.** Stages are defined by a new kind of source; MCP
+  brings no data, it is an interface over the tools stage 3 built. It is the project's
+  own server, not a generic database one, which would skip the locked-down SQL and the
+  data dictionary as the schema's context, and it lives in the core (`mlops mcp --domain
+  <d>`), so every installed domain gets one, as it gets a Dagster graph.
+
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make
@@ -2125,6 +2169,9 @@ The evaluation is built to survive a small test set:
 
 - Model cards — what each model is for, how it performs, where it fails and what it must
   not be used for: [cup score](model-card.md) and [price per kilo](model-card-price.md).
+- [Data sources](sources.md) — what was verified about each source: its address, how it
+  is reached, what the file really holds and the traps found in it; and the candidates
+  verified, rejected or waiting.
 - `experiments/` — one-off studies that answer a question and get logged to MLflow, kept
   out of the pipelines. See "Alternatives tried" in the model card.
 - [Data dictionary](../src/domains/coffee/data_dictionary.md) — every column of every layer, with units; the agent's SQL is written against it.
@@ -2237,10 +2284,8 @@ so nothing could lean on the working copy.
   while the full package ships the tracking server (1.48 GB instead of 2.26 GB).
 - The image has no httpx, DuckDB or matplotlib, so a domain's adapter imports what its
   data pipeline needs inside the methods that use it. CI runs the API's tests in exactly
-  that environment; it caught `validate.py` pulling DuckDB in at import time. It could not
-  catch httpx, which the test tools bring along for FastAPI's test client - and a contract
-  that imported a constant from the package of API clients broke the image for one commit
-  while CI stayed green. So a test also imports the API in a fresh interpreter with every
+  that environment. It cannot see httpx missing, since the test tools bring it along for
+  FastAPI's test client, so a test also imports the API in a fresh interpreter with every
   other extra's packages blocked.
 - `POST /models/<name>/predict` answers `{"target", "prediction", "context",
   "model_version", ...}`: the response names what it predicted instead of assuming it,
@@ -2252,6 +2297,45 @@ so nothing could lean on the working copy.
   request takes; the example is also the one the API's docs show.
 - Settings are `MLOPS_*` (data dir, MLflow URI, which domain); a domain's credentials
   use its own prefix, so the core never holds another project's keys.
+
+### Traps of the environment
+
+A Windows laptop, Docker Desktop, a 6 GB GPU. None of these fails loudly:
+
+- **Git Bash rewrites paths in `docker` arguments**: `-e MLOPS_DATA_DIR=/data` reaches
+  the container as `C:/Program Files/Git/data`, and `docker exec x ls /data` too. Use
+  `MSYS_NO_PATHCONV=1`, or `sh -c '...'` inside the container.
+- **`Path.write_text` writes CRLF on Windows.** `.gitattributes` stores LF, so a script
+  that edited files that way left 46 of them CRLF on disk and LF in the index, and every
+  `git status` rewrote the index. The tree was renormalised; files of the repository are
+  written from Python with `newline="\n"`.
+- **`localhost` resolves to IPv6 first**, and the containers publish on 127.0.0.1 only:
+  every new connection waited for the attempt at `[::1]` to time out (an experiment stuck
+  over ten minutes in `SYN_SENT` ran in 18 s after the change). Ollama's and Qdrant's
+  addresses are `127.0.0.1`.
+- **`mlflow` and `mlflow-skinny` share the `mlflow/` directory**: switching from one to
+  the other leaves the package broken (`ModuleNotFoundError: mlflow` with skinny
+  "installed") until `uv sync --reinstall-package mlflow-skinny`. A fresh environment (CI,
+  the image) never meets it.
+- **The API image**: the slim base lacks `libgomp1`, which LightGBM needs; a cache volume
+  is created owned by root unless its directory exists in the image with the right
+  owner; `data/` is mounted read-only and the model cache has its own volume. MLflow
+  rejects `Host: mlflow:5000` unless `--allowed-hosts` includes the port.
+- **MLflow 3.16 in Compose** starts four web workers and a job runner with seven huey
+  consumers by default (~2 GB of RAM); it runs with `--workers 1` and
+  `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false` (~340 MB). Scikit-learn models are saved with
+  skops, not pickle, and need their trusted types listed.
+- **Ollama's server keeps every finished prompt's state in host RAM**, up to 8 GB: an
+  evaluation took it to about 4 GB and the runner died with `std::bad_alloc` (a 500 on
+  `/api/chat`). The llama.cpp it ships reads `LLAMA_ARG_CACHE_RAM` from the server's
+  environment; set to 0, the cache is off - and the same questions got the same answers
+  run after run, which they had not before. The first request loads a model into VRAM
+  (~95 s for the 4B); an embedding input longer than the context is truncated without a
+  word (HTTP 200).
+- **Tests of the apps**: `st.cache_resource` is global to the process, so it is cleared
+  before each `AppTest` or one test's agent answers the next; a Dagster sensor with a
+  `partition_key` needs `build_sensor_context(definitions=defs)`, and materialising the
+  whole graph in a test leaves the partitioned assets out.
 
 ## Roadmap
 

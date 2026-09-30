@@ -209,6 +209,8 @@ current month; run it before a month ends). `make help` lists every target.
 ## Documentation
 
 - [Development plan](docs/development_plan.md): the detailed record, stage by stage.
+- [Data sources](docs/sources.md): what was verified about each source - address,
+  access, format and the traps in it - and the candidates not (yet) read.
 - [Data dictionary](src/domains/coffee/data_dictionary.md): every column of every table,
   with units; the agent writes its SQL against it.
 - Model cards: [cup score](docs/model-card.md) and [price per kilo](docs/model-card-price.md).
