@@ -112,7 +112,7 @@ flowchart TD
         end
         subgraph CORPUS["Documents: text, never figures"]
             direction TB
-            corpus_sources["17 documents<br/>WCR · FAO · SCA · ICO · papers<br/>fetched, or handed over at a 403"]
+            corpus_sources["22 documents<br/>WCR · FAO · SCA · ICO · USDA · papers<br/>fetched, or handed over at a 403"]
         end
     end
 
@@ -796,9 +796,9 @@ changed between reads, and it could only have flattered the notes.
 
 The tables answer how much and how many. What a variety is, why a washed coffee tastes
 the way it does, what "sweetness" means on a cupping form: that is what the corpus is
-for. 17 documents, 1.33 million characters, in the same raw layer as every other source -
-manifest, sha256, one partition per ingestion - and each read into parts before anything
-uses it (a page of a PDF, a section of an article).
+for. 22 documents, 1.51 million characters (17 and 1.33 million until 30 September), in
+the same raw layer as every other source - manifest, sha256, one partition per ingestion -
+and each read into parts before anything uses it (a page of a PDF, a section of an article).
 
 | Documents | Publisher | Topics |
 |---|---|---|
@@ -808,6 +808,8 @@ uses it (a page of a PDF, a section of an article).
 | Roasting conditions, coffee flavour, postharvest aroma | MDPI Beverages, IJFST | roasting, chemistry, cupping |
 | CVA forms and standards SCA-102 to SCA-105 | Specialty Coffee Association | cupping |
 | Market report, Coffee Development Report, WMT circular | ICO, USDA FAS | market, sustainability |
+| Brewing methods, hot and cold brew, a filter's caffeine (added 30 September) | Molecules, Antioxidants, Scientific Reports (via Europe PMC) | brewing, chemistry, roasting |
+| *Mexico: Coffee Annual*, 2025 and 2026 (added 30 September) | USDA FAS, GAIN | market, cultivation, varieties |
 
 Four rules the ingestion follows, each of them a decision:
 
@@ -862,7 +864,8 @@ about the shape of text rather than its subject, and is counted per document in
   in one review) is joined only where the document spells the word whole, so "the first"
   never becomes "thefirst".
 
-**1,353 chunks**, median 1,056 characters (about 260 tokens), cut at the coarsest
+**1,353 chunks** (1,560 since five documents were added on 30 September), median 1,056
+characters (about 260 tokens), cut at the coarsest
 boundary that fits - paragraph, then sentence, then line - and packed up to 1,200, each
 opening with the last whole sentences of the one before (up to 200 characters). A chunk
 never spans two parts, so it cites one page or one section. Size and overlap are config:
@@ -1049,6 +1052,52 @@ judgments add graded labels.
   each question is embedded once per run, so dense and hybrid see the same vector.
 - **Tested without a server**: Qdrant's in-process mode runs the same collections,
   sparse vectors, fusion and aliases, so CI builds and searches a real index.
+
+### Five more documents: brewing, and Mexico's own coffee
+
+Brewing was the corpus's known gap - one mathematical paper on espresso extraction - and
+Mexico had no document of its own. Five were added on 30 September, each downloaded and
+its text read the day before:
+
+- **Three open-access papers on brewing**, found through Europe PMC's search and read by
+  section like the others (CC BY 4.0): how the method (espresso, V60, French press,
+  Turkish…) changes a cup's bioactive compounds and minerals (*Molecules* 2025), what hot
+  and cold water take out of the grounds (*Antioxidants* 2023), and how roast and
+  extraction yield set a filter's caffeine (*Scientific Reports* 2024).
+- **The USDA attaché's *Coffee Annual* for Mexico**, 2025 and 2026 (public domain): the
+  country's harvest, rust, varieties and trade in words. The GAIN site's own links answer
+  403 to a client; its API's download by file name serves the same PDF.
+
+They add 176,014 characters in 68 parts and **207 chunks** (1,353 → 1,560), 88-100% of
+them filed by their own terms; 144 are about brewing. One chunk of the 2025 annual is
+PSD's balance table flattened into a single line, which the rule for runs of lines ending
+in a figure cannot see; it stays, like the contents pages already known.
+
+Measured on the same 108 questions, paired, before and after:
+
+| nDCG@10 · recall@5 · recall@10 | 1,353 chunks | 1,560 chunks | nDCG@10, after - before |
+|---|---|---|---|
+| BM25 | 0.465 · 0.556 · 0.676 | 0.455 · 0.509 · 0.657 | -0.010 [-0.027, +0.006] |
+| **Dense** | **0.608** · 0.741 · 0.796 | **0.600** · 0.731 · 0.787 | -0.007 [-0.015, -0.002] |
+| Hybrid | 0.589 · 0.704 · 0.769 | 0.590 · 0.676 · 0.759 | +0.000 [-0.021, +0.022] |
+
+The verdicts hold - dense passes against BM25 (+0.145 [+0.073, +0.223]), hybrid fails
+against dense (-0.011 [-0.066, +0.044], 35% sure) - and dense stays the retriever. The
+drop is small and certain, and read question by question it is what adding documents to
+a fixed set costs: the dense ranking changed for 8 of 108 questions, in brewing,
+roasting, chemistry, market and processing. In six the labelled passage moved down one or
+two places; in one it fell from 10th out of the top ten; in one (how the brewing method
+changes the waste) it fell from 4th to 8th, behind four passages on how the method changes
+the cup. Every passage that came in is on the question's subject, and none answers it as
+asked - hot against cold brew temperatures for the ideal brewing temperature, grind size
+in cold brew for grind size in espresso; the closest, on controlling every other stage to
+isolate the roast's effect, answers the mirror image of a question about isolating the
+green coffee's.
+
+**What the set cannot show** is what the documents add: no question points at them, so
+it can only see five more documents competing. The labels are also unjudged for the new
+chunks - never looked at, not judged irrelevant. Measuring the gain takes questions
+drafted from the new documents, the same way the 108 were.
 
 ### The agent's SQL, locked down
 

@@ -23,7 +23,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first) - their tasting notes read into the SCA's flavour
-  categories - and 17 documents for the agent to read.
+  categories - and 22 documents for the agent to read.
 - **Keeps every download untouched and forever** in a content-addressed raw layer:
   running again only adds what is new, never overwrites. Every source and every clean
   table is held to a Pandera contract that stops the pipeline when broken.
@@ -51,7 +51,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Cup score (CQI, trained on 2010-2018, tested on 2022-2023) | MAE **1.648** points | 1.894, the best baseline; certain |
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
-| Retrieval, 108 questions | nDCG@10 **0.608** (dense) | 0.468 (BM25); hybrid did not beat dense |
+| Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
 | The agent, 48 questions end to end | **79%** correct, 98% verified | 73% before the fixes of 29 September |
 | The agent, 25 held-out questions written before those fixes | **88%** correct, 100% verified | 52% before them; +12 measured blind, the rest optimistic (see the plan) |
 
@@ -100,7 +100,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["15 sources + 17 documents"]
+    subgraph SOURCES["15 sources + 22 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]
@@ -160,8 +160,8 @@ uv run mlops secrets          # which are loaded, without printing them
 ```
 
 **3. Documents a publisher will not serve to a script: optional.** MDPI, Oxford Academic
-and the SCA answer 403, so eight of the corpus's 17 documents are downloaded by hand into
-`data/coffee/inbox/documents/`, under the names below; without them the corpus has nine,
+and the SCA answer 403, so eight of the corpus's 22 documents are downloaded by hand into
+`data/coffee/inbox/documents/`, under the names below; without them the corpus has fourteen,
 and `make extract` names each missing one with its address.
 
 | Save as | From |

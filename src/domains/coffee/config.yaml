@@ -363,6 +363,37 @@ documents:
     language: en
     topics: [brewing, chemistry]
     format: jats
+  # Brewing was the corpus' known gap: one mathematical paper on espresso. Three open
+  # access papers found through Europe PMC's search (29 September 2026), full text by
+  # section, CC BY 4.0 each: how the method changes the cup, what hot and cold water take
+  # out of the grounds, and how roast and extraction yield set the caffeine of a filter.
+  - name: pmc_brewing_methods
+    title: Influence of brewing methods on the bioactive and mineral composition of coffee beverages
+    publisher: Molecules (PMC12565998)
+    year: 2025
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12565998/fullTextXML
+    license: CC BY 4.0
+    language: en
+    topics: [brewing, chemistry]
+    format: jats
+  - name: pmc_cold_hot_brew
+    title: "Variables affecting the extraction of antioxidants in cold and hot brew coffee: a review"
+    publisher: Antioxidants (PMC10812495)
+    year: 2023
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10812495/fullTextXML
+    license: CC BY 4.0
+    language: en
+    topics: [brewing, chemistry]
+    format: jats
+  - name: pmc_filter_caffeine
+    title: Caffeine content in filter coffee brews as a function of degree of roast and extraction yield
+    publisher: Scientific Reports (PMC11586412)
+    year: 2024
+    url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC11586412/fullTextXML
+    license: CC BY 4.0
+    language: en
+    topics: [brewing, roasting, chemistry]
+    format: jats
 
   # --- Cupping: the SCA's Coffee Value Assessment ---------------------------------
   # Encrypted with permissions rather than a password; an empty password opens them.
@@ -444,6 +475,27 @@ documents:
     license: Public domain (US government)
     language: en
     topics: [market]
+    format: pdf
+  # Mexico's own coffee, in words: the USDA attaché's yearly report (GAIN), through the
+  # GAIN API's download by file name (the site's own links answer 403 to a client).
+  # Verified 29 September 2026: text PDFs, 8 and 15 pages; no robots.txt (404).
+  - name: gain_mexico_coffee_2026
+    title: "Mexico: Coffee Annual (MX2026-0026)"
+    publisher: USDA Foreign Agricultural Service, GAIN
+    year: 2026
+    url: https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Coffee+Annual_Mexico+City_Mexico_MX2026-0026.pdf
+    license: Public domain (US government)
+    language: en
+    topics: [market, cultivation, varieties]
+    format: pdf
+  - name: gain_mexico_coffee_2025
+    title: "Mexico: Coffee Annual (MX2025-0023)"
+    publisher: USDA Foreign Agricultural Service, GAIN
+    year: 2025
+    url: https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Coffee+Annual_Mexico+City_Mexico_MX2025-0023.pdf
+    license: Public domain (US government)
+    language: en
+    topics: [market, cultivation, varieties]
     format: pdf
 
 # The corpus' own vocabulary: what coffee knowledge is filed under. Metadata, not
@@ -1413,8 +1465,9 @@ explore:
       workplace (who lives and works in each borough).
     - **The Coffee Quality Institute's cupping scores**, frozen in May 2023 - the only
       source here that is not current.
-    - **17 documents** the agent reads: World Coffee Research's variety catalogues, the
-      SCA's cupping standards, FAO's arabica manual, the ICO's reports and five reviews.
+    - **22 documents** the agent reads: World Coffee Research's variety catalogues, the
+      SCA's cupping standards, FAO's arabica manual, the ICO's and the USDA's reports
+      (Mexico's own among them), five reviews and four papers on brewing.
 
     **The limits.** The roasters' notes are their own claims, written to sell, not a
     cupper's. The price model learns mostly from one shop. The agent's model is small

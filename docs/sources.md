@@ -360,9 +360,9 @@ robots.txt allows the project's agent on all four; none asks for a `Crawl-delay`
 
 ## Documents (the corpus)
 
-17 documents indexed, each downloaded and its text read (2026-09-21 to 23); 5 more
-fetched on 2026-09-29 and waiting to be chunked, indexed and measured. None is committed:
-the ones behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
+22 documents, each downloaded and its text read before it was declared (17 on
+2026-09-21 to 23, 5 on 2026-09-29, indexed on 2026-09-30). None is committed: the ones
+behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 
 | Topic | Document | Access | Form | Licence |
 |---|---|---|---|---|
@@ -379,8 +379,8 @@ the ones behind a refusal are fetched by hand into `data/coffee/inbox/documents/
 | flavour, chemistry | MDPI Beverages 2020, *Coffee Flavor: A Review* | **by hand** (403) | PDF, 25 p | CC BY |
 | roasting | MDPI Beverages 2020, *Roasting Conditions and Coffee Flavor* | **by hand** (403) | PDF, 14 p | CC BY |
 | processing, aroma | IJFST 2023, postharvest processing and aroma | **by hand** (403) | PDF, 21 p | CC BY |
-| brewing (waiting) | Molecules 2025 (PMC12565998), Antioxidants 2023 (PMC10812495), Scientific Reports 2024 (PMC11586412) | Europe PMC API | JATS | CC BY 4.0 |
-| market, cultivation (waiting) | USDA GAIN *Mexico: Coffee Annual* 2025 and 2026 | GAIN API, download by file name | PDF, 8 and 15 p | public domain |
+| brewing | Molecules 2025 (PMC12565998), Antioxidants 2023 (PMC10812495), Scientific Reports 2024 (PMC11586412) | Europe PMC API | JATS | CC BY 4.0 |
+| market, cultivation | USDA GAIN *Mexico: Coffee Annual* 2025 and 2026 | GAIN API, download by file name | PDF, 8 and 15 p | public domain |
 
 - **PubMed Central answers automated clients with a reCAPTCHA.** It is not evaded: Europe
   PMC has a documented API (`/webservices/rest/<PMCID>/fullTextXML`), which also serves
