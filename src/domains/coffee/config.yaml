@@ -174,6 +174,35 @@ sources:
     null_values: ["MI", "NA"]
     refresh_hours: 8760 # the next survey is the 2030 census
 
+  # Where people pass: Mexico City's open-data portal (CKAN). Its robots.txt forbids /api/
+  # and asks ten seconds between requests, so the three files are fetched by their
+  # download addresses, ten seconds apart. CC-BY-4.0 (Mexico City's), each. Verified
+  # 2026-09-29/30 with the project's client.
+  # The Metro's entries per station and day since 2010 ("Afluencia Diaria del Metro
+  # (Simple)"): 60 MB, 1,180,920 rows, the 195 station-lines every day. Republished
+  # monthly with the month before added (the portal warns history may be revised).
+  metro_ridership:
+    url: https://datos.cdmx.gob.mx/dataset/f2046fd5-51b5-4876-b008-bd65d95f9a02/resource/0e8ffe58-28bb-4dde-afcd-e5f5b4de4ccb/download/0e8ffe58-28bb-4dde-afcd-e5f5b4de4ccb.csv
+    filename: afluencia_diaria_metro.csv
+    crawl_delay: 10
+    refresh_hours: 720 # a monthly release
+  # The Metrobús' entries per line and day since July 2005: per line only, never per
+  # station. 2 MB; "NaN" for the days before a line opened.
+  metrobus_ridership:
+    url: https://datos.cdmx.gob.mx/dataset/f0ff3759-5c5d-41fb-80cc-2a3c8bbab278/resource/f7943c47-835d-4078-93ea-906f64b72f3b/download/f7943c47-835d-4078-93ea-906f64b72f3b.csv
+    filename: afluencia_diaria_metrobus.csv
+    null_values: ["NaN"]
+    crawl_delay: 10
+    refresh_hours: 720
+  # The city's static GTFS feed (2.4 MB ZIP, every system); its stops are read for the
+  # Metro's and the Metrobús' stations. A stop id names the system and the line.
+  transit_stops:
+    url: https://datos.cdmx.gob.mx/dataset/75538d96-3ade-4bc5-ae7d-d85595e4522d/resource/32ed1b6b-41cd-49b3-b7f0-b57acb0eb819/download/32ed1b6b-41cd-49b3-b7f0-b57acb0eb819.zip
+    filename: gtfs.zip
+    member: stops.txt
+    crawl_delay: 10
+    refresh_hours: 720
+
   # What farmers are paid for their coffee, country by country, year by year: FAOSTAT's
   # producer prices, one bulk file for every crop. Verified 2026-09-29: 11.7 MB ZIP whose
   # CSV is 214 MB unpacked (1.3 million rows, UTF-8, every field quoted); "Coffee, green"
@@ -1095,6 +1124,16 @@ producer_prices:
   # (checked on every build).
   cherry: [Mexico]
 
+# Where people pass: the Metro's and the Metrobús' stations and their entries. Every name
+# of sixteen years of the Metro's counts matches the feed's, folded to its words, but two.
+transit:
+  stops: transit_stops
+  metro: metro_ridership
+  metrobus: metrobus_ridership
+  station_aliases:
+    zocalo tenochtitlan: zocalo
+    ninos heroes: ninos heroes poder judicial cdmx
+
 # Who lives in each borough now (source `intercensal_2025`): the survey's columns read,
 # each under this domain's name and unit. "percent" is per 100 of the group INEGI names in
 # the data dictionary; a count must add up to the city's total.
@@ -1285,6 +1324,13 @@ explore:
       sql: >-
         SELECT borough_id, value AS median_age, ci_low, ci_high
         FROM clean.borough_profile WHERE indicator = 'median_age'
+    - name: Metro entries a day
+      kind: areas
+      unit: entries a day
+      description: People entering the borough's Metro stations on an average day of the last year of the counts, each station's open days only
+      sql: >-
+        SELECT borough_id, metro_daily_entries, metro_stations, metrobus_stations
+        FROM analysis.borough_transit WHERE metro_daily_entries > 0
     - name: Median shelf price of ground coffee
       kind: areas
       unit: MXN/kg
@@ -1301,6 +1347,12 @@ explore:
       sql: >-
         SELECT name, source, borough, latitude, longitude
         FROM clean.coffee_shops WHERE kind = 'coffee'
+    - name: Metro and Metrobús stations
+      kind: points
+      description: Every station on every line, from the city's GTFS feed
+      sql: >-
+        SELECT station, system, line, borough, latitude, longitude
+        FROM clean.transit_stations
     - name: Shelves PROFECO priced
       kind: points
       description: The supermarkets, markets and pharmacies behind the shelf prices
@@ -1471,6 +1523,19 @@ explore:
       kind: bar
       x: indicator
       y: rho_per_10k_people
+    - title: The Metro has not come back
+      text: >-
+        Entries on an average day: the Metro carried 4.2 to 4.6 million a day from 2010 to
+        2019, half that in 2020, and 3.4 million in 2025 - still a fifth fewer - while the
+        Metrobús, which counts per line, went from 1.2 to 1.4 million. Where the Metro's
+        stations board the most people (Cuauhtémoc, 786,000 a day), coffee shops are most
+        (Spearman 0.76 across the boroughs, by count).
+      sql: >-
+        SELECT year, system, daily_entries FROM analysis.transit_by_year WHERE year < 2026
+      kind: line
+      x: year
+      y: daily_entries
+      color: system
     - title: What farmers keep of the port price
       text: >-
         FAOSTAT's producer prices against the World Bank's price of each country's own mix

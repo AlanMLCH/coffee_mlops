@@ -264,6 +264,69 @@ def survey_archive(
     return buffer.getvalue()
 
 
+# The city's GTFS feed: stops of every system, the Metro's and the Metrobús' named by
+# their ids, placed on the boundary fixture's grid of boroughs: Balderas, the Zócalo and
+# the Metrobús in Cuauhtémoc's square, Pantitlán in Venustiano Carranza's, Tláhuac in
+# its own, La Paz north of them all; a Metrobús station listed once per direction; a
+# trolleybus stop the stations leave out.
+TRANSIT_STOPS = [
+    "stop_id,stop_name,stop_lat,stop_lon,zone_id,wheelchair_boarding",
+    "B_0200L1-BALDERAS,Balderas,19.50,-99.25,0200L1-BALDERAS,1",
+    "B_0200L1-PANTITLAN,Pantitlán,19.50,-99.00,0200L1-PANTITLAN,1",
+    "B_0200L2-ZOCALO,Zócalo,19.51,-99.24,0200L2-ZOCALO,1",
+    "B_020L12-TLAHUAC,Tláhuac,19.37,-99.25,020L12-TLAHUAC,1",
+    "B_0200LA-LAPAZ,La Paz,19.60,-99.00,0200LA-LAPAZ,1",
+    "B_0300L4-20NOVIEMBR,20 de Noviembre,19.5050,-99.2550,0300L4-20NOVIEMBR,1",
+    "B_0300L4-20NOVIEMB1,20 de Noviembre,19.5052,-99.2552,0300L4-20NOVIEMB1,1",
+    "B_0300L4-PINOSRZSR,Pino Suárez Sur,19.5060,-99.2560,0300L4-PINOSRZSR,1",
+    "B_0700T1-CENTRAL,Central de Abasto,19.37,-99.09,0700T1-CENTRAL,1",
+]
+
+
+def gtfs_archive(stops: list[str] = TRANSIT_STOPS) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("stops.txt", "\n".join(stops) + "\n")
+        archive.writestr("agency.txt", "agency_id,agency_name\nMETRO,Metro\n")  # not read
+    return buffer.getvalue()
+
+
+def broken(text: str) -> str:
+    """UTF-8 read as Windows-1252, as the Metro's files of 2021-2023 write it."""
+    return text.encode("utf-8").decode("cp1252")
+
+
+# The Metro's daily entries: a closed station's zero, a line and a station whose name came
+# out double-encoded, the Zócalo by its longer name, and a station named twice on one day.
+METRO_RIDERSHIP = [
+    ("2026-07-30", "Linea 1", "Balderas", 20000),
+    ("2026-07-30", "Linea 1", "Pantitlán", 150000),
+    ("2026-07-30", "Linea 2", "Zócalo/Tenochtitlan", 30000),
+    ("2026-07-30", "Linea 12", "Tláhuac", 0),
+    ("2026-07-30", "Linea A", "La Paz", 40000),
+    ("2026-07-31", "Linea 1", "Balderas", 22000),
+    ("2026-07-31", "Linea 1", "Pantitlán", 158000),
+    ("2022-03-01", broken("Línea 1"), broken("Pantitlán"), 90000),
+    ("2020-12-15", "Linea 1", "Balderas", 5559),
+    ("2020-12-15", "Linea 1", "Balderas", 7529),
+]
+
+
+def metro_csv(rows: list[tuple[str, str, str, int]] = METRO_RIDERSHIP) -> bytes:
+    lines = ["fecha,anio,mes,linea,estacion,afluencia"]
+    lines += [f"{day},{day[:4]},Julio,{line},{station},{n}" for day, line, station, n in rows]
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+# The Metrobús' entries per line: "NaN" before a line opened, a line written two ways.
+METROBUS_RIDERSHIP = (
+    "fecha,anio,mes,linea,afluencia\n"
+    "2005-07-26,2005,Julio,Línea 4,NaN\n"
+    "2026-07-30,2026,Julio,Línea 4,80000\n"
+    "2026-07-31,2026,Julio,linea 4,82000\n"
+).encode()
+
+
 # FAOSTAT's bulk file of producer prices, as it downloads: one CSV in a ZIP, every field
 # quoted. Coffee's year values, a month (left out), an estimated zero (a price nobody
 # reported), Mexico's cherry price (SIAP's fixture: 15,000,000 pesos over 5,024 t), a
@@ -404,6 +467,9 @@ def recorded() -> dict[str, bytes]:
         "census_2020": census_archive(),
         "intercensal_2025": survey_archive(),
         "faostat_prices": faostat_archive(),
+        "metro_ridership": metro_csv(),
+        "metrobus_ridership": METROBUS_RIDERSHIP,
+        "transit_stops": gtfs_archive(),
     }
 
 

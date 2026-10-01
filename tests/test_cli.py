@@ -72,6 +72,9 @@ def test_extract_writes_raw_layer_under_the_domain(
         "faostat_prices",
         "census_2020",
         "intercensal_2025",
+        "metro_ridership",
+        "metrobus_ridership",
+        "transit_stops",
         *served,
     }
 
@@ -121,6 +124,8 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "consumer_prices",
         "exchange_rates",
         "producer_prices",
+        "transit_stations",
+        "transit_ridership",
         "documents",
         "document_chunks",
     }
@@ -159,6 +164,8 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "consumer_prices",
         "exchange_rates",
         "producer_prices",
+        "transit_stations",
+        "transit_ridership",
         "documents",
         "document_chunks",
     }

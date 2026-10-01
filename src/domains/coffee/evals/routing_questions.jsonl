@@ -50,3 +50,4 @@
 {"id": "data-20", "question": "Which Mexico City borough has the most workplaces of any activity in INEGI's business register?", "route": "data"}
 {"id": "data-21", "question": "What were Colombian farmers paid for green coffee in 2024, in US dollars per tonne, according to FAO?", "route": "data"}
 {"id": "data-22", "question": "Which Mexico City borough has the highest share of homes rented, according to INEGI's 2025 Intercensal Survey?", "route": "data"}
+{"id": "data-23", "question": "How many people entered the Mexico City Metro on an average day of 2025?", "route": "data"}

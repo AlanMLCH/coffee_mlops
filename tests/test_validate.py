@@ -60,6 +60,9 @@ def test_recorded_sources_pass_and_come_out_typed(
         "fred_usd_mxn": 5,  # days, one of them without a rate
         "census_2020": 5,  # the state, three alcaldias and a small locality
         "intercensal_2025": 30,  # six areas, five estimators each
+        "metro_ridership": 10,  # station-days, one station named twice on one of them
+        "metrobus_ridership": 3,  # line-days, one before the line opened
+        "transit_stops": 9,  # every system's: the stations keep the Metro's and Metrobús'
         "faostat_prices": 9,  # coffee's rows; the other crop left in the file
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.

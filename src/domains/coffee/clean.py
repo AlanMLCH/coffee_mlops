@@ -13,6 +13,8 @@
 - The ICO and the World Bank -> `price_indicators`, and FRED's peso-dollar rate ->
   `exchange_rates`; see `domains.coffee.prices`.
 - PROFECO's shelf prices -> `consumer_prices`; see `domains.coffee.consumer_prices`.
+- The city's GTFS stops and the Metro's and Metrobús' daily entries -> `transit_stations`
+  and `transit_ridership`; see `domains.coffee.transit`.
 
 Transforms are pure functions over validated frames. Reading the raw layer, holding
 each table to its contract and writing it with lineage is the core's job
@@ -37,6 +39,7 @@ from domains.coffee.config import (
     ProducerPricesConfig,
     ProductionConfig,
     ShopKindRule,
+    TransitConfig,
 )
 from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
 from domains.coffee.prices import (
@@ -57,6 +60,7 @@ from domains.coffee.schemas import (
 )
 from domains.coffee.sources.denue import STRATA
 from domains.coffee.survey import clean_borough_profile
+from domains.coffee.transit import clean_transit_ridership, clean_transit_stations
 from mlops_core.adapter import CleanTable
 from mlops_core.data.geo import attribute_points, match_places
 
@@ -589,6 +593,7 @@ def clean_tables(
     shelves: ConsumerPricesConfig,
     farmers: ProducerPricesConfig,
     profile: BoroughProfileConfig,
+    transit: TransitConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
@@ -601,6 +606,7 @@ def clean_tables(
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
     shop_inputs = tuple(name for name in (*READERS, "cdmx_boroughs") if name in frames)
+    stations = clean_transit_stations(frames[transit.stops], areas)
     roasters = clean_roasters(
         frames.get("roaster_catalogs"), rules, read_at.get("roaster_catalogs")
     )
@@ -630,6 +636,13 @@ def clean_tables(
         ),
         "exchange_rates": CleanTable(
             clean_exchange_rates(frames["fred_usd_mxn"]), ("fred_usd_mxn",)
+        ),
+        "transit_stations": CleanTable(stations, (transit.stops, "cdmx_boroughs")),
+        "transit_ridership": CleanTable(
+            clean_transit_ridership(
+                frames[transit.metro], frames[transit.metrobus], stations, transit
+            ),
+            (transit.metro, transit.metrobus, transit.stops),
         ),
         "consumer_prices": CleanTable(
             clean_consumer_prices(shelf_reads(frames, shelves, read_at), areas, shelves),

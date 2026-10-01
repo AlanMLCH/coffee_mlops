@@ -34,6 +34,9 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "census_2020",
         "intercensal_2025",
         "faostat_prices",
+        "metro_ridership",
+        "metrobus_ridership",
+        "transit_stops",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -268,6 +271,14 @@ def test_the_borough_profile_reads_a_source_that_exists() -> None:
     config["borough_profile"]["source"] = "intercensal_2030"
 
     with pytest.raises(ValidationError, match="reads 'intercensal_2030', which is not a source"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_transit_reads_sources_that_exist() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["transit"]["metrobus"] = "trolleybus_ridership"
+
+    with pytest.raises(ValidationError, match=r"`transit` reads \['trolleybus_ridership'\]"):
         CoffeeConfig.model_validate(config)
 
 

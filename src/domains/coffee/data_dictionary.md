@@ -105,6 +105,35 @@ One borough's figure: `WHERE indicator = 'median_age' AND borough = 'Coyoacán'`
 borough on one indicator: `WHERE indicator = 'rented_pct' ORDER BY value DESC`. Never
 average `value` across indicators; a share of the city needs the counts, not the shares.
 
+## `clean.transit_stations` — one Metro or Metrobús station on one line
+
+From the city's GTFS feed. 195 Metro (11 outside the city: no borough), 287 Metrobús.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `station_id` | String | `<system>-<line>-<name>` |
+| `system` | String | `metro` or `metrobus` |
+| `line` | String | `1`..`12`, `A`, `B` (Metro); `1`..`7` (Metrobús) |
+| `station` | String | Name as the feed spells it |
+| `latitude`, `longitude` | Float | WGS84 |
+| `borough_id`, `borough` | String? | Where it is; null outside the city |
+
+## `clean.transit_ridership` — entries on one day: a Metro station, or a whole Metrobús line
+
+Metro since 2010 per station; Metrobús since 2005 per line only (`station_id` null).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `date` | Date | The day |
+| `system` | String | `metro` or `metrobus` |
+| `line` | String | As in `clean.transit_stations` |
+| `station_id`, `station` | String? | The Metro station; null for Metrobús |
+| `entries` | Int | People who entered; 0 = the station was closed |
+
+A system's average day is the mean of its day totals: `SELECT avg(total) FROM (SELECT date,
+sum(entries) AS total FROM clean.transit_ridership WHERE system = 'metro' GROUP BY date)`. One
+station's average day: `avg(entries) FILTER (WHERE entries > 0)`.
+
 ## `clean.coffee_shops` — one place in DENUE's cafeterías class or OSM's cafés and ice-cream parlours
 
 **Not every row is a coffee shop.** DENUE's class 722515 also holds juice stands, soda

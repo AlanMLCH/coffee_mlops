@@ -410,6 +410,47 @@ FAOSTAT_PRICES = pa.DataFrameSchema(
     },
 )
 
+_DAY = pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}-\d{2}-\d{2}$"))
+
+# The Metro's entries as published: a row per station-line and day. Not unique - one
+# December has a station named twice a day - which `clean` resolves and says.
+METRO_RIDERSHIP = pa.DataFrameSchema(
+    name="metro_ridership",
+    coerce=True,
+    columns={
+        "fecha": _DAY,
+        "linea": _text(),
+        "estacion": _text(),
+        "afluencia": pa.Column(pl.Int64, pa.Check.ge(0)),  # zero: the station was closed
+    },
+)
+
+# The Metrobús' entries as published: a row per line and day, null before it opened.
+METROBUS_RIDERSHIP = pa.DataFrameSchema(
+    name="metrobus_ridership",
+    coerce=True,
+    unique=["fecha", "linea"],
+    columns={
+        "fecha": _DAY,
+        "linea": _text(),
+        "afluencia": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+    },
+)
+
+# The city's GTFS stops, every system's: where each stop is.
+GTFS_STOPS = pa.DataFrameSchema(
+    name="transit_stops",
+    coerce=True,
+    unique=["stop_id"],
+    columns={
+        "stop_id": _text(),
+        "stop_name": _text(),
+        # Inside Mexico's bounding box: a swapped pair or a zero would land outside it.
+        "stop_lat": pa.Column(pl.Float64, pa.Check.in_range(14.0, 33.0)),
+        "stop_lon": pa.Column(pl.Float64, pa.Check.in_range(-119.0, -86.0)),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -428,6 +469,9 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "census_2020": CENSUS_2020,
     "denue_workplaces": DENUE_WORKPLACES,
     "faostat_prices": FAOSTAT_PRICES,
+    "metro_ridership": METRO_RIDERSHIP,
+    "metrobus_ridership": METROBUS_RIDERSHIP,
+    "transit_stops": GTFS_STOPS,
 }
 
 
@@ -630,6 +674,8 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "price_indicators": PRICE_INDICATORS,
         "consumer_prices": CONSUMER_PRICES,
         "exchange_rates": EXCHANGE_RATES,
+        "transit_stations": TRANSIT_STATIONS,
+        "transit_ridership": TRANSIT_RIDERSHIP,
     }
 
 
@@ -828,6 +874,44 @@ EXCHANGE_RATES = pa.DataFrameSchema(
     columns={
         "date": pa.Column(pl.Date),
         "mxn_per_usd": pa.Column(pl.Float64, pa.Check.gt(0)),
+    },
+)
+
+
+METRO, METROBUS = "metro", "metrobus"
+TRANSIT_SYSTEMS = [METRO, METROBUS]
+
+# A Metro or Metrobús station: one per system, line and name, as the city's feed places
+# it; a transfer is a station on each of its lines. Outside every borough (the State of
+# Mexico's end of a line) it has no borough, and is kept.
+TRANSIT_STATIONS = pa.DataFrameSchema(
+    name="transit_stations",
+    strict=True,
+    unique=["station_id"],
+    columns={
+        "station_id": pa.Column(pl.String),  # "<system>-<line>-<name's words>"
+        "system": pa.Column(pl.String, pa.Check.isin(TRANSIT_SYSTEMS)),
+        "line": pa.Column(pl.String),
+        "station": pa.Column(pl.String),
+        "latitude": pa.Column(pl.Float64, pa.Check.in_range(-90, 90)),
+        "longitude": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
+        "borough_id": pa.Column(pl.String, nullable=True),
+        "borough": pa.Column(pl.String, nullable=True),
+    },
+)
+
+# Entries a day: per Metro station, per Metrobús line (its counts name no station).
+TRANSIT_RIDERSHIP = pa.DataFrameSchema(
+    name="transit_ridership",
+    strict=True,
+    unique=["date", "system", "line", "station_id"],
+    columns={
+        "date": pa.Column(pl.Date),
+        "system": pa.Column(pl.String, pa.Check.isin(TRANSIT_SYSTEMS)),
+        "line": pa.Column(pl.String),
+        "station_id": pa.Column(pl.String, nullable=True),  # null: a Metrobús line's day
+        "station": pa.Column(pl.String, nullable=True),
+        "entries": pa.Column(pl.Int64, pa.Check.ge(0)),  # zero: the station was closed
     },
 )
 

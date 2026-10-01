@@ -165,6 +165,7 @@ class CoffeeAdapter:
             config.consumer_prices,
             config.producer_prices,
             config.borough_profile,
+            config.transit,
             read_at,
         )
 

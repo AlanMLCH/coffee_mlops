@@ -30,6 +30,7 @@ from domains.coffee.config import (
 )
 from domains.coffee.prices import CENTS_PER_LB_PER_USD_PER_KG
 from domains.coffee.roaster_sheets import fold
+from domains.coffee.schemas import METRO, METROBUS
 from mlops_core.analysis.figures import (
     BASELINE,
     INK,
@@ -105,6 +106,10 @@ def studies(
         "borough_profile_coffee": borough_profile_coffee(
             clean["borough_profile"], shops, clean["boroughs"]
         ),
+        "borough_transit": borough_transit(
+            clean["transit_stations"], clean["transit_ridership"], shops, clean["boroughs"]
+        ),
+        "transit_by_year": transit_by_year(clean["transit_ridership"]),
         "register_editions": register_editions(shops),
         "shop_turnover": shop_turnover(clean["coffee_shop_history"], redraw_m),
         "kind_agreement": agreement,
@@ -149,6 +154,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     people = tables["borough_coffee_shops"].drop_nulls(["per_10k_people", "schooling_years"])
     if people.height >= 3:  # a correlation of fewer points says nothing
         drawn["coffee_and_schooling"] = coffee_and_schooling_figure(tables["borough_coffee_shops"])
+    if not tables["transit_by_year"].is_empty():
+        drawn["transit_ridership"] = transit_figure(tables["transit_by_year"])
     if not tables["borough_profile_coffee"].is_empty():
         drawn["coffee_and_profile"] = coffee_and_profile_figure(tables["borough_profile_coffee"])
     if not tables["roaster_coverage"].is_empty():
@@ -252,6 +259,91 @@ def borough_profile_coffee(
     return table.sort(pl.col("rho_per_10k_people").abs(), descending=True)
 
 
+def borough_transit(
+    stations: pl.DataFrame,
+    ridership: pl.DataFrame,
+    shops: pl.DataFrame,
+    boroughs: pl.DataFrame,
+) -> pl.DataFrame:
+    """Where people pass, borough by borough, beside its coffee shops.
+
+    The Metro's entries a day at the borough's stations, each station's mean over the days
+    it was open in the last year of the counts (a closed day counts zero entries, and is
+    left out); its Metrobús stations, counted only - the Metrobús counts entries per line,
+    never per station. Entries are where people board, not where they go; a station
+    outside the city (the State of Mexico's end of four lines) is in no borough. Coffee
+    shops are DENUE's kind coffee. No radius: the borough is the zone.
+    """
+    last = ridership.select(pl.col("date").max()).item()
+    recent = ridership.filter(
+        pl.col("system") == METRO,
+        pl.col("date") > pl.lit(last) - pl.duration(days=TRANSIT_WINDOW_DAYS),
+        pl.col("entries") > 0,
+    )
+    daily = recent.group_by("station_id").agg(pl.col("entries").mean().alias("daily"))
+    by_borough = (
+        stations.join(daily, on="station_id", how="left")
+        .group_by("borough_id")
+        .agg(
+            (pl.col("system") == METRO).sum().cast(pl.Int64).alias("metro_stations"),
+            (pl.col("system") == METROBUS).sum().cast(pl.Int64).alias("metrobus_stations"),
+            pl.col("daily").sum().alias("metro_daily_entries"),
+        )
+    )
+    places = borough_coffee_shops(shops, boroughs).select("borough_id", "coffee_shops")
+    return (
+        boroughs.select("borough_id", "borough", "population")
+        .join(by_borough, on="borough_id", how="left")
+        .join(places, on="borough_id", how="left")
+        .with_columns(
+            pl.col("metro_stations", "metrobus_stations").fill_null(0),
+            pl.col("metro_daily_entries").fill_null(0.0),
+        )
+        .with_columns(
+            (pl.col("metro_daily_entries") / pl.col("population")).alias(
+                "metro_entries_per_resident"
+            )
+        )
+        .sort("metro_daily_entries", "metrobus_stations", descending=True)
+    )
+
+
+def transit_by_year(ridership: pl.DataFrame) -> pl.DataFrame:
+    """Each system's entries on an average day of each year: every station's (Metro) or
+    line's (Metrobús) entries summed per day, then averaged over the year's days. The
+    first year of each is partial; the Metrobús' first day reports 3 million entries,
+    thirteen times its next days, and is kept as published."""
+    return (
+        ridership.group_by("system", "date")
+        .agg(pl.col("entries").sum())
+        .group_by("system", pl.col("date").dt.year().alias("year"))
+        .agg(
+            pl.col("entries").mean().alias("daily_entries"),
+            pl.len().cast(pl.Int64).alias("days"),
+        )
+        .sort("system", "year")
+    )
+
+
+def transit_figure(by_year: pl.DataFrame) -> Figure:
+    """The Metro's and the Metrobús' average day, year by year."""
+    figure, ax = canvas(
+        "Who boards, year by year",
+        "Entries on an average day, millions: every Metro station, every Metrobús line",
+    )
+    for color, (system, label) in zip(
+        SERIES, ((METRO, "Metro"), (METROBUS, "Metrobús")), strict=False
+    ):
+        rows = by_year.filter(pl.col("system") == system).sort("year")
+        ax.plot(rows["year"], rows["daily_entries"] / 1e6, color=color, linewidth=2, label=label)
+    ax.set_ylim(bottom=0)
+    ax.legend(frameon=False, loc="upper left", fontsize=9)
+    value_grid(ax, "y")
+    figure.tight_layout()
+    return figure
+
+
+TRANSIT_WINDOW_DAYS = 365  # the last year of the counts
 # Fewer boroughs than this and a rank correlation says nothing.
 MIN_BOROUGHS = 5
 RHO_RESAMPLES, RHO_SEED = 2000, 11

@@ -376,6 +376,19 @@ class BoroughProfileConfig(BaseModel):
         return self
 
 
+class TransitConfig(BaseModel):
+    """Where Mexico City's Metro and Metrobús stop, and how many people enter them: the
+    sources that download each, and the names the counts spell otherwise than the feed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stops: str  # the city's GTFS feed, read for its stops
+    metro: str  # the Metro's entries per station and day
+    metrobus: str  # the Metrobús' entries per line and day
+    # A station's name in the Metro's counts -> the feed's, both folded to their words.
+    station_aliases: dict[str, str] = {}
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -401,6 +414,7 @@ class CoffeeConfig(DomainConfig):
     consumer_prices: ConsumerPricesConfig
     producer_prices: ProducerPricesConfig
     borough_profile: BoroughProfileConfig
+    transit: TransitConfig
 
     @model_validator(mode="after")
     def _title_notes_name_shops(self) -> Self:
@@ -441,4 +455,14 @@ class CoffeeConfig(DomainConfig):
         name = self.borough_profile.source
         if name not in self.sources:
             raise ValueError(f"`borough_profile` reads {name!r}, which is not a source")
+        return self
+
+    @model_validator(mode="after")
+    def _transit_is_downloaded(self) -> Self:
+        transit = self.transit
+        missing = [
+            n for n in (transit.stops, transit.metro, transit.metrobus) if n not in self.sources
+        ]
+        if missing:
+            raise ValueError(f"`transit` reads {missing}, which are not sources")
         return self

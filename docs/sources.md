@@ -266,6 +266,41 @@ date read. The bulk host has no robots.txt (403).
 - Series move without a flag: Vietnam halves in 2022 with every flag "official";
   Colombia's is above the port price in 2018-2020.
 
+### Metro, Metrobús and their stations: `metro_ridership`, `metrobus_ridership`, `transit_stops`
+
+Mexico City's open-data portal (`datos.cdmx.gob.mx`, CKAN). **robots.txt forbids `/api/`
+and asks `Crawl-Delay: 10`**: the three files are fetched by their download addresses,
+ten seconds apart (`SourceConfig.crawl_delay`). CC-BY-4.0 (Mexico City's), each; the
+portal warns that a dataset's history can be revised. Verified 2026-09-29/30.
+
+- **Metro, entries per station and day** ("Afluencia Diaria del Metro (Simple)",
+  `.../dataset/f2046fd5-.../resource/0e8ffe58-.../download/0e8ffe58-....csv`): 60 MB, UTF-8,
+  `fecha, anio, mes, linea, estacion, afluencia` (the dictionary also lists `dia` and
+  `ano`, which the file does not have), 1,180,920 rows, 1 January 2010 to 31 July 2026,
+  the 195 station-lines every day; a monthly release.
+  - **Double-encoded names from January 2021 to May 2023** (UTF-8 read as Windows-1252
+    and encoded again: "LÃ­nea 1", "Isabel la CatÃ³lica"; "Miguel Ãngel de Quevedo"
+    only comes back through Latin-1).
+  - 62,025 days at **zero**: stations closed for works (Line 1, Line 12), not empty.
+  - **December 2020**: line B names "Oceanía" twice a day and "Deportivo Oceanía" not at
+    all; the rows cannot be told apart and are left out.
+  - Every name of the sixteen years matches the GTFS feed's once folded to its words, but
+    two: "Zócalo/Tenochtitlan" and "Niños Héroes" (the feed: "Niños Héroes/Poder Judicial
+    CDMX").
+- **Metrobús, entries per line and day** (`.../dataset/f0ff3759-.../resource/f7943c47-...`):
+  2 MB, `fecha, anio, mes, linea, afluencia`, 26 July 2005 to 31 July 2026, seven lines,
+  **per line only - never per station**. `NaN` before a line opened; lines written
+  "Línea 1" and "linea 1"; the first day reports 3,032,667 entries, thirteen times the
+  next days (kept as published). A breakdown by payment type exists from 2021 (not read).
+- **GTFS feed** (`.../dataset/75538d96-.../resource/32ed1b6b-...zip`, 2.4 MB, files dated
+  16 February 2026): ten agencies; `stops.txt` (11,362 stops, UTF-8) is read. **A stop id
+  names the system and the line**: `B_0200L1-PANTITLAN`, `B_020L12-TLAHUAC` (Metro, 195
+  stop-lines), `B_0300L4-20NOVIEMBR` (Metrobús, 361 stops, one per direction under one
+  name: 287 stations).
+- 11 Metro stations are outside the city (Cuatro Caminos, La Paz, Los Reyes, and line B in
+  Ecatepec and Nezahualcóyotl): they board about 330,000 people a day and fall in no
+  borough.
+
 ## APIs
 
 ### DENUE (INEGI): `denue_cafes`, `denue_workplaces`
@@ -432,7 +467,6 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 | Yahoo `KC=F` (Coffee C futures) | rejected | unofficial endpoint, personal-use terms, and a future, not the physical price |
 | FRED `PCOFFOTMUSDM`, `PCOFFROBUSDM` | verified alternative, not chosen | the IMF's monthly other milds and robustas (¢/lb, 1992→); the World Bank's go back to 1960 |
 | Banxico SIE (FIX) | not chosen | its API needs a token; FRED does not |
-| Metro ridership, `datos.cdmx.gob.mx` | **in progress** | CC-BY-4.0-ESP; robots.txt forbids `/api/` and asks `Crawl-delay: 10` (files only, ten seconds apart: `SourceConfig.crawl_delay`); the 195 station-lines of the daily ridership match the GTFS; names double-encoded in 2021-2023 (UTF-8 read as Latin-1 and encoded again); ~62,000 days at zero (closed stations); in December 2020 "Deportivo Oceanía" also appears as "Oceanía" - indistinguishable rows, dropped |
 | ENIGH 2024 microdata (INEGI) | verified, not read | 200, 54 MB ZIP; the household spending that would fill the consumption gap; its geographic representativeness (probably state, not borough) is still to check |
 | Cup of Excellence Mexico 2012-2026 | verified, terms to check | HTML tables (score, farm, process, variety, region); robots.txt allows them |
 | INEGI INPC (consumer prices) | needs a token | the indicators API takes its own token, not DENUE's; would deflate SIAP's and PROFECO's nominal prices |

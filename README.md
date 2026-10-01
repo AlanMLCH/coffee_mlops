@@ -15,9 +15,10 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 16 sources of four kinds** - static files (CQI cupping scores, USDA's world
+- **Reads 19 sources of four kinds** - static files (CQI cupping scores, USDA's world
   coffee balance, SIAP's harvests, INEGI's borough polygons, 2020 Census and 2025 Intercensal Survey, World Bank and ICO prices,
-  FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
+  FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate, the Metro's and
+  Metrobús' daily entries and the city's transit feed), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first) - their tasting notes read into the SCA's flavour
   categories - and 22 documents for the agent to read.
@@ -81,6 +82,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
   where people work. INEGI's 2025 Intercensal Survey draws the same gradient: a computer
   or internet at home and renting rise with them (Spearman about 0.9), people per room
   and long commutes fall; commuting by Metro does not follow.
+- The Metro boarded 4.4 million people on an average day of 2019 and 3.4 million in 2025 -
+  still a fifth fewer - while the Metrobús is above its 2019. Where the Metro's stations
+  board the most people, coffee shops are most (Spearman 0.76 across the boroughs).
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
@@ -99,7 +103,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["16 sources + 22 documents"]
+    subgraph SOURCES["19 sources + 22 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]

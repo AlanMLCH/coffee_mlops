@@ -219,6 +219,8 @@ def test_build_clean_writes_every_table_with_lineage(
         "price_indicators",
         "consumer_prices",
         "exchange_rates",
+        "transit_stations",
+        "transit_ridership",
         # The corpus', built by the core from the documents the domain lists.
         "documents",
         "document_chunks",
