@@ -62,6 +62,8 @@ def test_recorded_sources_pass_and_come_out_typed(
         "intercensal_2025": 30,  # six areas, five estimators each
         "metro_ridership": 10,  # station-days, one station named twice on one of them
         "metrobus_ridership": 3,  # line-days, one before the line opened
+        "census_2020_ageb": 7,  # each urban AGEB's own total row, nothing else
+        "cdmx_ageb": 2431,  # the framework's urban AGEBs, as many as the real layer
         "transit_stops": 9,  # every system's: the stations keep the Metro's and Metrobús'
         "faostat_prices": 9,  # coffee's rows; the other crop left in the file
     }

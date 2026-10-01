@@ -138,6 +138,28 @@ locality plus a total per borough (`LOC 0000`) and for the state (`MUN 000`); `E
 state's 9,209,944 people are exactly the boroughs' sum (the build demands it).
 robots.txt allows `/contenidos/programas`; INEGI's terms (free use, citing it).
 
+### INEGI 2020 Census by urban AGEB: `census_2020_ageb`, `cdmx_ageb`
+
+A zone finer than the borough. `https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/ageb_manzana/ageb_mza_urbana_09_cpv2020_csv.zip`
+(verified 2026-09-30): a 13 MB ZIP, `conjunto_de_datos_ageb_urbana_09_cpv2020.csv` (44 MB,
+68,941 rows x 230 columns, UTF-8 with a BOM), a dictionary and metadata. Rows: the state, each
+borough, each urban locality, **each AGEB's total ("Total AGEB urbana", 2,433)** and every
+block (66,456). The AGEBs hold 9,145,632 of the city's 9,209,944 people (the rest live in
+rural localities). Key: `ENTIDAD + MUN + LOC + AGEB` (an AGEB code can carry a letter:
+"122A"), the same 13 characters the framework's AGEB polygons carry in `CVEGEO`.
+
+- The only marker is **`*`**, a figure withheld to protect a few households: 216 among the
+  columns read, at the AGEB level; read as null. 17 AGEBs have no residents (an airport, a
+  park, an industrial estate), and INEGI writes their average schooling as 0: null in
+  `census_zones`.
+- The domain's reader keeps only the AGEB totals and the columns used: the whole file as text
+  would be some 16 million cells.
+- The polygons are layer `09a` of the geostatistical framework `cdmx_boroughs` reads (the same
+  83 MB ZIP, downloaded as its own source so the core reads it as any layer): **2,431**
+  polygons (`CVEGEO`, `CVE_ENT`, `CVE_MUN`, `CVE_LOC`, `CVE_AGEB`), 792 km², the boroughs'
+  projection (EPSG:6372) and character set. Two AGEBs the census counts have no polygon
+  (7,108 people) and are left out, saying so.
+
 ### INEGI 2025 Intercensal Survey: `intercensal_2025`
 
 Principal results of the 2025 Intercensal Survey (October-November 2025, a sample of 7.3

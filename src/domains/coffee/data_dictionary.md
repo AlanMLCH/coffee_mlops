@@ -105,6 +105,25 @@ One borough's figure: `WHERE indicator = 'median_age' AND borough = 'Coyoacán'`
 borough on one indicator: `WHERE indicator = 'rented_pct' ORDER BY value DESC`. Never
 average `value` across indicators; a share of the city needs the counts, not the shares.
 
+## `clean.census_zones` — one urban AGEB of Mexico City (2020 Census)
+
+An AGEB is a few dozen blocks: 2,431 of them, finer than the 16 boroughs. Shops and
+stations carry their `zone_id`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `zone_id` | String | INEGI's 13-character key |
+| `borough_id`, `borough` | String | Its borough |
+| `area_km2` | Float | Area |
+| `boundary` | Binary | Polygon as WKB, WGS84 |
+| `population` | Int | People, 2020 |
+| `dwellings` | Int? | Private dwellings lived in |
+| `schooling_years` | Float? | Average years of schooling, 15+; null where nobody lives |
+| `economically_active`, `people_65_plus` | Int? | People |
+| `dwellings_with_internet`, `dwellings_with_car`, `dwellings_with_computer` | Int? | Dwellings |
+
+Null = withheld by INEGI. Coffee shops per zone: `JOIN clean.coffee_shops USING (zone_id)`.
+
 ## `clean.transit_stations` — one Metro or Metrobús station on one line
 
 From the city's GTFS feed. 195 Metro (11 outside the city: no borough), 287 Metrobús.
@@ -117,6 +136,7 @@ From the city's GTFS feed. 195 Metro (11 outside the city: no borough), 287 Metr
 | `station` | String | Name as the feed spells it |
 | `latitude`, `longitude` | Float | WGS84 |
 | `borough_id`, `borough` | String? | Where it is; null outside the city |
+| `zone_id` | String? | Its urban AGEB (`clean.census_zones`) |
 
 ## `clean.transit_ridership` — entries on one day: a Metro station, or a whole Metrobús line
 
@@ -156,6 +176,7 @@ both can avoid counting one place twice.
 | `latitude`, `longitude` | Float | WGS84 |
 | `borough_id`, `borough` | String? | From the spatial join. Null if the point falls outside every borough. Filter a borough by its name, `borough` |
 | `declared_borough_id` | String? | The borough the source itself claims (DENUE's `AreaGeo`); null for OSM. The column the join is audited against |
+| `zone_id` | String? | The urban AGEB it falls in (`clean.census_zones`); null outside every one |
 | `kind` | String | What the place is: `coffee`, `tea`, `ice_cream`, `juice`, `soda_fountain`, `school`, `unnamed` or `unclassified`. For a coffee-only view, filter `kind = 'coffee'` |
 | `kind_basis` | String | How the kind was decided: `name` (DENUE, read by the ordered rules in `cleaning.shop_kinds`) or `tag` (OSM, its own `amenity` tag) |
 | `matched_shop_id` | String? | The same place in the other register, both ways: within 60 m, names at least 0.88 alike (Jaro-Winkler), each the other's best match |

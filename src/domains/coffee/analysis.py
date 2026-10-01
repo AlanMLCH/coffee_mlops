@@ -110,6 +110,7 @@ def studies(
             clean["transit_stations"], clean["transit_ridership"], shops, clean["boroughs"]
         ),
         "transit_by_year": transit_by_year(clean["transit_ridership"]),
+        **zone_studies(clean["census_zones"], shops, clean["transit_stations"]),
         "register_editions": register_editions(shops),
         "shop_turnover": shop_turnover(clean["coffee_shop_history"], redraw_m),
         "kind_agreement": agreement,
@@ -228,7 +229,7 @@ def borough_profile_coffee(
     rows = []
     for (indicator, unit), group in profile.group_by("indicator", "unit", maintain_order=True):
         known = group.join(places, on="borough_id").drop_nulls(["value", "per_10k_people"])
-        if known.height < MIN_BOROUGHS:
+        if not _rankable(known, "value", "per_10k_people"):
             continue
         low, high = _spearman_interval(known["value"], known["per_10k_people"])
         lowest, highest = (
@@ -343,10 +344,134 @@ def transit_figure(by_year: pl.DataFrame) -> Figure:
     return figure
 
 
+def zone_coffee_shops(
+    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame
+) -> pl.DataFrame:
+    """Every urban AGEB with what the census counted in it, its DENUE coffee shops and its
+    stations: the city's finest common grain, a row per zone. Shares are of the zone's
+    lived-in dwellings or people; a figure INEGI withheld stays null."""
+    coffee = (
+        shops.filter(pl.col("source") == "denue", pl.col("kind") == COFFEE)
+        .group_by("zone_id")
+        .agg(pl.len().cast(pl.Int64).alias("coffee_shops"))
+    )
+    boarding = stations.group_by("zone_id").agg(
+        (pl.col("system") == METRO).sum().cast(pl.Int64).alias("metro_stations"),
+        (pl.col("system") == METROBUS).sum().cast(pl.Int64).alias("metrobus_stations"),
+    )
+    per_dwelling = {"internet_pct": "dwellings_with_internet", "car_pct": "dwellings_with_car",
+                    "computer_pct": "dwellings_with_computer"}  # fmt: skip
+    return (
+        zones.select(
+            "zone_id",
+            "borough",
+            "population",
+            "area_km2",
+            (pl.col("population") / pl.col("area_km2")).alias("people_per_km2"),
+            "schooling_years",
+            *[
+                (100 * pl.col(count) / pl.col("dwellings")).alias(name)
+                for name, count in per_dwelling.items()
+            ],
+            (100 * pl.col("people_65_plus") / pl.col("population")).alias("aged_65_plus_pct"),
+        )
+        .join(coffee, on="zone_id", how="left")
+        .join(boarding, on="zone_id", how="left")
+        .with_columns(pl.col("coffee_shops", "metro_stations", "metrobus_stations").fill_null(0))
+        .with_columns((pl.col("coffee_shops") / pl.col("area_km2")).alias("coffee_shops_per_km2"))
+        .sort("coffee_shops", "zone_id", descending=[True, False])
+    )
+
+
+def zone_studies(
+    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame
+) -> dict[str, pl.DataFrame]:
+    """The urban AGEBs, and what they say set side by side."""
+    table = zone_coffee_shops(zones, shops, stations)
+    return {
+        "zone_coffee_shops": table,
+        "zone_coffee_correlations": zone_coffee_correlations(table),
+        "zone_station_coffee": zone_station_coffee(table),
+    }
+
+
+# What a zone is, as the census says it, against its coffee shops per km².
+ZONE_TRAITS = ["people_per_km2", "schooling_years", "internet_pct", "computer_pct", "car_pct",
+               "aged_65_plus_pct"]  # fmt: skip
+
+
+def zone_coffee_correlations(zones: pl.DataFrame) -> pl.DataFrame:
+    """Each trait of the zones ranked against their coffee shops per km² (Spearman), with
+    an interval from resampling the zones: the borough study's question asked of 2,431
+    zones instead of 16, so an interval is narrow enough to say something. Zones where the
+    trait is unknown (a withheld figure, no dwellings) are left out of that trait."""
+    rows = []
+    for trait in ZONE_TRAITS:
+        known = zones.drop_nulls([trait]).filter(pl.col(trait).is_finite())
+        if not _rankable(known, trait, "coffee_shops_per_km2"):
+            continue
+        low, high = _spearman_interval(known[trait], known["coffee_shops_per_km2"])
+        rows.append(
+            {
+                "trait": trait,
+                "zones": known.height,
+                "rho": _spearman(known[trait], known["coffee_shops_per_km2"]),
+                "rho_low": low,
+                "rho_high": high,
+            }
+        )
+    schema = {"trait": pl.String, "zones": pl.Int64, "rho": pl.Float64,
+              "rho_low": pl.Float64, "rho_high": pl.Float64}  # fmt: skip
+    return pl.DataFrame(rows, schema=schema).sort(pl.col("rho").abs(), descending=True)
+
+
+def zone_station_coffee(zones: pl.DataFrame) -> pl.DataFrame:
+    """Zones with a station of a system against zones with none: their mean coffee shops
+    and the difference, with an interval from resampling each group. A zone, not a radius:
+    a station's own AGEB, as the census and the framework draw it."""
+    rows = []
+    for system, column in ((METRO, "metro_stations"), (METROBUS, "metrobus_stations")):
+        with_station = zones.filter(pl.col(column) > 0)["coffee_shops"].to_numpy()
+        without = zones.filter(pl.col(column) == 0)["coffee_shops"].to_numpy()
+        if len(with_station) == 0 or len(without) == 0:
+            continue
+        low, high = _difference_interval(with_station, without)
+        rows.append(
+            {
+                "system": system,
+                "zones_with": len(with_station),
+                "zones_without": len(without),
+                "mean_with": float(with_station.mean()),
+                "mean_without": float(without.mean()),
+                "difference": float(with_station.mean() - without.mean()),
+                "difference_low": low,
+                "difference_high": high,
+            }
+        )
+    schema = {"system": pl.String, "zones_with": pl.Int64, "zones_without": pl.Int64,
+              "mean_with": pl.Float64, "mean_without": pl.Float64, "difference": pl.Float64,
+              "difference_low": pl.Float64, "difference_high": pl.Float64}  # fmt: skip
+    return pl.DataFrame(rows, schema=schema)
+
+
+def _difference_interval(first: np.ndarray, second: np.ndarray) -> tuple[float, float]:
+    """The middle 95% of the difference in means over resamples of each group."""
+    rng = np.random.default_rng(RHO_SEED)
+    a = first[rng.integers(0, len(first), size=(RHO_RESAMPLES, len(first)))].mean(axis=1)
+    b = second[rng.integers(0, len(second), size=(RHO_RESAMPLES, len(second)))].mean(axis=1)
+    return float(np.percentile(a - b, 2.5)), float(np.percentile(a - b, 97.5))
+
+
 TRANSIT_WINDOW_DAYS = 365  # the last year of the counts
 # Fewer boroughs than this and a rank correlation says nothing.
 MIN_BOROUGHS = 5
 RHO_RESAMPLES, RHO_SEED = 2000, 11
+
+
+def _rankable(known: pl.DataFrame, *columns: str) -> bool:
+    """Enough rows to rank, and values that differ in every column: a constant has no
+    order to compare."""
+    return known.height >= MIN_BOROUGHS and all(known[c].n_unique() > 1 for c in columns)
 
 
 def _figure(value: float) -> str:

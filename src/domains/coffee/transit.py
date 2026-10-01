@@ -30,6 +30,7 @@ import polars as pl
 
 from domains.coffee.config import TransitConfig
 from domains.coffee.schemas import METRO, METROBUS
+from domains.coffee.zones import in_zones
 from mlops_core.data.geo import attribute_points
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,11 @@ def line_code(text: str) -> str:
     return folded(repaired(text)).upper()
 
 
-def clean_transit_stations(stops: pl.DataFrame, areas: pl.DataFrame) -> pl.DataFrame:
-    """A station per system, line and name, where the feed puts it, in a borough or none.
+def clean_transit_stations(
+    stops: pl.DataFrame, areas: pl.DataFrame, zones: pl.DataFrame
+) -> pl.DataFrame:
+    """A station per system, line and name, where the feed puts it, in a borough or none
+    and in its urban AGEB.
 
     The Metrobús feed lists a platform per direction under one name: one station, at the
     middle of its platforms. A transfer is a station on each of its lines, as the Metro's
@@ -108,9 +112,14 @@ def clean_transit_stations(stops: pl.DataFrame, areas: pl.DataFrame) -> pl.DataF
         placed.filter(pl.col("system") == METROBUS).height,
         outside.height,
     )
-    return placed.select(
-        "station_id", "system", "line", "station", "latitude", "longitude", "borough_id", "borough"
-    ).sort("system", "line", "station")
+    return (
+        in_zones(placed, zones)
+        .select(
+            "station_id", "system", "line", "station", "latitude", "longitude",
+            "borough_id", "borough", "zone_id",
+        )
+        .sort("system", "line", "station")
+    )  # fmt: skip
 
 
 def clean_transit_ridership(

@@ -37,6 +37,8 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "metro_ridership",
         "metrobus_ridership",
         "transit_stops",
+        "census_2020_ageb",
+        "cdmx_ageb",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -279,6 +281,18 @@ def test_transit_reads_sources_that_exist() -> None:
     config["transit"]["metrobus"] = "trolleybus_ridership"
 
     with pytest.raises(ValidationError, match=r"`transit` reads \['trolleybus_ridership'\]"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_the_zones_read_a_census_in_a_zip_and_draw_a_map_layer() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["census_zones"]["census"] = "fred_usd_mxn"  # a CSV on its own
+
+    with pytest.raises(ValidationError, match="names the CSV inside INEGI's ZIP"):
+        CoffeeConfig.model_validate(config)
+
+    config["census_zones"] |= {"census": "census_2020_ageb", "layer": "census_2020"}
+    with pytest.raises(ValidationError, match="it has to be a map layer"):
         CoffeeConfig.model_validate(config)
 
 

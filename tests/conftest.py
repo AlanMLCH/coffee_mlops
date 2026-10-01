@@ -7,9 +7,12 @@ another pipeline happens to pull in.
 """
 
 import csv
+import functools
 import io
+import tempfile
 import zipfile
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -264,6 +267,99 @@ def survey_archive(
     return buffer.getvalue()
 
 
+# INEGI's geostatistical framework as the tests download it: the boundary fixture's
+# sixteen boroughs (a 4x4 grid of squares in the layer's projection) and, written here,
+# the urban AGEBs: 2,431 cells of a 50x50 grid over the same squares - as many as the real
+# layer has, so the config's count holds - each keyed by the borough its corner is in.
+AGEB_CELL = 0.0104  # degrees; the boroughs' squares are 0.13
+AGEB_ORIGIN = (-99.45, 19.05)  # the grid's south-west corner, as the boroughs'
+
+
+def ageb_code(latitude: float, longitude: float) -> str:
+    """The AGEB the written framework draws around a point: "09" + borough + "0001" + n."""
+    col = int((longitude - AGEB_ORIGIN[0]) / AGEB_CELL)
+    row = int((latitude - AGEB_ORIGIN[1]) / AGEB_CELL)
+    borough = 2 + int(row * AGEB_CELL / 0.13) * 4 + int(col * AGEB_CELL / 0.13)
+    return f"09{borough:03d}0001{row * 50 + col:04d}"
+
+
+@functools.cache
+def framework_archive() -> bytes:
+    from mlops_core.data.geo import spatial_connection  # DuckDB: not in the API's image
+
+    west, south = AGEB_ORIGIN
+    query = f"""
+        COPY (
+            SELECT '09' || lpad(CAST(CAST(2 + floor(row * {AGEB_CELL} / 0.13) * 4
+                                           + floor(col * {AGEB_CELL} / 0.13) AS INTEGER)
+                                      AS VARCHAR), 3, '0')
+                       || '0001' || lpad(CAST(n AS VARCHAR), 4, '0') AS CVEGEO,
+                   lpad(CAST(n AS VARCHAR), 4, '0') AS CVE_AGEB,
+                   ST_Transform(ST_MakeEnvelope({west} + col * {AGEB_CELL},
+                                                {south} + row * {AGEB_CELL},
+                                                {west} + (col + 1) * {AGEB_CELL},
+                                                {south} + (row + 1) * {AGEB_CELL}),
+                                'EPSG:4326', 'EPSG:6372', always_xy := true) AS geom
+            FROM (SELECT n, n % 50 AS col, n // 50 AS row FROM range(2431) t(n))
+        ) TO '{{target}}' WITH (FORMAT GDAL, DRIVER 'ESRI Shapefile')
+    """  # fmt: skip
+    buffer = io.BytesIO()
+    with tempfile.TemporaryDirectory() as folder, closing(spatial_connection()) as con:
+        con.execute(query.format(target=(Path(folder) / "09a.shp").as_posix()))
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            with zipfile.ZipFile(FIXTURES / "cdmx_boroughs_sample.zip") as boroughs:
+                for member in boroughs.namelist():
+                    archive.writestr(member, boroughs.read(member))
+            for path in sorted(Path(folder).iterdir()):
+                archive.write(path, f"conjunto_de_datos/{path.name}")
+    return buffer.getvalue()
+
+
+# The 2020 Census by urban AGEB as it downloads: a BOM, a ZIP, a folder; totals for the
+# state, a borough and a locality, then each AGEB's total row and its blocks. Six AGEBs of
+# Cuauhtémoc's square (Balderas', the Zócalo's and the Metrobús' among them), one where
+# nobody lives, one the framework does not draw, and a withheld figure.
+CENSUS_AGEB_MEMBER = (
+    "ageb_mza_urbana_09_cpv2020/conjunto_de_datos/conjunto_de_datos_ageb_urbana_09_cpv2020.csv"
+)
+CENSUS_AGEB_HEADER = ("ENTIDAD,NOM_ENT,MUN,NOM_MUN,LOC,NOM_LOC,AGEB,MZA,POBTOT,P_18YMAS,TVIVHAB,"
+                      "GRAPROES,PEA,POB65_MAS,VPH_INTER,VPH_AUTOM,VPH_PC")  # fmt: skip
+
+
+def ageb_row(code: str, name: str, block: str, people: int, schooling: str = "12.5") -> str:
+    mun, loc, ageb = code[2:5], code[5:9], code[9:]
+    return (f"09,Ciudad de México,{mun},Cuauhtémoc,{loc},{name},{ageb},{block},{people},"
+            f"{people - 50},{people // 3},{schooling},{people // 2},{people // 10},"
+            f"{people // 4},{people // 6},{people // 5}")  # fmt: skip
+
+
+BALDERAS_ZONE = ageb_code(19.50, -99.25)
+CENSUS_AGEB_ROWS = [
+    CENSUS_AGEB_HEADER,
+    "09,Ciudad de México,000,Total de la entidad,0000,Total de la entidad,0000,000,"
+    "9209944,7000000,2700000,11.5,5000000,1300000,2000000,1300000,1100000",
+    "09,Ciudad de México,015,Cuauhtémoc,0000,Total del municipio,0000,000,"
+    "545884,452000,196593,12.4,300000,70000,150000,60000,90000",
+    "09,Ciudad de México,015,Cuauhtémoc,0001,Total de la localidad urbana,0000,000,"
+    "545884,452000,196593,12.4,300000,70000,150000,60000,90000",
+    ageb_row(BALDERAS_ZONE, "Total AGEB urbana", "000", 3000),
+    ageb_row(BALDERAS_ZONE, "Cuauhtémoc", "001", 1500),  # a block: not read
+    ageb_row(ageb_code(19.51, -99.24), "Total AGEB urbana", "000", 1500),  # the Zócalo
+    ageb_row(ageb_code(19.505, -99.255), "Total AGEB urbana", "000", 2400),  # Metrobús
+    ageb_row(ageb_code(19.49, -99.27), "Total AGEB urbana", "000", 900, schooling="*"),
+    ageb_row(ageb_code(19.48, -99.28), "Total AGEB urbana", "000", 0, schooling="0"),
+    ageb_row(ageb_code(19.47, -99.29), "Total AGEB urbana", "000", 4100),
+    ageb_row("0901500019999", "Total AGEB urbana", "000", 75),  # no polygon draws it
+]
+
+
+def census_ageb_archive(rows: list[str] = CENSUS_AGEB_ROWS) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(CENSUS_AGEB_MEMBER, "﻿" + "\r\n".join(rows) + "\r\n")
+    return buffer.getvalue()
+
+
 # The city's GTFS feed: stops of every system, the Metro's and the Metrobús' named by
 # their ids, placed on the boundary fixture's grid of boroughs: Balderas, the Zócalo and
 # the Metrobús in Cuauhtémoc's square, Pantitlán in Venustiano Carranza's, Tláhuac in
@@ -448,7 +544,8 @@ def recorded() -> dict[str, bytes]:
         "psd_coffee": zip_fixture("psd_coffee_sample.csv", "psd_coffee.csv"),
         # Shaped like INEGI's download: a shapefile inside a ZIP, Latin-1 attributes,
         # the layer's own projection. Two boroughs instead of sixteen.
-        "cdmx_boroughs": (FIXTURES / "cdmx_boroughs_sample.zip").read_bytes(),
+        "cdmx_boroughs": framework_archive(),
+        "cdmx_ageb": framework_archive(),  # the same download, another layer of it
         # SIAP's real bytes, still Latin-1: 11 coffee rows (Ocosingo's three CADERs among
         # them) and two other crops, one with nothing harvested.
         "siap_agricola": (FIXTURES / "siap_agricola_sample.csv").read_bytes(),
@@ -470,6 +567,7 @@ def recorded() -> dict[str, bytes]:
         "metro_ridership": metro_csv(),
         "metrobus_ridership": METROBUS_RIDERSHIP,
         "transit_stops": gtfs_archive(),
+        "census_2020_ageb": census_ageb_archive(),
     }
 
 

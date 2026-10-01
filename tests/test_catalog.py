@@ -21,6 +21,7 @@ def test_every_built_table_is_queryable_by_layer(
     assert [t[0] for t in tables] == [
         "clean.borough_profile",
         "clean.boroughs",
+        "clean.census_zones",
         "clean.coffee_reviews",
         "clean.coffee_shop_history",
         "clean.coffee_shops",

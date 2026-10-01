@@ -451,6 +451,26 @@ GTFS_STOPS = pa.DataFrameSchema(
     },
 )
 
+# The 2020 Census' total row per urban AGEB, as the domain's reader keeps it: the key and
+# the figures used, a withheld one null.
+CENSUS_ZONES_RAW = pa.DataFrameSchema(
+    name="census_2020_ageb",
+    coerce=True,
+    unique=["ENTIDAD", "MUN", "LOC", "AGEB"],
+    columns={
+        "ENTIDAD": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2}$")),
+        "MUN": pa.Column(pl.String, pa.Check.str_matches(r"^\d{3}$")),
+        "LOC": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}$")),
+        "AGEB": pa.Column(pl.String, pa.Check.str_matches(r"^[0-9A-Z]{4}$")),  # "122A"
+        "POBTOT": pa.Column(pl.Int64, pa.Check.ge(0)),  # never withheld
+        **{
+            column: pa.Column(pl.Int64, pa.Check.ge(0), nullable=True)
+            for column in ("TVIVHAB", "PEA", "POB65_MAS", "VPH_INTER", "VPH_AUTOM", "VPH_PC")
+        },
+        "GRAPROES": pa.Column(pl.Float64, pa.Check.in_range(0, 25), nullable=True),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -472,6 +492,8 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "metro_ridership": METRO_RIDERSHIP,
     "metrobus_ridership": METROBUS_RIDERSHIP,
     "transit_stops": GTFS_STOPS,
+    "census_2020_ageb": CENSUS_ZONES_RAW,
+    "cdmx_ageb": AREAS,
 }
 
 
@@ -626,6 +648,8 @@ COFFEE_SHOPS = pa.DataFrameSchema(
         # What the source itself says the borough is. DENUE carries one, OSM does not,
         # so this is the column the spatial join is audited against.
         "declared_borough_id": pa.Column(pl.String, nullable=True),
+        # The urban AGEB it falls in (the census' finer zone); null outside every one.
+        "zone_id": pa.Column(pl.String, nullable=True),
         # The month of the DENUE edition the place entered the register; OSM keeps none.
         # An entry, not an opening: each economic census adds thousands at once.
         "listed_since": pa.Column(pl.Date, nullable=True),
@@ -675,6 +699,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "consumer_prices": CONSUMER_PRICES,
         "exchange_rates": EXCHANGE_RATES,
         "transit_stations": TRANSIT_STATIONS,
+        "census_zones": CENSUS_ZONES,
         "transit_ridership": TRANSIT_RIDERSHIP,
     }
 
@@ -897,6 +922,7 @@ TRANSIT_STATIONS = pa.DataFrameSchema(
         "longitude": pa.Column(pl.Float64, pa.Check.in_range(-180, 180)),
         "borough_id": pa.Column(pl.String, nullable=True),
         "borough": pa.Column(pl.String, nullable=True),
+        "zone_id": pa.Column(pl.String, nullable=True),  # its urban AGEB
     },
 )
 
@@ -912,6 +938,30 @@ TRANSIT_RIDERSHIP = pa.DataFrameSchema(
         "station_id": pa.Column(pl.String, nullable=True),  # null: a Metrobús line's day
         "station": pa.Column(pl.String, nullable=True),
         "entries": pa.Column(pl.Int64, pa.Check.ge(0)),  # zero: the station was closed
+    },
+)
+
+
+# An urban AGEB: its polygon and what the 2020 Census counted in it. A figure INEGI
+# withheld is null; population never is.
+CENSUS_ZONES = pa.DataFrameSchema(
+    name="census_zones",
+    strict=True,
+    unique=["zone_id"],
+    columns={
+        "zone_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{9}[0-9A-Z]{4}$")),
+        "borough_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+        "borough": pa.Column(pl.String),
+        "area_km2": pa.Column(pl.Float64, pa.Check.gt(0)),
+        "boundary": pa.Column(pl.Binary),
+        "population": pa.Column(pl.Int64, pa.Check.ge(0)),
+        "dwellings": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "schooling_years": pa.Column(pl.Float64, pa.Check.in_range(0, 25), nullable=True),
+        "economically_active": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "people_65_plus": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "dwellings_with_internet": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "dwellings_with_car": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
+        "dwellings_with_computer": pa.Column(pl.Int64, pa.Check.ge(0), nullable=True),
     },
 )
 

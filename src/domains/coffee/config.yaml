@@ -156,6 +156,33 @@ sources:
     member: iter_09_cpv2020/conjunto_de_datos/conjunto_de_datos_iter_09CSV20.csv
     refresh_hours: 8760 # the next census is 2030
 
+  # A finer zone than the borough: INEGI's 2020 Census by urban AGEB (a basic
+  # geostatistical area - a few dozen blocks) and by block. Verified 2026-09-30: a 13 MB
+  # ZIP, one CSV of 68,941 rows x 230 columns (UTF-8 with a BOM): a total row per AGEB
+  # (2,433, "Total AGEB urbana"; 9,145,632 people, the city's urban ones), its blocks, and
+  # totals per borough and locality. Small figures are withheld as "*" (216 among the
+  # columns read). Only the AGEB totals and the columns used are read (the domain's reader).
+  census_2020_ageb:
+    url: https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/ageb_manzana/ageb_mza_urbana_09_cpv2020_csv.zip
+    filename: ageb_mza_urbana_09_cpv2020_csv.zip
+    member: ageb_mza_urbana_09_cpv2020/conjunto_de_datos/conjunto_de_datos_ageb_urbana_09_cpv2020.csv
+    refresh_hours: 8760 # the next census is 2030
+
+  # The urban AGEBs' polygons: another layer (09a) of the framework `cdmx_boroughs` reads,
+  # downloaded as its own source so the core reads it as it reads any layer. 2,431
+  # polygons, the same projection and character set as the boroughs'.
+  cdmx_ageb:
+    url: https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/889463807469/09_ciudaddemexico.zip
+    filename: 09_ciudaddemexico.zip
+    member: conjunto_de_datos/09a.shp
+    spatial:
+      encoding: ISO-8859-1
+      crs: EPSG:6372
+      id_column: CVEGEO # entity + municipality + locality + AGEB: 13 characters
+      name_column: CVE_AGEB # an AGEB has a code, no name
+      expected_features: 2431
+    refresh_hours: 8760
+
   # INEGI's 2025 Intercensal Survey, principal results: the same questions as the census
   # and more (age, work, commute, housing tenure), asked in October-November 2025 of a
   # sample of 7.3 million dwellings, representative of every municipality - each alcaldia
@@ -1134,6 +1161,12 @@ transit:
     zocalo tenochtitlan: zocalo
     ninos heroes: ninos heroes poder judicial cdmx
 
+# The city in its urban AGEBs: the 2020 Census' figures for each and its polygon. Every
+# coffee shop and station is placed in one, as in a borough.
+census_zones:
+  census: census_2020_ageb
+  layer: cdmx_ageb
+
 # Who lives in each borough now (source `intercensal_2025`): the survey's columns read,
 # each under this domain's name and unit. "percent" is per 100 of the group INEGI names in
 # the data dictionary; a count must add up to the city's total.
@@ -1523,6 +1556,19 @@ explore:
       kind: bar
       x: indicator
       y: rho_per_10k_people
+    - title: Block by block, the gradient fades
+      text: >-
+        The same question asked of 2,431 urban AGEBs instead of 16 boroughs: coffee shops
+        per km² still rise with schooling, a computer and internet at home (Spearman about
+        0.3, against 0.9 by borough) and barely follow how many people live there. A zone
+        with a Metro station has 3.8 coffee shops on average, one without 1.4 (+2.4, 95%
+        interval +1.7 to +3.3): cafes crowd where people pass, not only where people with
+        schooling live.
+      sql: >-
+        SELECT trait, rho FROM analysis.zone_coffee_correlations
+      kind: bar
+      x: trait
+      y: rho
     - title: The Metro has not come back
       text: >-
         Entries on an average day: the Metro carried 4.2 to 4.6 million a day from 2010 to

@@ -181,6 +181,8 @@ def test_the_study_ranks_each_indicator_against_coffee_shops_per_resident() -> N
             survey_rows("scrambled", [3.0, 1.0, 4.0, 1.5, 5.0, 9.0, 2.0, 6.0]),
             # Known in too few boroughs to rank: left out, not reported as noise.
             survey_rows("thin", [1.0, 2.0, None, None, None, None, None, None]),
+            # The same in every borough: no order to rank.
+            survey_rows("flat", [5.0] * 8),
         ]
     )
 
@@ -190,7 +192,7 @@ def test_the_study_ranks_each_indicator_against_coffee_shops_per_resident() -> N
         ["rented_pct", "occupants_per_room"],
         ["occupants_per_room", "rented_pct"],
     )
-    assert "thin" not in study["indicator"].to_list()
+    assert {"thin", "flat"}.isdisjoint(study["indicator"].to_list())
     rented = study.filter(pl.col("indicator") == "rented_pct").row(0, named=True)
     assert rented["rho_per_10k_people"] == pytest.approx(1.0)
     assert rented["rho_low"] > 0.5

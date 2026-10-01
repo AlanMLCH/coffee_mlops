@@ -15,6 +15,8 @@
 - PROFECO's shelf prices -> `consumer_prices`; see `domains.coffee.consumer_prices`.
 - The city's GTFS stops and the Metro's and Metrobús' daily entries -> `transit_stations`
   and `transit_ridership`; see `domains.coffee.transit`.
+- The 2020 Census by urban AGEB and the AGEBs' polygons -> `census_zones`, and every
+  place's `zone_id`; see `domains.coffee.zones`.
 
 Transforms are pure functions over validated frames. Reading the raw layer, holding
 each table to its contract and writing it with lineage is the core's job
@@ -40,6 +42,7 @@ from domains.coffee.config import (
     ProductionConfig,
     ShopKindRule,
     TransitConfig,
+    ZonesConfig,
 )
 from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
 from domains.coffee.prices import (
@@ -61,6 +64,7 @@ from domains.coffee.schemas import (
 from domains.coffee.sources.denue import STRATA
 from domains.coffee.survey import clean_borough_profile
 from domains.coffee.transit import clean_transit_ridership, clean_transit_stations
+from domains.coffee.zones import clean_census_zones, in_zones
 from mlops_core.adapter import CleanTable
 from mlops_core.data.geo import attribute_points, match_places
 
@@ -414,10 +418,14 @@ READERS = {"denue_cafes": _denue_shops, "osm_places": _osm_shops}
 
 
 def clean_coffee_shops(
-    frames: Mapping[str, pl.DataFrame], areas: pl.DataFrame, rules: CleaningConfig
+    frames: Mapping[str, pl.DataFrame],
+    areas: pl.DataFrame,
+    rules: CleaningConfig,
+    zones: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Both registers as one table of places, each one placed inside a borough, given a
-    kind, and linked to its twin in the other register when there is one.
+    """Both registers as one table of places, each one placed inside a borough and its
+    urban AGEB, given a kind, and linked to its twin in the other register when there is
+    one.
 
     The sources sit side by side rather than merged: DENUE is the official register, OSM
     is what people mapped, and they disagree about what exists. `matched_shop_id` says
@@ -441,7 +449,7 @@ def clean_coffee_shops(
         {"area_id": "borough_id", "area_name": "borough"}
     )
     _report_placement(placed)
-    linked = _link_registers(placed, rules)
+    linked = in_zones(_link_registers(placed, rules), zones)
     return linked.select(*coffee_shops_schema(rules).columns).sort("shop_id")
 
 
@@ -594,6 +602,7 @@ def clean_tables(
     farmers: ProducerPricesConfig,
     profile: BoroughProfileConfig,
     transit: TransitConfig,
+    zones: ZonesConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
@@ -606,7 +615,8 @@ def clean_tables(
     areas = frames["cdmx_boroughs"]
     # Which registers this build actually saw: DENUE is absent without a token.
     shop_inputs = tuple(name for name in (*READERS, "cdmx_boroughs") if name in frames)
-    stations = clean_transit_stations(frames[transit.stops], areas)
+    layer = frames[zones.layer]
+    stations = clean_transit_stations(frames[transit.stops], areas, layer)
     roasters = clean_roasters(
         frames.get("roaster_catalogs"), rules, read_at.get("roaster_catalogs")
     )
@@ -621,7 +631,13 @@ def clean_tables(
             clean_borough_profile(frames[profile.source], areas, profile),
             (profile.source, "cdmx_boroughs"),
         ),
-        "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
+        "coffee_shops": CleanTable(
+            clean_coffee_shops(frames, areas, rules, layer), (*shop_inputs, zones.layer)
+        ),
+        "census_zones": CleanTable(
+            clean_census_zones(frames[zones.census], layer, areas),
+            (zones.census, zones.layer, "cdmx_boroughs"),
+        ),
         "coffee_shop_history": CleanTable(
             clean_coffee_shop_history(frames, areas, rules, read_at), shop_inputs
         ),
@@ -637,7 +653,7 @@ def clean_tables(
         "exchange_rates": CleanTable(
             clean_exchange_rates(frames["fred_usd_mxn"]), ("fred_usd_mxn",)
         ),
-        "transit_stations": CleanTable(stations, (transit.stops, "cdmx_boroughs")),
+        "transit_stations": CleanTable(stations, (transit.stops, "cdmx_boroughs", zones.layer)),
         "transit_ridership": CleanTable(
             clean_transit_ridership(
                 frames[transit.metro], frames[transit.metrobus], stations, transit

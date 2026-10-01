@@ -75,6 +75,8 @@ def test_extract_writes_raw_layer_under_the_domain(
         "metro_ridership",
         "metrobus_ridership",
         "transit_stops",
+        "census_2020_ageb",
+        "cdmx_ageb",
         *served,
     }
 
@@ -126,6 +128,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "producer_prices",
         "transit_stations",
         "transit_ridership",
+        "census_zones",
         "documents",
         "document_chunks",
     }
@@ -166,6 +169,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "producer_prices",
         "transit_stations",
         "transit_ridership",
+        "census_zones",
         "documents",
         "document_chunks",
     }

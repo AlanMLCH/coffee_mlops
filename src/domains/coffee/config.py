@@ -389,6 +389,16 @@ class TransitConfig(BaseModel):
     station_aliases: dict[str, str] = {}
 
 
+class ZonesConfig(BaseModel):
+    """A zone finer than the borough: the sources of the census' figures per urban AGEB
+    and of the AGEBs' polygons."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    census: str
+    layer: str
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -415,6 +425,7 @@ class CoffeeConfig(DomainConfig):
     producer_prices: ProducerPricesConfig
     borough_profile: BoroughProfileConfig
     transit: TransitConfig
+    census_zones: ZonesConfig
 
     @model_validator(mode="after")
     def _title_notes_name_shops(self) -> Self:
@@ -465,4 +476,17 @@ class CoffeeConfig(DomainConfig):
         ]
         if missing:
             raise ValueError(f"`transit` reads {missing}, which are not sources")
+        return self
+
+    @model_validator(mode="after")
+    def _zones_are_downloaded(self) -> Self:
+        zones = self.census_zones
+        census, layer = self.sources.get(zones.census), self.sources.get(zones.layer)
+        if census is None or census.member is None:
+            raise ValueError(
+                f"`census_zones` reads {zones.census!r}: it has to be a source whose `member` "
+                "names the CSV inside INEGI's ZIP"
+            )
+        if layer is None or layer.spatial is None:
+            raise ValueError(f"`census_zones` draws {zones.layer!r}: it has to be a map layer")
         return self

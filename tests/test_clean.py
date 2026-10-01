@@ -221,6 +221,7 @@ def test_build_clean_writes_every_table_with_lineage(
         "exchange_rates",
         "transit_stations",
         "transit_ridership",
+        "census_zones",
         # The corpus', built by the core from the documents the domain lists.
         "documents",
         "document_chunks",
@@ -234,7 +235,7 @@ def test_build_clean_writes_every_table_with_lineage(
 
 
 def shops(frames: Frames) -> pl.DataFrame:
-    return clean_coffee_shops(frames, frames["cdmx_boroughs"], RULES)
+    return clean_coffee_shops(frames, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
 
 def test_both_registers_become_one_table_of_places(frames: Frames) -> None:
@@ -276,7 +277,7 @@ def test_a_disagreement_is_reported_rather_than_absorbed(
     moved = dict(frames)
     moved["denue_cafes"] = frames["denue_cafes"].with_columns(pl.lit("090150001").alias("AreaGeo"))
 
-    clean_coffee_shops(moved, frames["cdmx_boroughs"], RULES)
+    clean_coffee_shops(moved, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
     assert "agrees with the source's own borough on 0 of 3" in caplog.text
 
@@ -288,7 +289,7 @@ def test_a_place_outside_every_borough_is_kept_and_counted(
     adrift = dict(frames)
     adrift["denue_cafes"] = set_first(frames["denue_cafes"], "Latitud", 0.0)
 
-    table = clean_coffee_shops(adrift, frames["cdmx_boroughs"], RULES)
+    table = clean_coffee_shops(adrift, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
     assert "1 places fell outside every borough" in caplog.text
     assert table["borough_id"].null_count() == 1  # the row stays, unplaced
@@ -302,7 +303,7 @@ def test_an_element_without_a_coordinate_is_dropped(
     unplaced = dict(frames)
     unplaced["osm_places"] = set_first(frames["osm_places"], "latitude", None)
 
-    table = clean_coffee_shops(unplaced, frames["cdmx_boroughs"], RULES)
+    table = clean_coffee_shops(unplaced, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
     assert "Dropped 1 places with no coordinate" in caplog.text
     assert table.height == 9  # 3 from DENUE, 7 from OSM, less the one with no point
@@ -310,7 +311,9 @@ def test_an_element_without_a_coordinate_is_dropped(
 
 def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
     """A clone with no DENUE token still gets the OpenStreetMap half."""
-    table = clean_coffee_shops({"osm_places": frames["osm_places"]}, frames["cdmx_boroughs"], RULES)
+    table = clean_coffee_shops(
+        {"osm_places": frames["osm_places"]}, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"]
+    )
 
     assert table["source"].unique().to_list() == ["osm"]
     assert table["declared_borough_id"].null_count() == table.height
@@ -318,7 +321,7 @@ def test_one_register_is_enough_to_build_the_table(frames: Frames) -> None:
 
 def test_no_register_at_all_says_what_to_run(frames: Frames) -> None:
     with pytest.raises(ValueError, match="run extract first"):
-        clean_coffee_shops({}, frames["cdmx_boroughs"], RULES)
+        clean_coffee_shops({}, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
     with pytest.raises(ValueError, match="run extract first"):
         clean_coffee_shop_history({}, frames["cdmx_boroughs"], RULES, {})
 
@@ -353,7 +356,7 @@ def test_every_read_of_a_register_is_its_history_and_the_newest_is_now(frames: F
             registers, frames["cdmx_boroughs"], RULES, {"denue_cafes": second}
         ),
     )
-    now = clean_coffee_shops(registers, frames["cdmx_boroughs"], RULES)
+    now = clean_coffee_shops(registers, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
     assert history.group_by("snapshot").len().sort("snapshot").rows() == [
         ("2026-03-01", 3),
@@ -493,7 +496,7 @@ def test_an_osm_tag_nobody_mapped_stops_the_run(frames: Frames) -> None:
     unmapped["osm_places"] = set_first(frames["osm_places"], "amenity", "fast_food")
 
     with pytest.raises(ValueError, match="fast_food"):
-        clean_coffee_shops(unmapped, frames["cdmx_boroughs"], RULES)
+        clean_coffee_shops(unmapped, frames["cdmx_boroughs"], RULES, frames["cdmx_ageb"])
 
 
 def test_a_place_both_registers_list_is_linked_both_ways(frames: Frames) -> None:

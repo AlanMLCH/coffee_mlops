@@ -134,6 +134,7 @@ class CoffeeAdapter:
         return readers
 
     def file_readers(self) -> Mapping[str, FileReader]:
+        from domains.coffee.sources.census_zones import read_census_zones
         from domains.coffee.sources.faostat import read_producer_prices
         from domains.coffee.sources.ico import read_indicator_prices
         from domains.coffee.sources.profeco import read_shelf_prices
@@ -144,6 +145,9 @@ class CoffeeAdapter:
         readers[farmers.source] = partial(read_producer_prices,
                                           member=str(self.config.sources[farmers.source].member),
                                           item_code=farmers.item_code)  # fmt: skip
+        # CoffeeConfig refuses a zones census without a member too.
+        zones = self.config.census_zones.census
+        readers[zones] = partial(read_census_zones, member=str(self.config.sources[zones].member))
         for name in (shelves.source, *shelves.closed_years):
             folder = self.config.sources[name].member
             if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
@@ -166,6 +170,7 @@ class CoffeeAdapter:
             config.producer_prices,
             config.borough_profile,
             config.transit,
+            config.census_zones,
             read_at,
         )
 

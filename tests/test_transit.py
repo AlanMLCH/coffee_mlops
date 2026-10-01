@@ -28,15 +28,18 @@ from domains.coffee.transit import (
 from mlops_core.contracts import check_contract
 from mlops_core.data.extract import ingest
 from mlops_core.data.validate import validate_read
+from tests.conftest import BALDERAS_ZONE
 
 Frames = dict[str, pl.DataFrame]
 
 
 @pytest.fixture
 def raw(coffee_adapter: CoffeeAdapter, client: Any, tmp_path: Path) -> Frames:
-    """The three transit sources and the boroughs, downloaded and checked as a build does."""
+    """The three transit sources, the boroughs and their AGEBs, downloaded and checked as a
+    build does."""
     config = coffee_adapter.config
-    names = [config.transit.stops, config.transit.metro, config.transit.metrobus, "cdmx_boroughs"]
+    transit = config.transit
+    names = [transit.stops, transit.metro, transit.metrobus, "cdmx_boroughs", "cdmx_ageb"]
     frames = {}
     for name in names:
         artifact = ingest(name, config.sources[name], tmp_path / "raw", client)
@@ -47,7 +50,8 @@ def raw(coffee_adapter: CoffeeAdapter, client: Any, tmp_path: Path) -> Frames:
 @pytest.fixture
 def stations(raw: Frames) -> pl.DataFrame:
     return check_contract(
-        TRANSIT_STATIONS, clean_transit_stations(raw["transit_stops"], raw["cdmx_boroughs"])
+        TRANSIT_STATIONS,
+        clean_transit_stations(raw["transit_stops"], raw["cdmx_boroughs"], raw["cdmx_ageb"]),
     )
 
 
@@ -73,7 +77,8 @@ def test_each_station_is_placed_once_per_line(stations: pl.DataFrame) -> None:
     # La Paz is over the city line: kept, with no borough.
     paz = stations.filter(pl.col("station") == "La Paz").row(0, named=True)
     assert paz["borough_id"] is None
-    assert stations.filter(pl.col("station") == "Balderas")["borough"].item() == "Cuauhtémoc"
+    balderas = stations.filter(pl.col("station") == "Balderas").row(0, named=True)
+    assert (balderas["borough"], balderas["zone_id"]) == ("Cuauhtémoc", BALDERAS_ZONE)
 
 
 def test_the_metros_days_are_repaired_matched_and_resolved(
