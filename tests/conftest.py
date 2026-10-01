@@ -201,6 +201,69 @@ def census_archive(rows: list[str] = CENSUS_ROWS) -> bytes:
     return buffer.getvalue()
 
 
+# INEGI's 2025 Intercensal Survey shaped as it downloads: Windows-1252, a CSV in a ZIP, a
+# row per area and estimator. Three of the boundary fixture's boroughs and the state as
+# their sum; a locality and another state's municipality, which the profile leaves out;
+# and an indicator whose sample was too small in one borough ("MI").
+SURVEY_MEMBER = "conjunto_de_datos/conjunto_datos_eic2025_105.csv"
+SURVEY_INDICATORS = [
+    "POBTOT", "MEDIANA_POBTOT", "INDICE_ENV", "RAZON_DEP_TOT", "PCN_PRESOE20", "GRAPROES",
+    "PCN_P15YM_ES", "PCN_PEA", "PCN_PDESOCUP", "PCN_POCUP_ASA", "PCN_POCUP_CPRO",
+    "PCN_PSINDER", "PCN_POCUP_OENT", "PCN_POCUP_MET", "PCN_POCUP_2HOR", "PCN_POCUP_2HYM",
+    "TOTHOG", "HOGJEF_F", "VIVPARHAB", "PROM_OCUP", "PRO_OCUP_C", "PCN_VPH_PROPIA",
+    "PCN_VPH_ALQUI", "PCN_VPH_INTER", "PCN_VPH_AUTOM", "PCN_VPH_PC",
+]  # fmt: skip
+SURVEY_COUNTS = {"POBTOT", "TOTHOG", "HOGJEF_F", "VIVPARHAB"}
+SURVEY_ESTIMATOR_NAMES = [
+    "Valor", "Error estándar", "Límite inferior de confianza",
+    "Límite superior de confianza", "Coeficiente de variación",
+]  # fmt: skip
+# (CVEGEO, municipality, its name, locality, people, median age, % rented)
+SURVEY_AREAS = [
+    ("090080000", "008", "La Magdalena Contreras", "0000", 250000, 36.5, 20.0),
+    ("090150000", "015", "Cuauhtémoc", "0000", 505637, 37.55, 42.15),
+    ("090160000", "016", "Miguel Hidalgo", "0000", 410000, 39.0, 42.31),
+    ("090150001", "015", "Cuauhtémoc", "0001", 505637, 37.55, 42.15),  # the locality
+    ("140390000", "039", "Guadalajara", "0000", 1400000, 33.0, 30.0),  # another state
+]
+
+
+def survey_row(cvegeo: str, mun: str, name: str, loc: str, people: float, age: float,
+               rented: float, estimator: str) -> list[str]:  # fmt: skip
+    """One area's figures under one estimator: the value, an interval 5% either side, a
+    3% standard error and a coefficient of 3."""
+    values = {column: (round(people / 2.5) if column in SURVEY_COUNTS else 10.0)
+              for column in SURVEY_INDICATORS}  # fmt: skip
+    values.update({"POBTOT": people, "MEDIANA_POBTOT": age, "PCN_VPH_ALQUI": rented})
+    scale = {"Valor": 1.0, "Error estándar": 0.03, "Límite inferior de confianza": 0.95,
+             "Límite superior de confianza": 1.05}  # fmt: skip
+    figures = [
+        "3.0" if estimator.startswith("Coef") else f"{values[c] * scale[estimator]:.10g}"
+        for c in SURVEY_INDICATORS
+    ]
+    if mun == "008":  # too few people sampled in this borough had moved since 2020
+        figures[SURVEY_INDICATORS.index("PCN_PRESOE20")] = "MI"
+    return [cvegeo, cvegeo[:2], "Ciudad de México", mun, name, loc, name, estimator, *figures]
+
+
+def survey_archive(
+    areas: list[tuple[str, str, str, str, int, float, float]] = SURVEY_AREAS,
+) -> bytes:
+    boroughs = [a for a in areas if a[0].startswith("09") and a[3] == "0000"]
+    state = ("090000000", "000", "Total de la entidad", "0000",
+             sum(a[4] for a in boroughs), 37.0, 35.0)  # fmt: skip
+    rows = [survey_row(*area, estimator)
+            for area in [state, *areas] for estimator in SURVEY_ESTIMATOR_NAMES]  # fmt: skip
+    header = ["CVEGEO", "CVE_ENT", "NOM_ENT", "CVE_MUN", "NOM_MUN", "CVE_LOC", "NOM_LOC",
+              "ESTIMADOR", *SURVEY_INDICATORS]  # fmt: skip
+    text = io.StringIO()
+    csv.writer(text, lineterminator="\r\n").writerows([header, *rows])
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(SURVEY_MEMBER, text.getvalue().encode("cp1252"))
+    return buffer.getvalue()
+
+
 # FAOSTAT's bulk file of producer prices, as it downloads: one CSV in a ZIP, every field
 # quoted. Coffee's year values, a month (left out), an estimated zero (a price nobody
 # reported), Mexico's cherry price (SIAP's fixture: 15,000,000 pesos over 5,024 t), a
@@ -339,6 +402,7 @@ def recorded() -> dict[str, bytes]:
         "fred_usd_mxn": b"observation_date,DEXMXUS\n2026-07-01,17.4000\n2026-07-02,17.5000\n"
         b"2026-07-03,\n2026-08-03,17.0000\n2026-08-04,17.1000\n",
         "census_2020": census_archive(),
+        "intercensal_2025": survey_archive(),
         "faostat_prices": faostat_archive(),
     }
 

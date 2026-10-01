@@ -32,6 +32,7 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "profeco_prices_2025",
         "fred_usd_mxn",
         "census_2020",
+        "intercensal_2025",
         "faostat_prices",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
@@ -259,6 +260,22 @@ def test_producer_prices_come_from_a_source_that_names_the_csv_in_its_zip() -> N
     config["producer_prices"]["source"] = "fred_usd_mxn"  # a CSV on its own
 
     with pytest.raises(ValidationError, match="names the CSV inside FAOSTAT's ZIP"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_the_borough_profile_reads_a_source_that_exists() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["borough_profile"]["source"] = "intercensal_2030"
+
+    with pytest.raises(ValidationError, match="reads 'intercensal_2030', which is not a source"):
+        CoffeeConfig.model_validate(config)
+
+
+def test_two_survey_columns_cannot_share_a_name() -> None:
+    config = load_adapter("coffee").config.model_dump()
+    config["borough_profile"]["indicators"]["PCN_VPH_ALQUI"]["name"] = "owned_pct"
+
+    with pytest.raises(ValidationError, match=r"names two columns the same: \['owned_pct'\]"):
         CoffeeConfig.model_validate(config)
 
 

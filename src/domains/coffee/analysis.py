@@ -31,6 +31,7 @@ from domains.coffee.config import (
 from domains.coffee.prices import CENTS_PER_LB_PER_USD_PER_KG
 from domains.coffee.roaster_sheets import fold
 from mlops_core.analysis.figures import (
+    BASELINE,
     INK,
     MUTED,
     SECONDARY,
@@ -101,6 +102,9 @@ def studies(
         "market_history": market_history(context, market.spotlight_country, market.history_since),
         "shop_kinds": shop_kinds(shops),
         "borough_coffee_shops": borough_coffee_shops(shops, clean["boroughs"]),
+        "borough_profile_coffee": borough_profile_coffee(
+            clean["borough_profile"], shops, clean["boroughs"]
+        ),
         "register_editions": register_editions(shops),
         "shop_turnover": shop_turnover(clean["coffee_shop_history"], redraw_m),
         "kind_agreement": agreement,
@@ -145,6 +149,8 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
     people = tables["borough_coffee_shops"].drop_nulls(["per_10k_people", "schooling_years"])
     if people.height >= 3:  # a correlation of fewer points says nothing
         drawn["coffee_and_schooling"] = coffee_and_schooling_figure(tables["borough_coffee_shops"])
+    if not tables["borough_profile_coffee"].is_empty():
+        drawn["coffee_and_profile"] = coffee_and_profile_figure(tables["borough_profile_coffee"])
     if not tables["roaster_coverage"].is_empty():
         drawn["roaster_coverage"] = roaster_coverage_figure(tables["roaster_coverage"])
     if not tables["flavor_profiles"].is_empty():
@@ -196,6 +202,112 @@ def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.Data
         )
         .sort("per_10k_people", "per_km2", descending=True, nulls_last=True)
     )
+
+
+def borough_profile_coffee(
+    profile: pl.DataFrame, shops: pl.DataFrame, boroughs: pl.DataFrame
+) -> pl.DataFrame:
+    """Which of the survey's indicators move with the boroughs' coffee shops, one row
+    per indicator.
+
+    DENUE's coffee shops (`kind` coffee) per 10,000 residents (2020 Census) and per
+    square kilometre, ranked against each indicator across the boroughs (Spearman), with
+    an interval from resampling the boroughs. Sixteen points and two dozen indicators:
+    some will move together by chance, so a coefficient whose interval spans zero says
+    nothing, and none says why. The precision column is the survey's own (the loosest
+    coefficient of variation among the boroughs).
+    """
+    places = borough_coffee_shops(shops, boroughs).select("borough_id", "per_10k_people", "per_km2")
+    rows = []
+    for (indicator, unit), group in profile.group_by("indicator", "unit", maintain_order=True):
+        known = group.join(places, on="borough_id").drop_nulls(["value", "per_10k_people"])
+        if known.height < MIN_BOROUGHS:
+            continue
+        low, high = _spearman_interval(known["value"], known["per_10k_people"])
+        lowest, highest = (
+            known.sort("value").row(0, named=True),
+            known.sort("value").row(-1, named=True),
+        )
+        rows.append(
+            {
+                "indicator": indicator,
+                "unit": unit,
+                "boroughs": known.height,
+                "rho_per_10k_people": _spearman(known["value"], known["per_10k_people"]),
+                "rho_low": low,
+                "rho_high": high,
+                "rho_per_km2": _spearman(known["value"], known["per_km2"]),
+                "lowest": f"{lowest['borough']} {_figure(lowest['value'])}",
+                "highest": f"{highest['borough']} {_figure(highest['value'])}",
+                "loosest_cv": known["cv"].max(),
+            }
+        )
+    schema = {
+        "indicator": pl.String, "unit": pl.String, "boroughs": pl.Int64,
+        "rho_per_10k_people": pl.Float64, "rho_low": pl.Float64, "rho_high": pl.Float64,
+        "rho_per_km2": pl.Float64, "lowest": pl.String, "highest": pl.String,
+        "loosest_cv": pl.Float64,
+    }  # fmt: skip
+    table = pl.DataFrame(rows, schema=schema)
+    return table.sort(pl.col("rho_per_10k_people").abs(), descending=True)
+
+
+# Fewer boroughs than this and a rank correlation says nothing.
+MIN_BOROUGHS = 5
+RHO_RESAMPLES, RHO_SEED = 2000, 11
+
+
+def _figure(value: float) -> str:
+    """A count with its thousands, a share or an average as the survey prints it."""
+    return f"{value:,.0f}" if value >= 1000 else f"{value:g}"
+
+
+def _spearman(x: pl.Series, y: pl.Series) -> float:
+    """The rank correlation, ties at their average rank."""
+    return float(np.corrcoef(x.rank("average"), y.rank("average"))[0, 1])
+
+
+def _spearman_interval(x: pl.Series, y: pl.Series) -> tuple[float, float]:
+    """The middle 95% of the rank correlation over resamples of the boroughs; a resample
+    whose values are all one is left out, having no ranks to correlate."""
+    rng = np.random.default_rng(RHO_SEED)
+    xs, ys = x.to_numpy(), y.to_numpy()
+    draws = rng.integers(0, len(xs), size=(RHO_RESAMPLES, len(xs)))
+    rhos = [
+        _spearman(pl.Series(xs[d]), pl.Series(ys[d]))
+        for d in draws
+        if np.ptp(xs[d]) > 0 and np.ptp(ys[d]) > 0
+    ]
+    return float(np.percentile(rhos, 2.5)), float(np.percentile(rhos, 97.5))
+
+
+def coffee_and_profile_figure(table: pl.DataFrame) -> Figure:
+    """Each indicator's rank correlation with coffee shops per resident, and its
+    interval: the ones clear of zero against the ones that are noise."""
+    shown = table.sort("rho_per_10k_people")
+    figure, ax = canvas(
+        "Who lives where the coffee shops are (2025)",
+        f"vs coffee shops per 10k residents, {shown.select(pl.col('boroughs').max()).item()} "
+        "boroughs; "
+        "bars: 95% interval",
+    )
+    positions = np.arange(shown.height)
+    clear = (shown["rho_low"] > 0) | (shown["rho_high"] < 0)
+    colors = [SERIES[0] if c else MUTED for c in clear]
+    ax.errorbar(
+        shown["rho_per_10k_people"], positions,
+        xerr=[shown["rho_per_10k_people"] - shown["rho_low"],
+              shown["rho_high"] - shown["rho_per_10k_people"]],
+        fmt="none", ecolor=BASELINE, elinewidth=1.4, zorder=2,
+    )  # fmt: skip
+    ax.scatter(shown["rho_per_10k_people"], positions, color=colors, s=30, zorder=3)
+    ax.axvline(0, color=MUTED, linewidth=0.8)
+    ax.set_yticks(positions, [i.replace("_", " ") for i in shown["indicator"]], fontsize=7.5)
+    ax.set_xlim(-1, 1)
+    ax.set_xlabel("Spearman's rank correlation", color=MUTED)
+    value_grid(ax, "x")
+    figure.tight_layout()
+    return figure
 
 
 def coffee_and_schooling_figure(table: pl.DataFrame) -> Figure:

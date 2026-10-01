@@ -29,7 +29,12 @@ from domains.coffee.features import (
 )
 from domains.coffee.forecast import PRICES_TABLE, add_price_history
 from domains.coffee.request import Lot, Offer, PriceMonth
-from domains.coffee.schemas import RAW_SCHEMAS, clean_schemas
+from domains.coffee.schemas import (
+    RAW_SCHEMAS,
+    borough_profile_schema,
+    clean_schemas,
+    intercensal_schema,
+)
 from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
 
 if TYPE_CHECKING:
@@ -101,9 +106,15 @@ class CoffeeAdapter:
         return extract(self.config, self.keys, data_dir, client, now)
 
     def raw_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
-        # A closed year of the shelf survey is the same file as the year in course.
+        # A closed year of the shelf survey is the same file as the year in course; the
+        # survey of who lives where is read for the columns its profile names.
         closed = self.config.consumer_prices.closed_years
-        return {**RAW_SCHEMAS, **dict.fromkeys(closed, RAW_SCHEMAS["profeco_prices"])}
+        profile = self.config.borough_profile
+        return {
+            **RAW_SCHEMAS,
+            **dict.fromkeys(closed, RAW_SCHEMAS["profeco_prices"]),
+            profile.source: intercensal_schema(profile),
+        }
 
     def json_readers(self) -> Mapping[str, JsonReader]:
         from domains.coffee.sources import denue, fas, overpass, roasters
@@ -153,11 +164,13 @@ class CoffeeAdapter:
             config.production,
             config.consumer_prices,
             config.producer_prices,
+            config.borough_profile,
             read_at,
         )
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
-        return clean_schemas(self.config.cleaning)
+        profile = borough_profile_schema(self.config.borough_profile)
+        return {**clean_schemas(self.config.cleaning), "borough_profile": profile}
 
     def context_tables(self, model: str) -> tuple[str, ...]:
         return hooks(model).context_tables

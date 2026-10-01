@@ -205,6 +205,7 @@ def test_build_clean_writes_every_table_with_lineage(
         "coffee_reviews",
         "market_context",
         "boroughs",
+        "borough_profile",
         "coffee_shops",
         "coffee_shop_history",
         "mexico_production",

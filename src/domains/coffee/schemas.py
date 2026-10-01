@@ -15,7 +15,7 @@ contract with every downstream consumer (features, the agent's SQL, the API).
 import pandera.polars as pa
 import polars as pl
 
-from domains.coffee.config import UNCLASSIFIED, CleaningConfig
+from domains.coffee.config import UNCLASSIFIED, BoroughProfileConfig, CleaningConfig
 
 SENSORY_SCORES = [
     "Aroma",
@@ -340,6 +340,39 @@ CENSUS_2020 = pa.DataFrameSchema(
     },
 )
 
+# The intercensal survey's estimators, as its file names them, and the clean table's name
+# for each. The standard error is left out: the interval and the coefficient say it.
+SURVEY_ESTIMATORS = {
+    "Valor": "value",
+    "Límite inferior de confianza": "ci_low",
+    "Límite superior de confianza": "ci_high",
+    "Coeficiente de variación": "cv",
+}
+SURVEY_STANDARD_ERROR = "Error estándar"
+
+
+def intercensal_schema(profile: BoroughProfileConfig) -> pa.DataFrameSchema:
+    """The survey's principal results as downloaded: a row per area and estimator, and
+    only the columns the profile reads. "MI" (a sample too small) and "NA" (does not
+    apply) arrive as nulls, as the source config says."""
+    return pa.DataFrameSchema(
+        name=profile.source,
+        coerce=True,
+        unique=["CVEGEO", "ESTIMADOR"],
+        columns={
+            "CVEGEO": pa.Column(pl.String, pa.Check.str_matches(r"^\d{9}$")),
+            "CVE_ENT": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2}$")),
+            "CVE_MUN": pa.Column(pl.String, pa.Check.str_matches(r"^\d{3}$")),
+            "NOM_MUN": _text(),
+            "CVE_LOC": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}$")),
+            "ESTIMADOR": pa.Column(
+                pl.String, pa.Check.isin([*SURVEY_ESTIMATORS, SURVEY_STANDARD_ERROR])
+            ),
+            **{column: pa.Column(pl.Float64, nullable=True) for column in profile.indicators},
+        },
+    )
+
+
 # DENUE's count of every activity, per area and staff-size stratum: a row per activity
 # code at every level of SCIAN (sector 2 digits, down to class 6), as the service answers.
 DENUE_WORKPLACES = pa.DataFrameSchema(
@@ -470,6 +503,40 @@ BOROUGHS = pa.DataFrameSchema(
 )
 
 
+def borough_profile_schema(profile: BoroughProfileConfig) -> pa.DataFrameSchema:
+    """Contract of `borough_profile`: a row per borough and indicator of the survey, the
+    value inside its own interval. The indicators a row can name come from the config."""
+    return pa.DataFrameSchema(
+        name="borough_profile",
+        strict=True,
+        unique=["borough_id", "indicator"],
+        columns={
+            "borough_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+            "borough": pa.Column(pl.String),
+            "year": pa.Column(pl.Int64, pa.Check.eq(profile.year)),
+            "indicator": pa.Column(
+                pl.String, pa.Check.isin([i.name for i in profile.indicators.values()])
+            ),
+            "unit": pa.Column(pl.String),
+            # Null where the survey's sample was too small or the figure does not apply.
+            "value": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+            "ci_low": pa.Column(pl.Float64, nullable=True),
+            "ci_high": pa.Column(pl.Float64, nullable=True),
+            "cv": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),  # percent
+        },
+        checks=[
+            pa.Check(
+                lambda data: data.lazyframe.select(
+                    (pl.col("ci_low") <= pl.col("value"))
+                    .and_(pl.col("value") <= pl.col("ci_high"))
+                    .fill_null(True)
+                ),
+                error="an estimate lies inside its own interval",
+            )
+        ],
+    )
+
+
 def coffee_shops_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
     """Contract of `coffee_shops`; the kinds a place can have come from the config."""
     return COFFEE_SHOPS.add_columns(
@@ -544,7 +611,8 @@ def coffee_shop_history_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
 
 
 def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
-    """One strict contract per clean table: the domain's promise to every reader."""
+    """One strict contract per clean table: the domain's promise to every reader. The
+    survey's profile has its own (`borough_profile_schema`), shaped by its config."""
     return {
         "coffee_reviews": coffee_reviews_schema(rules),
         "market_context": MARKET_CONTEXT,

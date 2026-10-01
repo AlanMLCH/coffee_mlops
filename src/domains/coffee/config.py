@@ -344,6 +344,38 @@ class ProducerPricesConfig(BaseModel):
     cherry: list[str] = []
 
 
+class ProfileIndicator(BaseModel):
+    """One of the survey's columns, under the name the domain gives it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    unit: str = Field(min_length=1)  # what one unit of the value is: "percent", "years"...
+    # A count adds up: the boroughs' values must come to the state's own total.
+    count: bool = False
+
+
+class BoroughProfileConfig(BaseModel):
+    """What INEGI's intercensal survey says about each borough: the columns read from
+    its principal results, each under the domain's name for it. A survey, not a count:
+    every value comes with the interval INEGI computed for it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str  # the raw source that downloads the survey's principal results
+    year: int
+    confidence: float = Field(gt=0, lt=1)  # the level of the survey's own intervals
+    indicators: dict[str, ProfileIndicator] = Field(min_length=1)  # INEGI's column -> ...
+
+    @model_validator(mode="after")
+    def _names_are_unique(self) -> Self:
+        names = [indicator.name for indicator in self.indicators.values()]
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        if repeated:
+            raise ValueError(f"`borough_profile` names two columns the same: {repeated}")
+        return self
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -368,6 +400,7 @@ class CoffeeConfig(DomainConfig):
     market_analysis: MarketAnalysisConfig
     consumer_prices: ConsumerPricesConfig
     producer_prices: ProducerPricesConfig
+    borough_profile: BoroughProfileConfig
 
     @model_validator(mode="after")
     def _title_notes_name_shops(self) -> Self:
@@ -401,4 +434,11 @@ class CoffeeConfig(DomainConfig):
                 f"`producer_prices` reads {name!r}: it has to be a source whose `member` "
                 "names the CSV inside FAOSTAT's ZIP"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _borough_profile_is_downloaded(self) -> Self:
+        name = self.borough_profile.source
+        if name not in self.sources:
+            raise ValueError(f"`borough_profile` reads {name!r}, which is not a source")
         return self

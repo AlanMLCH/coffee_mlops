@@ -71,6 +71,7 @@ def test_extract_writes_raw_layer_under_the_domain(
         "fred_usd_mxn",
         "faostat_prices",
         "census_2020",
+        "intercensal_2025",
         *served,
     }
 
@@ -106,6 +107,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "coffee_reviews",
         "market_context",
         "boroughs",
+        "borough_profile",
         "coffee_shops",
         "coffee_shop_history",
         "mexico_production",
@@ -143,6 +145,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "coffee_reviews",
         "market_context",
         "boroughs",
+        "borough_profile",
         "coffee_shops",
         "coffee_shop_history",
         "mexico_production",

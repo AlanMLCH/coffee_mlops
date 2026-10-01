@@ -138,6 +138,33 @@ locality plus a total per borough (`LOC 0000`) and for the state (`MUN 000`); `E
 state's 9,209,944 people are exactly the boroughs' sum (the build demands it).
 robots.txt allows `/contenidos/programas`; INEGI's terms (free use, citing it).
 
+### INEGI 2025 Intercensal Survey: `intercensal_2025`
+
+Principal results of the 2025 Intercensal Survey (October-November 2025, a sample of 7.3
+million dwellings, representative of every municipality; published 22 September 2026):
+`https://www.inegi.org.mx/contenidos/programas/eic/2025/datosabiertos/conjunto_de_datos_eic2025_105_csv.zip`.
+The survey's page is built by script; this address is in its own `application/ld+json`
+metadata. robots.txt allows `/contenidos/programas`. Verified 2026-09-30:
+
+- An 8.3 MB ZIP: `conjunto_de_datos/conjunto_datos_eic2025_105.csv` (26.9 MB, 13,880 rows
+  x 349 columns, the whole country), a data dictionary and metadata. **Windows-1252**,
+  undeclared.
+- A row per area and **estimator**: `Valor`, `Error estándar`, `Límite inferior de
+  confianza`, `Límite superior de confianza`, `Coeficiente de variación`. The intervals are
+  at **90%**. Areas: the country, each state (`CVE_MUN 000`), each municipality (`CVE_LOC
+  0000`), each locality of 50,000 or more, and per state the rest (`CVE_MUN 997`,
+  `CVE_LOC 9997`). In Mexico City each alcaldia's main locality repeats its totals.
+- `MI` = not available, sample too small (665 values nationwide, none in Mexico City);
+  `NA` = does not apply. Both are read as nulls.
+- Indicators with a `PCN_` prefix are percentages of a group the dictionary names (e.g.
+  `PCN_POCUP_MET`: of the employed who commute, those who go by Metro or Metrobús);
+  `MEDIANA_POBTOT` is the median age, computed by INEGI.
+- The sixteen alcaldias' counts (people, dwellings, households) add up exactly to the
+  city's (9,165,819 people in private dwellings): checked on every build. Estimates, not a
+  count: the coefficient of variation reaches 20% for some boroughs' population and 37%
+  for the share who lived in another state in 2020.
+- Licence: INEGI's terms of use (free use, citing it).
+
 ### World Bank Pink Sheet: `world_bank_prices`
 
 Page `https://www.worldbank.org/en/research/commodity-markets`; the workbook

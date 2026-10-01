@@ -69,6 +69,42 @@ the state's own total, which the build checks). 16 rows.
 Per inhabitant: divide by `population` (per 10,000: `* 10000.0 / population`). Per job:
 divide by `jobs_estimate` (per 1,000: `* 1000.0 / jobs_estimate`).
 
+## `clean.borough_profile` — one indicator of one alcaldia, 2025 (INEGI's Intercensal Survey)
+
+Who lives in each borough now: INEGI's 2025 Intercensal Survey (October-November 2025, a
+sample of 7.3 million dwellings, representative of every municipality). An estimate, not a
+count: each comes with INEGI's 90% interval. 16 boroughs x 26 indicators.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `borough_id` | String | INEGI's code, as in `clean.boroughs` |
+| `borough` | String | Name as INEGI spells it |
+| `year` | Int | 2025 |
+| `indicator` | String | One of the names below |
+| `unit` | String | What one unit of `value` is |
+| `value` | Float? | The estimate; null where the sample was too small |
+| `ci_low` | Float? | Lower limit of the 90% interval |
+| `ci_high` | Float? | Upper limit of the 90% interval |
+| `cv` | Float? | Coefficient of variation, percent: under 15 precise, 15-30 acceptable, over 30 use with care |
+
+Indicators (`percent` = per 100 of the group named):
+- People: `population` (in private dwellings), `median_age` (years), `aging_index` (people
+  60+ per 100 under 15), `dependency_ratio` (people under 15 or 65+ per 100 aged 15-64),
+  `lived_in_another_state_2020_pct` (of people 5+).
+- Schooling: `schooling_years` (people 15+), `higher_education_pct` (of people 15+).
+- Work: `economically_active_pct` (of people 12+), `unemployment_pct` (of the economically
+  active), `salaried_pct` and `self_employed_pct` (of the employed),
+  `no_health_coverage_pct` (of everyone), `works_in_another_state_pct`,
+  `commutes_by_metro_or_metrobus_pct`, `commute_1_to_2_hours_pct`,
+  `commute_over_2_hours_pct` (of the employed; the Metro one of those who commute).
+- Homes: `households`, `female_headed_households`, `dwellings` (private, lived in),
+  `occupants_per_dwelling`, `occupants_per_room`, `owned_pct`, `rented_pct`,
+  `internet_pct`, `car_pct`, `computer_pct` (of dwellings).
+
+One borough's figure: `WHERE indicator = 'median_age' AND borough = 'Coyoacán'`. Every
+borough on one indicator: `WHERE indicator = 'rented_pct' ORDER BY value DESC`. Never
+average `value` across indicators; a share of the city needs the counts, not the shares.
+
 ## `clean.coffee_shops` — one place in DENUE's cafeterías class or OSM's cafés and ice-cream parlours
 
 **Not every row is a coffee shop.** DENUE's class 722515 also holds juice stands, soda

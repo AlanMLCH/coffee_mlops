@@ -156,6 +156,24 @@ sources:
     member: iter_09_cpv2020/conjunto_de_datos/conjunto_de_datos_iter_09CSV20.csv
     refresh_hours: 8760 # the next census is 2030
 
+  # INEGI's 2025 Intercensal Survey, principal results: the same questions as the census
+  # and more (age, work, commute, housing tenure), asked in October-November 2025 of a
+  # sample of 7.3 million dwellings, representative of every municipality - each alcaldia
+  # included. Published 22 September 2026; found through the survey page's own metadata.
+  # Verified 2026-09-30: an 8.3 MB ZIP, one CSV of 13,880 rows x 349 columns for the whole
+  # country, Windows-1252; a row per area and estimator (the value, its standard error,
+  # the 90% interval's limits and the coefficient of variation); "MI" where the sample was
+  # too small (never in Mexico City) and "NA" where a figure does not apply. The sixteen
+  # alcaldias add up to the city's own totals exactly. Licence: INEGI's terms (free use,
+  # citing it).
+  intercensal_2025:
+    url: https://www.inegi.org.mx/contenidos/programas/eic/2025/datosabiertos/conjunto_de_datos_eic2025_105_csv.zip
+    filename: conjunto_de_datos_eic2025_105_csv.zip
+    member: conjunto_de_datos/conjunto_datos_eic2025_105.csv
+    encoding: cp1252
+    null_values: ["MI", "NA"]
+    refresh_hours: 8760 # the next survey is the 2030 census
+
   # What farmers are paid for their coffee, country by country, year by year: FAOSTAT's
   # producer prices, one bulk file for every crop. Verified 2026-09-29: 11.7 MB ZIP whose
   # CSV is 214 MB unpacked (1.3 million rows, UTF-8, every field quoted); "Coffee, green"
@@ -1077,6 +1095,45 @@ producer_prices:
   # (checked on every build).
   cherry: [Mexico]
 
+# Who lives in each borough now (source `intercensal_2025`): the survey's columns read,
+# each under this domain's name and unit. "percent" is per 100 of the group INEGI names in
+# the data dictionary; a count must add up to the city's total.
+borough_profile:
+  source: intercensal_2025
+  year: 2025
+  confidence: 0.90 # the survey's intervals
+  indicators:
+    # People
+    POBTOT: {name: population, unit: people, count: true} # in private dwellings
+    MEDIANA_POBTOT: {name: median_age, unit: years}
+    INDICE_ENV: {name: aging_index, unit: people 60+ per 100 under 15}
+    RAZON_DEP_TOT: {name: dependency_ratio, unit: people under 15 or 65+ per 100 aged 15-64}
+    PCN_PRESOE20: {name: lived_in_another_state_2020_pct, unit: percent}
+    # Schooling
+    GRAPROES: {name: schooling_years, unit: years}
+    PCN_P15YM_ES: {name: higher_education_pct, unit: percent}
+    # Work
+    PCN_PEA: {name: economically_active_pct, unit: percent}
+    PCN_PDESOCUP: {name: unemployment_pct, unit: percent}
+    PCN_POCUP_ASA: {name: salaried_pct, unit: percent}
+    PCN_POCUP_CPRO: {name: self_employed_pct, unit: percent}
+    PCN_PSINDER: {name: no_health_coverage_pct, unit: percent}
+    PCN_POCUP_OENT: {name: works_in_another_state_pct, unit: percent}
+    PCN_POCUP_MET: {name: commutes_by_metro_or_metrobus_pct, unit: percent}
+    PCN_POCUP_2HOR: {name: commute_1_to_2_hours_pct, unit: percent}
+    PCN_POCUP_2HYM: {name: commute_over_2_hours_pct, unit: percent}
+    # Households and dwellings
+    TOTHOG: {name: households, unit: households, count: true}
+    HOGJEF_F: {name: female_headed_households, unit: households, count: true}
+    VIVPARHAB: {name: dwellings, unit: dwellings, count: true} # private, lived in
+    PROM_OCUP: {name: occupants_per_dwelling, unit: people per dwelling}
+    PRO_OCUP_C: {name: occupants_per_room, unit: people per room}
+    PCN_VPH_PROPIA: {name: owned_pct, unit: percent}
+    PCN_VPH_ALQUI: {name: rented_pct, unit: percent}
+    PCN_VPH_INTER: {name: internet_pct, unit: percent}
+    PCN_VPH_AUTOM: {name: car_pct, unit: percent}
+    PCN_VPH_PC: {name: computer_pct, unit: percent}
+
 # The studies every domain gets: profiles, drift, feature evidence, residuals.
 # Stage 4: the data pipeline runs every morning in Dagster (make dagster). The ICO's page
 # holds only the current month, so it has to be read every day to build its history; the
@@ -1214,6 +1271,20 @@ explore:
         FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
         WHERE s.kind = 'coffee' AND s.source = 'denue' AND b.jobs_estimate > 0
         GROUP BY b.borough_id
+    - name: Rented homes, 2025
+      kind: areas
+      unit: percent of dwellings
+      description: INEGI's 2025 Intercensal Survey, homes lived in for a rent; the 90% interval in the tooltip
+      sql: >-
+        SELECT borough_id, value AS rented_pct, ci_low, ci_high
+        FROM clean.borough_profile WHERE indicator = 'rented_pct'
+    - name: Median age, 2025
+      kind: areas
+      unit: years
+      description: INEGI's 2025 Intercensal Survey; half the residents are younger, half older
+      sql: >-
+        SELECT borough_id, value AS median_age, ci_low, ci_high
+        FROM clean.borough_profile WHERE indicator = 'median_age'
     - name: Median shelf price of ground coffee
       kind: areas
       unit: MXN/kg
@@ -1387,6 +1458,19 @@ explore:
       kind: scatter
       x: schooling_years
       y: per_10k_people
+    - title: Who lives where the coffee shops are, 2025
+      text: >-
+        Each of INEGI's 2025 indicators ranked against coffee shops per resident across the
+        16 boroughs: schooling, higher education, a computer or internet at home and renting
+        rise with them (Spearman about 0.9); people per room and long commutes fall. The
+        Metro commute does not follow. Sixteen points and 26 indicators: a description of
+        one gradient, not 26 causes.
+      sql: >-
+        SELECT indicator, rho_per_10k_people FROM analysis.borough_profile_coffee
+        WHERE rho_low > 0 OR rho_high < 0
+      kind: bar
+      x: indicator
+      y: rho_per_10k_people
     - title: What farmers keep of the port price
       text: >-
         FAOSTAT's producer prices against the World Bank's price of each country's own mix
@@ -1461,8 +1545,8 @@ explore:
       tastes of.
     - **SIAP** (Mexico's harvest), **USDA PSD** (the world market), the **World Bank**
       and the **ICO** (the price of green coffee), **FAOSTAT** (what growers are paid),
-      **FRED** (pesos per dollar), and INEGI's 2020 Census and DENUE's count of every
-      workplace (who lives and works in each borough).
+      **FRED** (pesos per dollar), and INEGI's 2020 Census, its 2025 Intercensal Survey
+      and DENUE's count of every workplace (who lives and works in each borough).
     - **The Coffee Quality Institute's cupping scores**, frozen in May 2023 - the only
       source here that is not current.
     - **22 documents** the agent reads: World Coffee Research's variety catalogues, the

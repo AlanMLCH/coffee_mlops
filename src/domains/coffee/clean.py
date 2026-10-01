@@ -3,7 +3,8 @@
 - Both CQI snapshots -> one canonical `coffee_reviews` table (one row per graded lot).
 - USDA PSD (long format) -> `market_context` (one row per country and market year).
 - INEGI's borough polygons and its 2020 Census -> `boroughs` (one row per alcaldia,
-  geometry as WKB, with who lives there).
+  geometry as WKB, with who lives there); its 2025 Intercensal Survey ->
+  `borough_profile` (a row per alcaldia and indicator); see `domains.coffee.survey`.
 - DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough, as
   each register lists it now) and `coffee_shop_history` (each place in every read).
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
@@ -30,6 +31,7 @@ from polars.expr.whenthen import ChainedThen, Then
 
 from domains.coffee.config import (
     UNCLASSIFIED,
+    BoroughProfileConfig,
     CleaningConfig,
     ConsumerPricesConfig,
     ProducerPricesConfig,
@@ -54,6 +56,7 @@ from domains.coffee.schemas import (
     coffee_shops_schema,
 )
 from domains.coffee.sources.denue import STRATA
+from domains.coffee.survey import clean_borough_profile
 from mlops_core.adapter import CleanTable
 from mlops_core.data.geo import attribute_points, match_places
 
@@ -585,6 +588,7 @@ def clean_tables(
     crop: ProductionConfig,
     shelves: ConsumerPricesConfig,
     farmers: ProducerPricesConfig,
+    profile: BoroughProfileConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
@@ -606,6 +610,10 @@ def clean_tables(
         "boroughs": CleanTable(
             clean_boroughs(areas, frames.get("census_2020"), frames.get(WORKPLACES)),
             tuple(n for n in ("cdmx_boroughs", "census_2020", WORKPLACES) if n in frames),
+        ),
+        "borough_profile": CleanTable(
+            clean_borough_profile(frames[profile.source], areas, profile),
+            (profile.source, "cdmx_boroughs"),
         ),
         "coffee_shops": CleanTable(clean_coffee_shops(frames, areas, rules), shop_inputs),
         "coffee_shop_history": CleanTable(

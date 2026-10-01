@@ -15,8 +15,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 15 sources of four kinds** - static files (CQI cupping scores, USDA's world
-  coffee balance, SIAP's harvests, INEGI's borough polygons and 2020 Census, World Bank and ICO prices,
+- **Reads 16 sources of four kinds** - static files (CQI cupping scores, USDA's world
+  coffee balance, SIAP's harvests, INEGI's borough polygons, 2020 Census and 2025 Intercensal Survey, World Bank and ICO prices,
   FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate), token-authenticated and paginated APIs
   (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
   politely (robots.txt first) - their tasting notes read into the SCA's flavour
@@ -78,7 +78,9 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
   10,000 people in Cuauhtémoc, 1.9 in La Magdalena Contreras (Spearman 0.93 with the
   average years of schooling, 16 boroughs). Per job - DENUE's workplaces of every
   activity - the boroughs are three times more alike: much of the centre's density is
-  where people work.
+  where people work. INEGI's 2025 Intercensal Survey draws the same gradient: a computer
+  or internet at home and renting rise with them (Spearman about 0.9), people per room
+  and long commutes fall; commuting by Metro does not follow.
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
@@ -97,7 +99,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["15 sources + 22 documents"]
+    subgraph SOURCES["16 sources + 22 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]

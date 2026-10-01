@@ -21,7 +21,14 @@ AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
 # Turnover needs two reads of a register; the fixtures read each once. The farmgate
 # needs a year in FAOSTAT, PSD and the World Bank's months at once, and the recorded
 # workbook holds only 2026 (the study is tested on its own in test_producer_prices).
-EMPTY_ON_THE_FIXTURES = {"production_crosscheck", "shop_turnover", "farmgate_prices"}
+# The census names three boroughs, fewer than a rank correlation needs (the survey's
+# study is tested on its own in test_borough_profile).
+EMPTY_ON_THE_FIXTURES = {
+    "production_crosscheck",
+    "shop_turnover",
+    "farmgate_prices",
+    "borough_profile_coffee",
+}
 # The core's studies are computed per model and named after it; the domain's are not.
 ALWAYS_WRITTEN = {
     "review_target_distribution",
