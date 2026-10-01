@@ -6,12 +6,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mlops_core.config import DomainConfig
+from mlops_core.config import DomainConfig, SourceConfig
 from mlops_core.data.extract import (
     CHECKS,
     MANIFEST_NAME,
     checks,
     checks_by_day,
+    crawl_delays,
     extract_all,
     find_link,
     ingest,
@@ -22,7 +23,7 @@ from mlops_core.data.extract import (
     user_agent,
 )
 from tests.conftest import PROFECO_CLOSED, PROFECO_FILE, PROFECO_PAGE
-from tests.fakes import RecordedServer
+from tests.fakes import RecordedServer, without_rate_limits
 
 T0 = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 T1 = datetime(2026, 12, 20, 12, 0, tzinfo=UTC)
@@ -36,7 +37,7 @@ def test_a_source_that_cannot_be_reached_does_not_stop_the_others(
     del server.payloads[str(coffee_config.sources["cqi_2018"].url)]
     server.payloads[str(coffee_config.sources["world_bank_prices"].url)] = b"<html>moved</html>"
 
-    extraction = extract_all(coffee_config, tmp_path, client)
+    extraction = extract_all(without_rate_limits(coffee_config), tmp_path, client)
 
     assert extraction.failed.keys() == {"cqi_2018", "world_bank_prices"}
     assert extraction.failed["cqi_2018"].startswith("HTTPStatusError: Client error '404")
@@ -77,7 +78,7 @@ def test_a_year_that_fails_is_named_and_the_others_are_stored(
     year, url, _ = source.editions()[5]
     del server.payloads[url]
 
-    extraction = extract_all(coffee_config, tmp_path, client)
+    extraction = extract_all(without_rate_limits(coffee_config), tmp_path, client)
 
     assert extraction.failed["siap_agricola"] == (
         f"LookupError: siap_agricola: not downloaded for {year} (HTTPStatusError); "
@@ -92,7 +93,7 @@ def test_every_source_is_stored_byte_for_byte(
     client: httpx.Client,
     recorded: dict[str, bytes],
 ) -> None:
-    extraction = extract_all(coffee_config, tmp_path, client)
+    extraction = extract_all(without_rate_limits(coffee_config), tmp_path, client)
     artifacts = extraction.artifacts
 
     assert not extraction.failed
@@ -112,6 +113,42 @@ def test_every_source_is_stored_byte_for_byte(
         else:
             assert artifact.manifest.url == str(source.url)
         assert artifact.partition.name.startswith("ingested_at=")
+
+
+def test_two_files_from_a_host_that_asks_for_a_delay_are_that_far_apart(
+    tmp_path: Path, coffee_config: DomainConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mexico City's open data portal asks for ten seconds between requests: its two
+    files wait for each other, counted from when the first was sent; another host's file
+    in between waits for nothing, and the client is handed back as it came."""
+    now, waits = [100.0], []
+
+    def sleep(seconds: float) -> None:
+        waits.append(seconds)
+        now[0] += seconds
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        now[0] += 3.0  # every download takes three seconds
+        return httpx.Response(200, content=request.url.path.encode())
+
+    monkeypatch.setattr("mlops_core.data.extract.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("mlops_core.data.extract.time.sleep", sleep)
+    portal = "https://data.example.org"
+    sources = {
+        "first": SourceConfig(url=f"{portal}/a.csv", filename="a.csv", crawl_delay=10),
+        "elsewhere": SourceConfig(url="https://other.example.org/b.csv", filename="b.csv"),
+        "second": SourceConfig(url=f"{portal}/c.csv", filename="c.csv", crawl_delay=10),
+    }
+    config = coffee_config.model_copy(update={"sources": sources})
+
+    with httpx.Client(transport=httpx.MockTransport(serve)) as client:
+        extraction = extract_all(config, tmp_path, client)
+        hooks = client.event_hooks["request"]
+
+    assert extraction.artifacts.keys() == sources.keys() and not extraction.failed
+    assert waits == [4.0]  # sent at 100 and at 110: 3 s for each file before it, 4 s held
+    assert hooks == []
+    assert crawl_delays(config) == {"data.example.org": 10.0}
 
 
 def test_signed_redirect_url_is_never_persisted(

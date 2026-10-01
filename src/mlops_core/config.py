@@ -181,6 +181,10 @@ class SourceConfig(BaseModel):
     # A thousands separator some cells use ("10,271" among thousands of "10271"): taken
     # out when read, from a cell that is a number and nothing else, so a name keeps it.
     thousands: str | None = Field(None, min_length=1, max_length=1)
+    # The seconds its host's robots.txt asks between requests (`Crawl-delay`), read by
+    # hand like the rest of this entry. Two downloads from that host in one run wait it
+    # out between them; one download alone waits for nothing.
+    crawl_delay: float | None = Field(None, gt=0)
 
     def editions(self) -> list[tuple[int, str, str]]:
         """Each year's (year, url, filename); none for a source that is one file."""

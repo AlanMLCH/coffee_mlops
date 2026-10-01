@@ -93,12 +93,17 @@ def without_rate_limits(config: CoffeeConfig) -> CoffeeConfig:
 
     The tests' server is a MockTransport: FAS alone is ~70 requests a pull, and at the
     real second apart every test that extracts would spend a minute being polite to
-    nobody. Everything else - endpoints, pages, years, caching - stays as configured.
+    nobody - and a host's crawl delay, ten seconds between two files. Everything else -
+    endpoints, pages, years, caching - stays as configured.
     """
-    quick = {
+    quick: dict[str, Any] = {
         name: source.model_copy(update={"rate_limit_seconds": 0.0})
         for name in ("denue", "overpass", "fas", "roasters")
         if (source := getattr(config, name)) is not None
+    }
+    quick["sources"] = {
+        name: source.model_copy(update={"crawl_delay": None})
+        for name, source in config.sources.items()
     }
     return config.model_copy(update=quick)
 

@@ -402,8 +402,9 @@ def raw_dir(tmp_path: Path, coffee_config: CoffeeConfig, client: Any) -> Path:
     from mlops_core.data.extract import extract_all
 
     data_dir = tmp_path / coffee_config.name
-    extract_all(coffee_config, data_dir / "raw", client)
-    adapter = CoffeeAdapter(without_rate_limits(coffee_config), FIXTURE_CREDENTIALS)
+    quick = without_rate_limits(coffee_config)
+    extract_all(quick, data_dir / "raw", client)
+    adapter = CoffeeAdapter(quick, FIXTURE_CREDENTIALS)
     adapter.extract(data_dir, client)
     fetch_documents(coffee_config.documents, data_dir, client)
     return data_dir / "raw"

@@ -367,16 +367,54 @@ def extract_all(config: DomainConfig, raw_dir: Path, client: httpx.Client) -> Ex
     link moved - does not stop the others: they are stored, and the caller says which
     failed and fails after trying everything. Only what the network or the page can
     cause is caught; a bug still stops the run where it happens.
+
+    A host whose robots.txt asks for a delay between requests (a source's `crawl_delay`)
+    gets it, for every request of the run: a page read for its link as well as a file.
     """
     artifacts, failed = {}, {}
-    for name, source in config.sources.items():
-        try:
-            artifacts[name] = ingest(name, source, raw_dir, client)
-        except (httpx.HTTPError, LookupError, ValueError) as error:
-            reason = str(error).strip().splitlines()[0] if str(error).strip() else ""
-            failed[name] = f"{type(error).__name__}: {reason}".rstrip(": ")
-            logger.error("%s could not be downloaded: %s", name, failed[name])
+    with _polite(client, crawl_delays(config)):
+        for name, source in config.sources.items():
+            try:
+                artifacts[name] = ingest(name, source, raw_dir, client)
+            except (httpx.HTTPError, LookupError, ValueError) as error:
+                reason = str(error).strip().splitlines()[0] if str(error).strip() else ""
+                failed[name] = f"{type(error).__name__}: {reason}".rstrip(": ")
+                logger.error("%s could not be downloaded: %s", name, failed[name])
     return Extraction(artifacts, failed)
+
+
+def crawl_delays(config: DomainConfig) -> dict[str, float]:
+    """Each host's delay between requests: the longest any of its sources declares."""
+    delays: dict[str, float] = {}
+    for source in config.sources.values():
+        if source.crawl_delay is not None:
+            host = source.url.host or ""
+            delays[host] = max(delays.get(host, 0.0), source.crawl_delay)
+    return delays
+
+
+@contextmanager
+def _polite(client: httpx.Client, delays: dict[str, float]) -> Iterator[None]:
+    """Hold each request to a host in `delays` until its delay has passed since the last
+    request to it was sent: two files from one host, back to back, are ten seconds
+    apart when the host asks for ten. A request the run does not make (a source that is
+    not due) waits for nothing."""
+    sent: dict[str, float] = {}
+
+    def wait(request: httpx.Request) -> None:
+        host = request.url.host
+        if host not in delays:
+            return
+        if host in sent:
+            time.sleep(max(0.0, sent[host] + delays[host] - time.monotonic()))
+        sent[host] = time.monotonic()
+
+    hooks = client.event_hooks
+    client.event_hooks = {**hooks, "request": [*hooks.get("request", []), wait]}
+    try:
+        yield
+    finally:
+        client.event_hooks = hooks
 
 
 def _download(client: httpx.Client, url: str, target: Path) -> tuple[str, int, str | None]:
