@@ -77,6 +77,9 @@ def test_extract_writes_raw_layer_under_the_domain(
         "transit_stops",
         "census_2020_ageb",
         "cdmx_ageb",
+        "enigh_2024_spending",
+        "enigh_2024_households",
+        "cup_of_excellence",
         *served,
     }
 
@@ -129,6 +132,8 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "transit_stations",
         "transit_ridership",
         "census_zones",
+        "household_coffee",
+        "cup_of_excellence",
         "documents",
         "document_chunks",
     }
@@ -170,6 +175,8 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "transit_stations",
         "transit_ridership",
         "census_zones",
+        "household_coffee",
+        "cup_of_excellence",
         "documents",
         "document_chunks",
     }

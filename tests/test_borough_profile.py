@@ -226,6 +226,6 @@ def test_the_figure_is_drawn_once_the_study_has_rows(coffee_config: CoffeeConfig
     )  # fmt: skip
     tables = defaultdict(lambda: nothing, {"borough_profile_coffee": study})
 
-    drawn = figures(tables, coffee_config.market_analysis)
+    drawn = figures(tables, coffee_config.market_analysis, "Ciudad de México")
 
     assert list(drawn) == ["coffee_and_profile"]

@@ -333,6 +333,11 @@ def test_a_layer_of_areas_needs_the_areas_it_draws() -> None:
     with pytest.raises(ValidationError, match=r"draw areas, but `explore\.areas` names none"):
         ExploreConfig(title="t", view=view, layers=[layer])  # type: ignore[arg-type]
 
+    # A layer with areas of its own - a finer set of zones - needs none from the explorer.
+    zones = {"table": "clean.zones", "id": "zone_id", "name": "zone_id", "boundary": "shape"}
+    finer = ExploreConfig(title="t", view=view, layers=[layer | {"areas": zones}])  # type: ignore[arg-type]
+    assert finer.layers[0].areas is not None and finer.areas is None
+
 
 # --- The map's data, through the agent's locked session -------------------------------------
 

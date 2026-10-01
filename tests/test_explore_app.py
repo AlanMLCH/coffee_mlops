@@ -246,6 +246,18 @@ def test_the_page_opens_on_the_map_under_its_headline_numbers(
     assert not page.warning
 
 
+def test_a_layer_is_drawn_on_finer_areas_of_its_own(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The census' urban AGEBs instead of the boroughs: the same map, block by block."""
+    page = explorer(data_dir, monkeypatch)
+
+    page.selectbox(key="map_area").set_value("Years of schooling, block by block").run()
+
+    assert not page.exception and not page.warning
+    assert page.get("deck_gl_json_chart") and page.get("vega_lite_chart")
+
+
 def test_places_can_be_dots_or_hexagons(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     page = explorer(data_dir, monkeypatch)
 

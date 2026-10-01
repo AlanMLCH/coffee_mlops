@@ -15,7 +15,12 @@ contract with every downstream consumer (features, the agent's SQL, the API).
 import pandera.polars as pa
 import polars as pl
 
-from domains.coffee.config import UNCLASSIFIED, BoroughProfileConfig, CleaningConfig
+from domains.coffee.config import (
+    UNCLASSIFIED,
+    BoroughProfileConfig,
+    CleaningConfig,
+    HouseholdSpendingConfig,
+)
 
 SENSORY_SCORES = [
     "Aroma",
@@ -471,6 +476,54 @@ CENSUS_ZONES_RAW = pa.DataFrameSchema(
     },
 )
 
+# ENIGH's purchases of coffee, as the domain's reader keeps them: text keys with their
+# leading zeros. A purchase holds what was paid or, given or harvested, what it was worth.
+ENIGH_SPENDING_RAW = pa.DataFrameSchema(
+    name="enigh_spending",
+    coerce=True,
+    columns={
+        "folioviv": pa.Column(pl.String, pa.Check.str_matches(r"^\d{10}$")),
+        "foliohog": pa.Column(pl.String, pa.Check.str_matches(r"^\d$")),
+        "clave": pa.Column(pl.String, pa.Check.str_matches(r"^\d{6}$")),
+        "tipo_gasto": pa.Column(pl.String, pa.Check.isin(["G1", "G2", "G3", "G5", "G6", "G7"])),
+        "gasto_tri": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+        "gas_nm_tri": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
+        "entidad": pa.Column(pl.String, pa.Check.str_matches(r"^\d{2}$")),
+    },
+)
+
+# ENIGH's households: a row each, its weight the households it stands for.
+ENIGH_HOUSEHOLDS_RAW = pa.DataFrameSchema(
+    name="enigh_households",
+    coerce=True,
+    unique=["folioviv", "foliohog"],
+    columns={
+        "folioviv": pa.Column(pl.String, pa.Check.str_matches(r"^\d{10}$")),
+        "foliohog": pa.Column(pl.String, pa.Check.str_matches(r"^\d$")),
+        "ubica_geo": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),  # state + municipality
+        "est_dis": pa.Column(pl.String, pa.Check.str_matches(r"^\d{3}$")),  # the design's stratum
+        "upm": pa.Column(pl.String, pa.Check.str_matches(r"^\d{7}$")),  # its sampling unit
+        "factor": pa.Column(pl.Int64, pa.Check.gt(0)),
+        "tot_integ": pa.Column(pl.Int64, pa.Check.ge(1)),
+        "ing_cor": pa.Column(pl.Float64, pa.Check.ge(0)),
+    },
+)
+
+COE_TEXT = ("rank", "score", "farmer", "region", "variety", "process", "weight_kg",
+            "weight_lb", "bid", "total", "buyers")  # fmt: skip
+# Cup of Excellence Mexico, as the domain's reader keeps a page: a row of a table of lots
+# or of sales, every value as the page writes it. A row always names its farm.
+CUP_OF_EXCELLENCE_RAW = pa.DataFrameSchema(
+    name="cup_of_excellence",
+    coerce=True,
+    columns={
+        "year": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}$")),
+        "table": pa.Column(pl.String, pa.Check.str_matches(r"^\d+$")),
+        "farm": pa.Column(pl.String),
+        **{column: pa.Column(pl.String, nullable=True) for column in COE_TEXT},
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -493,6 +546,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "metrobus_ridership": METROBUS_RIDERSHIP,
     "transit_stops": GTFS_STOPS,
     "census_2020_ageb": CENSUS_ZONES_RAW,
+    "cup_of_excellence": CUP_OF_EXCELLENCE_RAW,
     "cdmx_ageb": AREAS,
 }
 
@@ -567,6 +621,32 @@ BOROUGHS = pa.DataFrameSchema(
         "jobs_estimate": pa.Column(pl.Float64, pa.Check.ge(0), nullable=True),
     },
 )
+
+
+def household_coffee_schema(survey: HouseholdSpendingConfig) -> pa.DataFrameSchema:
+    """Contract of `household_coffee`: a household of the survey a row, who it is and what
+    it spent on coffee in the quarter - a column for each of the domain's coffees."""
+    money = pa.Column(pl.Float64, pa.Check.ge(0))
+    return pa.DataFrameSchema(
+        name="household_coffee",
+        strict=True,
+        unique=["year", "household_id"],
+        columns={
+            "year": pa.Column(pl.Int64, pa.Check.eq(survey.year)),
+            "household_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{10}-\d$")),
+            "state_id": pa.Column(pl.String, pa.Check.isin(list(survey.states))),
+            "state": pa.Column(pl.String, pa.Check.isin(list(survey.states.values()))),
+            "municipality_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
+            "stratum": pa.Column(pl.String),
+            "psu": pa.Column(pl.String),
+            "weight": pa.Column(pl.Int64, pa.Check.gt(0)),
+            "members": pa.Column(pl.Int64, pa.Check.ge(1)),
+            "income_quarter_mxn": money,
+            "income_decile": pa.Column(pl.Int64, pa.Check.in_range(1, 10)),
+            **{f"{name}_quarter_mxn": money for name in survey.products.values()},
+            "own_harvest_quarter_mxn": money,
+        },
+    )
 
 
 def borough_profile_schema(profile: BoroughProfileConfig) -> pa.DataFrameSchema:
@@ -701,6 +781,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "transit_stations": TRANSIT_STATIONS,
         "census_zones": CENSUS_ZONES,
         "transit_ridership": TRANSIT_RIDERSHIP,
+        "cup_of_excellence": cup_of_excellence_schema(rules),
     }
 
 
@@ -718,6 +799,41 @@ ROASTER_COFFEES = pa.DataFrameSchema(
         "origins": pa.Column(pl.Int64, pa.Check.ge(0)),
     },
 )
+
+
+def cup_of_excellence_schema(rules: CleaningConfig) -> pa.DataFrameSchema:
+    """Contract of `cup_of_excellence`: a lot of one year's competition and its sale; its
+    state and process in the vocabularies the roasters' sheets use."""
+    sheets = rules.roaster_sheets
+    positive = pa.Column(pl.Float64, pa.Check.gt(0), nullable=True)
+    return pa.DataFrameSchema(
+        name="cup_of_excellence",
+        strict=True,
+        unique=["lot_id"],
+        columns={
+            "year": pa.Column(pl.Int64, pa.Check.in_range(2000, 2100)),
+            "lot_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}-\d{3}$")),
+            "rank": pa.Column(pl.String, nullable=True),
+            "national_winner": pa.Column(pl.Boolean),
+            "score": pa.Column(pl.Float64, pa.Check.in_range(80, 100)),
+            "farm": pa.Column(pl.String),
+            "farmer": pa.Column(pl.String, nullable=True),
+            "region": pa.Column(pl.String, nullable=True),
+            "state": pa.Column(
+                pl.String, pa.Check.isin(sorted(set(sheets.states.values()))), nullable=True
+            ),
+            "varieties": pa.Column(pl.List(pl.String), nullable=True),
+            "processing_method": pa.Column(
+                pl.String,
+                pa.Check.isin(sorted({*rules.processing_methods.values(), UNCLASSIFIED})),
+                nullable=True,
+            ),
+            "weight_kg": positive,
+            "price_usd_per_lb": positive,
+            "total_usd": positive,
+            "buyers": pa.Column(pl.String, nullable=True),
+        },
+    )
 
 
 def roaster_origins_schema(rules: CleaningConfig) -> pa.DataFrameSchema:

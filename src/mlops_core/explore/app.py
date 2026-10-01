@@ -36,7 +36,7 @@ import streamlit as st
 
 from mlops_core.adapter import load_adapter
 from mlops_core.agent.sql import Refused, read_only
-from mlops_core.config import ExploreDataset, ExploreFinding, MapLayer, Settings
+from mlops_core.config import AreasConfig, ExploreDataset, ExploreFinding, MapLayer, Settings
 from mlops_core.explore.charts import (
     Areas,
     Chart,
@@ -47,7 +47,7 @@ from mlops_core.explore.charts import (
     is_period,
     vega_lite,
 )
-from mlops_core.explore.layers import areas_if_built, ranked, run_layer
+from mlops_core.explore.layers import areas_built, areas_if_built, ranked, run_layer
 from mlops_core.explore.maps import area_layer, deck, density_layer, point_layer
 from mlops_core.explore.segments import (
     NO_VALUE,
@@ -61,6 +61,7 @@ from mlops_core.explore.studies import domain_figures, domain_studies, figure, l
 from mlops_core.explore.style import CSS
 
 KINDS = ["bar", "line", "scatter", "points", "areas", "table"]
+RANKED = 25  # areas ranked beside the map
 NONE = "(none)"
 MAP_HEIGHT = 620
 TABS = [
@@ -142,6 +143,20 @@ def built(sql: str) -> pl.DataFrame | None:
 @st.cache_resource
 def areas() -> Areas | None:
     return areas_if_built(session(), explore)
+
+
+@st.cache_resource
+def own_areas(table: str, key: str, name: str, boundary: str) -> Areas | None:
+    """A layer's own areas - a finer set of zones - read once."""
+    return areas_built(session(), AreasConfig(table=table, id=key, name=name, boundary=boundary))
+
+
+def areas_of(layer: MapLayer) -> Areas | None:
+    """The areas a layer is drawn on: its own, or the explorer's."""
+    if layer.areas is None:
+        return areas()
+    own = layer.areas
+    return own_areas(own.table, own.id, own.name, own.boundary)
 
 
 @st.cache_resource(show_spinner="Starting the agent: Ollama, the index, the prediction API")
@@ -250,11 +265,19 @@ def map_tab() -> None:
             )  # fmt: skip
         if ranking is not None:
             rows, value, _ = ranking
-            st.markdown(f"**{picked_area}, area by area**")
+            title = f"**{picked_area}, area by area**"
+            if rows.height > RANKED:  # a ranking of thousands of areas reads as none
+                title = f"**{picked_area}: the {RANKED} highest of {rows.height:,} areas**"
+                rows = rows.head(RANKED)
+            st.markdown(title)
             ranked_chart = Chart(kind="bar", x=rows.columns[0], y=value)
             spec = vega_lite(ranked_chart, rows)
             if spec is not None:
-                st.vega_lite_chart(spec | {"height": 300}, width="stretch")
+                # Lying bars keep their row per name (25 squeezed into 300 px overlap);
+                # standing ones fit beside the map.
+                if not isinstance(spec.get("height"), dict):
+                    spec = spec | {"height": 300}
+                st.vega_lite_chart(spec, width="stretch")
 
 
 def draw_areas(
@@ -262,7 +285,7 @@ def draw_areas(
 ) -> tuple[pl.DataFrame, str, str] | None:
     """The areas coloured and raised by the layer's number; the ranking beside the map."""
     rows = rows_or_warning(layer.name, layer.sql)
-    known = areas()
+    known = areas_of(layer)
     if rows is None:
         return None
     value = infer_chart(rows, known).y

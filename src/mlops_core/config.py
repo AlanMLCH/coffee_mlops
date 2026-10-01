@@ -116,6 +116,7 @@ class SpatialConfig(BaseModel):
 
 
 YEAR = "{year}"
+_ESCAPED_YEAR = "%7Byear%7D"
 
 
 class YearRange(BaseModel):
@@ -125,11 +126,17 @@ class YearRange(BaseModel):
 
     first: int
     last: int
+    # Years between them the publisher has no file for - an edition never held - so not
+    # a download that failed. The last year is never one: it is the edition in course.
+    missing: list[int] = []
 
     @model_validator(mode="after")
     def _in_order(self) -> Self:
         if self.first > self.last:
             raise ValueError(f"years run from first to last: {self.first} > {self.last}")
+        outside = [year for year in self.missing if not self.first <= year < self.last]
+        if outside:
+            raise ValueError(f"missing years {outside} are not before {self.last} in the range")
         return self
 
 
@@ -186,18 +193,24 @@ class SourceConfig(BaseModel):
     # out between them; one download alone waits for nothing.
     crawl_delay: float | None = Field(None, gt=0)
 
+    def address(self) -> str:
+        """`url` as written: the URL type escapes the braces of `{year}` in a path (not in
+        a query), and a year in the path is the address of a page a year."""
+        return str(self.url).replace(_ESCAPED_YEAR, YEAR)
+
     def editions(self) -> list[tuple[int, str, str]]:
         """Each year's (year, url, filename); none for a source that is one file."""
         if self.years is None:
             return []
         return [
-            (year, str(self.url).replace(YEAR, str(year)), self.filename.replace(YEAR, str(year)))
+            (year, self.address().replace(YEAR, str(year)), self.filename.replace(YEAR, str(year)))
             for year in range(self.years.first, self.years.last + 1)
+            if year not in self.years.missing
         ]
 
     @model_validator(mode="after")
     def _a_year_is_written_where_it_changes(self) -> Self:
-        named = YEAR in str(self.url) and YEAR in self.filename
+        named = YEAR in self.address() and YEAR in self.filename
         if (self.years is not None) != named:
             raise ValueError(
                 f"`years` and {YEAR} in both `url` and `filename` go together: '{self.filename}'"
@@ -596,6 +609,8 @@ class MapLayer(BaseModel):
     sql: str
     description: str = ""
     unit: str = ""  # of an area's number, for the legend: "places per km²"
+    # Areas of its own - a finer set of zones than the explorer's - instead of `explore.areas`.
+    areas: AreasConfig | None = None
 
 
 class ExploreMetric(BaseModel):
@@ -682,8 +697,12 @@ class ExploreConfig(BaseModel):
 
     @model_validator(mode="after")
     def _an_areas_layer_has_areas(self) -> Self:
-        drawn = [layer.name for layer in self.layers if layer.kind == "areas"]
-        if drawn and self.areas is None:
+        drawn = [
+            layer.name
+            for layer in self.layers
+            if layer.kind == "areas" and layer.areas is None and self.areas is None
+        ]
+        if drawn:
             raise ValueError(f"Layers {drawn} draw areas, but `explore.areas` names none")
         return self
 

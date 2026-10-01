@@ -358,6 +358,111 @@ CENSUS_AGEB_ROWS = [
 ]
 
 
+# ENIGH, as INEGI writes it: a household a row (its weight, place, stratum, sampling unit,
+# size and income) and a purchase a row, blanks as a space. Eight households in three
+# states, two strata and four sampling units; their coffee: instant and ground bought,
+# coffee from a household's own harvest, a gift (left out) and a purchase that is not
+# coffee (not read).
+ENIGH_HOUSEHOLDS = [
+    "folioviv,foliohog,ubica_geo,tam_loc,est_dis,upm,factor,tot_integ,ing_cor",
+    "0900000101,1,09015,1,001,0000001,300,3,90000.00",
+    "0900000102,1,09015,1,001,0000001,300,2,30000.00",
+    "0900000201,1,09003,1,001,0000002,200,4,150000.00",
+    "0900000202,1,09003,1,001,0000002,200,1,12000.00",
+    "0700000101,1,07059,3,002,0000003,500,5,15000.00",
+    "0700000102,1,07059,3,002,0000003,500,3,24000.00",
+    "1500000101,1,15057,1,002,0000004,800,4,60000.00",
+    "1500000101,2,15057,1,002,0000004,800,2,45000.00",
+]
+ENIGH_SPENDING = [
+    "folioviv,foliohog,clave,tipo_gasto,mes_dia,gasto,gasto_tri,gas_nm_tri,entidad,factor",
+    "0900000101,1,012201,G1,1031,30,385.71, ,09,300",
+    "0900000101,1,012202,G1,1101,40,514.28, ,09,300",
+    "0900000201,1,012202,G1,1101,90,1157.14, ,09,200",
+    "0900000201,1,012202,G1,1104,10,128.57, ,09,200",  # a second bag the same week
+    "0700000101,1,012201,G3,1102, , ,257.14,07,500",  # from its own harvest
+    "0700000102,1,012201,G1,1102,15,192.85, ,07,500",
+    "1500000101,2,012203,G5,1103, , ,64.28,15,800",  # a gift: neither paid nor grown
+    "1500000101,1,011131,G1,1031,13,167.14, ,15,800",  # bread: not coffee
+]
+
+
+def html_table(*rows: list[str]) -> str:
+    cells = ["<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows]
+    return "<table>" + "".join(cells) + "</table>"
+
+
+COE_JUDGES = html_table(["Name", "Country", "Company"], ["Head Judge"], ["E. M.", "Nicaragua", ""])
+
+
+def coe_page(year: int) -> bytes:
+    """A year of Cup of Excellence Mexico as the site lays it out: before 2018 a results
+    table and an auction table by lot number, with boxes for a size and a row of totals;
+    from 2018 scores, weights, varieties and processes on both. The last year also holds
+    a second competition with its own first place, a lot nobody bought, and a national
+    winner whose auction rounds its score - written with a decimal comma."""
+    if year < 2018:
+        tables = [
+            html_table(["Rank", "Size", "Farm / CWS", "Farmer / Representative", "Region", "Score"],
+                       ["1", "27", "Las Fincas Del Suspiro", "A. Zapata", "Coatepec, Veracruz",
+                        "90.03"],
+                       ["2", "39", "Finca Las Nubes", "L. López", "La Concordia , Chiapas",
+                        "88.97"]),
+            COE_JUDGES,
+            html_table(["Lot #", "Winning Farm / CWS", "Lot Size", "High Bid", "Total Value",
+                        "High Bidder(s)"],
+                       ["1", "Las Fincas Del Suspiro", "27", "$50.21/lb", "$89,662.01", "Maruyama"],
+                       ["2", "Finca Las Nubes", "39", "$15.00/lb", "$38,691.15", "Campos"],
+                       ["Totals:", "", "", "", "$128,353.16", ""]),
+        ]  # fmt: skip
+    else:
+        last = year == 2026
+        results = ["RANK", "SCORE", "FARM", "FARMER", "REGION", "WEIGHT (kg)", "VARIETY",
+                   "PROCESS"]  # fmt: skip
+        sales = ["Rank", "Farm", "Score", "Weight (lbs)", "High Bid", "Total Value",
+                 "Company Name"]  # fmt: skip
+        tables = [
+            html_table(results,
+                       ["1A", "91.58", "Finca Santa Cruz", "C. Argüello", "La Concordia, Chiapas",
+                        "150", "Gesha", "Natural"],
+                       ["2", "88,20" if last else "88.20", "Rancho Viejo \u2013 Kohmar", "B. Zilli",
+                        "Veracruz", "270", "Typica y Bourbon", "Washed"],
+                       *([["3", "87.50", "Unsold", "N. N.", "Puebla", "200", "Marsellesa",
+                           "Honey"]] if last else [])),
+            html_table(sales,
+                       ["1a", "Finca Santa Cruz", "91.58", "330.69", "$92.00", "$30,423.48",
+                        "Fisher Coffee"],
+                       ["2", "Rancho viejo-Kohmar", "88.2", "595.25", "US$ 14.60", "US$ 8,690.65",
+                        "Saza Coffee"]),
+            COE_JUDGES,
+        ]  # fmt: skip
+        if last:
+            tables += [
+                html_table(results, ["1A", "90.66", "Pocitos", "J. Cadena", "Veracruz", "125",
+                                     "Geisha", "Exerimental"]),
+                html_table(sales, ["1A", "Pocitos", "90.66", "275.58", "40.7", "11216.11",
+                                   "Puente Coffee"]),
+                html_table(["Score", "Farm", "Farmer", "Weight (kg)", "Region",
+                            "Process, Variety"],
+                           ["87.06", "Finca Consuelo", "K. Altamirano", "630", "OCOSINGO",
+                            "NATURAL, Borbón"]),
+                html_table(["Score", "Farm", "Weight (lbs)", "High Bid", "Total Value",
+                            "High Bidder(s)"],
+                           ["87.1", "Consuelo", "1,388.91", "$4.00", "$5,555.64", "Nagahama"]),
+            ]  # fmt: skip
+    page = (
+        "<html><body>" + "".join(tables) + "<p>© Alliance. All Rights Reserved.</p></body></html>"
+    )
+    return page.encode("utf-8")
+
+
+def enigh_archive(member: str, rows: list[str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(member, "\r\n".join(rows) + "\r\n")
+    return buffer.getvalue()
+
+
 def census_ageb_archive(rows: list[str] = CENSUS_AGEB_ROWS) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -573,6 +678,10 @@ def recorded() -> dict[str, bytes]:
         "metrobus_ridership": METROBUS_RIDERSHIP,
         "transit_stops": gtfs_archive(),
         "census_2020_ageb": census_ageb_archive(),
+        "enigh_2024_spending": enigh_archive("gastoshogar.csv", ENIGH_SPENDING),
+        "enigh_2024_households": enigh_archive("concentradohogar.csv", ENIGH_HOUSEHOLDS),
+        # A page a year; the last one's, as SIAP's (the server serves every year).
+        "cup_of_excellence": coe_page(2026),
     }
 
 
@@ -593,6 +702,8 @@ def server(coffee_config: CoffeeConfig, recorded: dict[str, bytes]) -> RecordedS
     siap = coffee_config.sources["siap_agricola"].editions()
     payloads |= {url: siap_year(year) for year, url, _ in siap[:-1]}
     payloads[siap[-1][1]] = recorded["siap_agricola"]
+    competitions = coffee_config.sources["cup_of_excellence"].editions()
+    payloads |= {url: coe_page(year) for year, url, _ in competitions}
     # The corpus a publisher serves to anyone. The ones behind a 403 are not here: they
     # are handed over by a person, and their absence is what the extract step reports.
     documents = {

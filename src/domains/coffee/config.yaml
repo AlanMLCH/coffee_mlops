@@ -244,6 +244,37 @@ sources:
     member: Prices_E_All_Data_(Normalized).csv
     refresh_hours: 720 # revised once or twice a year
 
+  # What households spend on coffee to drink at home: INEGI's 2024 household income and
+  # expenditure survey (ENIGH, new series), representative of every state - not of an
+  # alcaldia. Microdata, a ZIP per table, verified 2026-10-01 with the project's client.
+  # Purchases: every one the 91,414 households of the sample reported (5.3 million rows;
+  # the domain's reader keeps the coffee codes). Households: one row each, with its weight.
+  # Licence: INEGI's terms (free use, citing it).
+  enigh_2024_spending:
+    url: https://www.inegi.org.mx/contenidos/programas/enigh/nc/2024/microdatos/enigh2024_ns_gastoshogar_csv.zip
+    filename: enigh2024_ns_gastoshogar_csv.zip
+    member: gastoshogar.csv
+    refresh_hours: 8760 # the next survey is 2026's, published in 2027
+  enigh_2024_households:
+    url: https://www.inegi.org.mx/contenidos/programas/enigh/nc/2024/microdatos/enigh2024_ns_concentradohogar_csv.zip
+    filename: enigh2024_ns_concentradohogar_csv.zip
+    member: concentradohogar.csv
+    refresh_hours: 8760
+
+  # Cup of Excellence Mexico: each year's best lots, judged blind by a national and an
+  # international jury, and what an online auction paid for them - the Alliance for
+  # Coffee Excellence's page for the year, read by the domain (`sources/coe.py`).
+  # robots.txt allows every agent and asks no delay; two seconds between pages anyway.
+  # Verified 2026-10-01: the site's own list of Mexico's competitions has no 2016 or 2020.
+  # The pages say "© Alliance for Coffee Excellence. All Rights Reserved": kept in the
+  # raw layer like any download, never committed or republished.
+  cup_of_excellence:
+    url: https://allianceforcoffeeexcellence.org/mexico-{year}/
+    filename: mexico-{year}.html
+    years: {first: 2012, last: 2026, missing: [2016, 2020]}
+    crawl_delay: 2
+    refresh_hours: 720 # a closed year is read once; the year in course monthly
+
 # Raw sources whose history is every download, not the latest (stage 4): the ICO's page
 # shows only the current month, each read of the roasters' catalogues is an observation
 # of what they sold then, and PROFECO's archive holds only the current year - when 2027's
@@ -771,11 +802,11 @@ cleaning:
     # before the next, so "semi-lavado" is not also "lavado". A label naming two methods
     # ("Lavado, Natural") is a lot sold two ways: other. None at all: unclassified.
     processes:
-      semi_washed: 'semi.?lavad|giling basah|trillado humedo'
+      semi_washed: 'semi.?lavad|semi.?washed|giling basah|trillado humedo'
       honey: 'honey|enmielad'
       natural: '\bnatural\b|\bseco\b'
       washed: '\blavad[oa]\b|\bwashed\b'
-    experimental: 'macera|anaerobic|anoxic|ferment|levadura|barrel|hidronatural'
+    experimental: 'macera|anaerobic|anoxic|ferment|levadura|barrel|hidronatural|exp?erimental'
     # Spellings -> the CQI's, where it has the variety. Heirloom stays heirloom: the
     # CQI's "ethiopian heirlooms" would be wrong for a Yemeni one.
     varieties:
@@ -1167,6 +1198,53 @@ census_zones:
   census: census_2020_ageb
   layer: cdmx_ageb
 
+# What households spend on coffee to drink at home (sources `enigh_2024_*`). The survey
+# records food bought over one week and states it per quarter; coffee drunk in a coffee
+# shop is a meal out, not one of these. States in SIAP's names, which the production
+# table uses: "México" is the State of Mexico.
+household_spending:
+  spending: enigh_2024_spending
+  households: enigh_2024_households
+  year: 2024
+  products: # the survey's code -> a column of what was paid for it
+    "012201": instant
+    "012202": ground # beans or ground
+    "012203": prepared # preparations for coffee drinks
+  city: "09"
+  states:
+    "01": Aguascalientes
+    "02": Baja California
+    "03": Baja California Sur
+    "04": Campeche
+    "05": Coahuila
+    "06": Colima
+    "07": Chiapas
+    "08": Chihuahua
+    "09": Ciudad de México
+    "10": Durango
+    "11": Guanajuato
+    "12": Guerrero
+    "13": Hidalgo
+    "14": Jalisco
+    "15": México
+    "16": Michoacán
+    "17": Morelos
+    "18": Nayarit
+    "19": Nuevo León
+    "20": Oaxaca
+    "21": Puebla
+    "22": Querétaro
+    "23": Quintana Roo
+    "24": San Luis Potosí
+    "25": Sinaloa
+    "26": Sonora
+    "27": Tabasco
+    "28": Tamaulipas
+    "29": Tlaxcala
+    "30": Veracruz
+    "31": Yucatán
+    "32": Zacatecas
+
 # Who lives in each borough now (source `intercensal_2025`): the survey's columns read,
 # each under this domain's name and unit. "percent" is per 100 of the group INEGI names in
 # the data dictionary; a count must add up to the city's total.
@@ -1343,6 +1421,22 @@ explore:
         FROM clean.coffee_shops s JOIN clean.boroughs b USING (borough_id)
         WHERE s.kind = 'coffee' AND s.source = 'denue' AND b.jobs_estimate > 0
         GROUP BY b.borough_id
+    - name: Coffee shops per km², block by block
+      kind: areas
+      unit: places per km²
+      description: DENUE's coffee shops per square kilometre of each of the 2020 Census' 2,431 urban AGEBs (a few dozen blocks each); an AGEB with none is grey
+      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      sql: >-
+        SELECT zone_id, coffee_shops_per_km2, coffee_shops, borough
+        FROM analysis.zone_coffee_shops WHERE coffee_shops > 0
+    - name: Years of schooling, block by block
+      kind: areas
+      unit: years
+      description: Average years of schooling of people 15 and over in each urban AGEB, 2020 Census
+      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      sql: >-
+        SELECT zone_id, schooling_years, population, borough
+        FROM clean.census_zones WHERE schooling_years IS NOT NULL
     - name: Rented homes, 2025
       kind: areas
       unit: percent of dwellings
@@ -1569,6 +1663,33 @@ explore:
       kind: bar
       x: trait
       y: rho
+    - title: Who buys coffee to drink at home
+      text: >-
+        INEGI's 2024 household survey: 14% of Mexico's households bought coffee for home in
+        the survey's week, mostly instant. Chiapas leads (26%, 3% from their own harvest);
+        the city is third (18.5%) and spends the most a household, 65 pesos a month against
+        the country's 37. Coffee takes 5.4‰ of the poorest tenth's income and 0.9‰ of the
+        richest's. Per state, not per alcaldia; coffee drunk in a coffee shop is not here.
+      sql: >-
+        SELECT state, round(100 * bought_share, 1) AS bought_pct
+        FROM analysis.household_coffee_by_state ORDER BY bought_share DESC
+      kind: bar
+      x: state
+      y: bought_pct
+    - title: Mexico's best lots at auction
+      text: >-
+        Cup of Excellence Mexico, 2012-2026: the median winning lot fetches four to eight
+        times the market price of its year - 26.25 US dollars a pound in 2026, about 1,000
+        pesos a kilogram of green coffee, near what a roaster in the city charges for a
+        kilogram roasted. Each point of score adds about 41% to the price (95% interval 37%
+        to 44%, each year from its own level); Gesha lots fetch a median of 29 dollars, the
+        rest 12.
+      sql: >-
+        SELECT year, median_usd_per_lb, top_usd_per_lb, commodity_usd_per_lb
+        FROM analysis.coe_by_year ORDER BY year
+      kind: line
+      x: year
+      y: median_usd_per_lb
     - title: The Metro has not come back
       text: >-
         Entries on an average day: the Metro carried 4.2 to 4.6 million a day from 2010 to

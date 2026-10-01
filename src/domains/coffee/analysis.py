@@ -25,9 +25,13 @@ from domains.coffee.clean import normalised_name
 from domains.coffee.config import (
     UNCLASSIFIED,
     ConsumerPricesConfig,
+    HouseholdSpendingConfig,
     MarketAnalysisConfig,
     ProductionConfig,
 )
+from domains.coffee.excellence import coe_by_year, coe_score_price
+from domains.coffee.households import NATIONAL as COUNTRY
+from domains.coffee.households import household_coffee_by_decile, household_coffee_by_state
 from domains.coffee.prices import CENTS_PER_LB_PER_USD_PER_KG
 from domains.coffee.roaster_sheets import fold
 from domains.coffee.schemas import METRO, METROBUS
@@ -86,13 +90,15 @@ def studies(
     home_country: str,
     min_rows: int,
     redraw_m: float,
+    survey: HouseholdSpendingConfig,
 ) -> dict[str, pl.DataFrame]:
     """The domain's studies: the world market, the city's places, what the roasters say
     their coffees taste of, and the price of a kilogram from the farm to the shelf.
     `states` maps the domain's spelling of a state (folded) to SIAP's; `home_country` is
     the one the roasters' own coffees are profiled against the rest of the world; a group
     of fewer than `min_rows` coffees is not reported; a place that leaves a register and
-    a namesake that enters it within `redraw_m` are one place drawn again."""
+    a namesake that enters it within `redraw_m` are one place drawn again; `survey` reads
+    what households spend on coffee."""
     context, shops = clean["market_context"], clean["coffee_shops"]
     prices, production = clean["consumer_prices"], clean["mexico_production"]
     flavors, origins = clean["roaster_flavors"], clean["roaster_origins"]
@@ -135,11 +141,23 @@ def studies(
         "price_ladder": price_ladder(
             prices, clean["roaster_offers"], production, green, shelves.city
         ),
+        "household_coffee_by_state": household_coffee_by_state(clean["household_coffee"], survey),
+        "household_coffee_by_decile": household_coffee_by_decile(clean["household_coffee"], survey),
+        "coe_by_year": coe_by_year(
+            clean["cup_of_excellence"],
+            clean["price_indicators"],
+            clean["exchange_rates"],
+            GREEN_STEP,
+        ),
+        "coe_score_price": coe_score_price(clean["cup_of_excellence"]),
     }
 
 
-def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) -> dict[str, Figure]:
-    """One figure per market study that has rows to draw."""
+def figures(
+    tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig, city: str
+) -> dict[str, Figure]:
+    """One figure per market study that has rows to draw; `city` is the state the
+    household survey's figure sets apart."""
     drawn = {}
     if not tables["market_summary"].is_empty():
         drawn["market_share"] = market_share_figure(tables["market_summary"], market.market_year)
@@ -170,7 +188,85 @@ def figures(tables: Mapping[str, pl.DataFrame], market: MarketAnalysisConfig) ->
         drawn["consumer_prices"] = consumer_prices_figure(national)
     if not tables["green_coffee_in_pesos"].is_empty():
         drawn["green_coffee_pesos"] = green_coffee_figure(tables["green_coffee_in_pesos"])
+    if tables["household_coffee_by_state"].height > 1:  # more than the country's own row
+        drawn["household_coffee"] = household_coffee_figure(
+            tables["household_coffee_by_state"], city
+        )
+        drawn["household_deciles"] = household_deciles_figure(tables["household_coffee_by_decile"])
+    if not tables["coe_by_year"].is_empty():
+        drawn["cup_of_excellence"] = coe_figure(tables["coe_by_year"])
     return drawn
+
+
+def coe_figure(by_year: pl.DataFrame) -> Figure:
+    """Cup of Excellence Mexico's median and top auction prices, year by year, against the
+    commodity price of the year: the best lots fetch several times the market."""
+    figure, ax = canvas(
+        "Mexico's best lots at auction",
+        "Cup of Excellence Mexico, US dollars a pound of green coffee; no 2016 or 2020",
+    )
+    years = by_year["year"].to_list()
+    lines = (("top_usd_per_lb", "top lot", SERIES[1]),
+             ("median_usd_per_lb", "median lot", SERIES[0]),
+             ("commodity_usd_per_lb", "the market (other milds)", MUTED))  # fmt: skip
+    for column, label, color in lines:
+        ax.plot(years, by_year[column], marker="o", color=color, label=label)
+    ax.set_yscale("log")
+    ax.set_ylabel("US$ a pound (log scale)", color=MUTED)
+    ax.legend(frameon=False, fontsize=8)
+    value_grid(ax, "y")
+    figure.tight_layout()
+    return figure
+
+
+def household_coffee_figure(by_state: pl.DataFrame, city: str) -> Figure:
+    """The share of households that bought coffee to drink at home in the survey's week,
+    state by state, with its interval; the city and the country set apart."""
+    states = by_state.filter(pl.col("state") != COUNTRY).sort("bought_share")
+    country = by_state.filter(state=COUNTRY).row(0, named=True)
+    figure, ax = canvas(
+        "Who buys coffee to drink at home",
+        f"bought some in the survey's week, ENIGH 2024; dashed: the country, "
+        f"{country['bought_share']:.0%}; bars: 95%",
+    )
+    positions = np.arange(states.height)
+    percent = states.select(pl.col("bought_share", "bought_share_low", "bought_share_high") * 100)
+    ax.errorbar(
+        percent["bought_share"], positions,
+        xerr=[percent["bought_share"] - percent["bought_share_low"],
+              percent["bought_share_high"] - percent["bought_share"]],
+        fmt="none", ecolor=BASELINE, elinewidth=1.2, zorder=2,
+    )  # fmt: skip
+    colors = [SERIES[1] if state == city else SERIES[0] for state in states["state"]]
+    ax.scatter(percent["bought_share"], positions, color=colors, s=22, zorder=3)
+    ax.axvline(100 * country["bought_share"], color=MUTED, linewidth=0.8, linestyle="--")
+    ax.set_yticks(positions, states["state"].to_list(), fontsize=6.5)
+    ax.set_xlabel("% of households", color=MUTED)
+    value_grid(ax, "x")
+    figure.set_size_inches(7.2, 6.4)
+    figure.tight_layout()
+    return figure
+
+
+def household_deciles_figure(by_decile: pl.DataFrame) -> Figure:
+    """Coffee's share of income by income decile: the poorest give it several times the
+    share the richest do, though the richest spend more on it."""
+    figure, ax = canvas(
+        "Coffee weighs most on the poorest",
+        "coffee for home, per mille of current income, by national income decile, ENIGH 2024",
+    )
+    for color, (area, rows) in zip(SERIES, by_decile.group_by("area", maintain_order=True),
+                                   strict=False):  # fmt: skip
+        ax.plot(rows["income_decile"], rows["income_per_mille"], marker="o", color=color,
+                label=str(area[0]))  # fmt: skip
+    ax.set_xticks(range(1, 11))
+    ax.set_xlabel("income decile (1 = the poorest tenth of the country's households)", color=MUTED)
+    ax.set_ylabel("‰ of income", color=MUTED)
+    ax.set_ylim(bottom=0)
+    ax.legend(frameon=False, fontsize=8)
+    value_grid(ax, "y")
+    figure.tight_layout()
+    return figure
 
 
 def borough_coffee_shops(shops: pl.DataFrame, boroughs: pl.DataFrame) -> pl.DataFrame:

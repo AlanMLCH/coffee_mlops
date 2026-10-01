@@ -222,6 +222,8 @@ def test_build_clean_writes_every_table_with_lineage(
         "transit_stations",
         "transit_ridership",
         "census_zones",
+        "household_coffee",
+        "cup_of_excellence",
         # The corpus', built by the core from the documents the domain lists.
         "documents",
         "document_chunks",

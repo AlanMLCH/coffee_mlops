@@ -187,6 +187,53 @@ metadata. robots.txt allows `/contenidos/programas`. Verified 2026-09-30:
   for the share who lived in another state in 2020.
 - Licence: INEGI's terms of use (free use, citing it).
 
+### INEGI household income and expenditure survey (ENIGH 2024): `enigh_2024_spending`, `enigh_2024_households`
+
+What households spend on coffee to drink at home. The new series' microdata, a ZIP per
+table, published 30 July 2025, under `https://www.inegi.org.mx/contenidos/programas/enigh/nc/2024/microdatos/`
+(robots.txt allows `/contenidos/programas`). Verified 2026-10-01 with the project's client:
+
+- `enigh2024_ns_gastoshogar_csv.zip` (54 MB; `gastoshogar.csv`, 579 MB, 5,311,497 rows):
+  every purchase the 91,414 households of the sample reported. The domain's reader keeps
+  the coffee codes - `012201` instant, `012202` beans or ground, `012203` preparations for
+  coffee drinks - 17,356 rows. `tipo_gasto` G1 is paid for the household (`gasto_tri`), G3
+  taken from its own harvest (`gas_nm_tri`); gifts (G5) and transfers (G6) are left out.
+- `enigh2024_ns_concentradohogar_csv.zip` (13 MB): a row per household with its weight
+  (`factor`), state and municipality (`ubica_geo`), stratum (`est_dis`), primary sampling
+  unit (`upm`), size and current income in the quarter (`ing_cor`).
+- Plain ASCII, keys with leading zeros, a blank written as a space.
+- Checks that hold: the weights add up to 38,830,230 households; the weighted mean income
+  is **77,864 pesos a quarter, the figure INEGI publishes**; every coffee purchase belongs to
+  a household of the other file, in the same state. Representative of each state, not of an
+  alcaldia (2,576 households in Mexico City).
+- Food is recorded over **one week** and stated per quarter (`gasto` × 90/7): "bought coffee"
+  is "bought coffee in the survey's week". Coffee drunk in a coffee shop is a meal out
+  (codes 111xxx), not split by what was eaten: not here.
+- Licence: INEGI's terms of use (free use, citing it).
+
+### Cup of Excellence Mexico: `cup_of_excellence`
+
+Each year's competition - Mexico's best lots, judged blind by a national and an
+international jury - and its online auction, from the Alliance for Coffee Excellence's page
+for the year: `https://allianceforcoffeeexcellence.org/mexico-<year>/`. Verified 2026-10-01
+with the project's client:
+
+- robots.txt allows every agent (`Disallow:` empty) and asks no delay; the source waits
+  two seconds between pages anyway.
+- The site's own list of Mexico's competitions has 2012-2015, 2017-2019 and 2021-2026;
+  `mexico-2016` and `mexico-2020` answer 404. The source declares them missing years
+  (`years.missing`), not failed downloads.
+- WordPress pages, tables written by hand, a different layout in nearly every era: the
+  results (rank, score, farm, farmer, region; weight from 2019, variety and process from
+  2018, "Proceso" and "Variedad" in 2023, "Process, Variety" in one cell in 2019) and the
+  auction (lot or rank, farm, score from 2021, weight in pounds or boxes, the high bid as
+  "$50.21/lb", "US$ 61.00" or "75.10", the total, the buyers), each with its national
+  winners' pair. 2024-2026 hold three competitions a year, each with its own first place;
+  2025 writes scores with a decimal comma ("88,11"); the 2026 auction rounds 87.56 to 87.6.
+- 405 lots, 387 sold (2012-2026), every sale paired with its lot.
+- Licence: "© Alliance for Coffee Excellence. All Rights Reserved." on every page. Read
+  and kept in the raw layer like every download; never committed or republished.
+
 ### World Bank Pink Sheet: `world_bank_prices`
 
 Page `https://www.worldbank.org/en/research/commodity-markets`; the workbook
@@ -489,9 +536,8 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 | Yahoo `KC=F` (Coffee C futures) | rejected | unofficial endpoint, personal-use terms, and a future, not the physical price |
 | FRED `PCOFFOTMUSDM`, `PCOFFROBUSDM` | verified alternative, not chosen | the IMF's monthly other milds and robustas (¢/lb, 1992→); the World Bank's go back to 1960 |
 | Banxico SIE (FIX) | not chosen | its API needs a token; FRED does not |
-| ENIGH 2024 microdata (INEGI) | verified, not read | 200, 54 MB ZIP; the household spending that would fill the consumption gap; its geographic representativeness (probably state, not borough) is still to check |
-| Cup of Excellence Mexico 2012-2026 | verified, terms to check | HTML tables (score, farm, process, variety, region); robots.txt allows them |
+| IMSS jobs by employer (`asg-<date>.csv`, datos abiertos) | verified, not read | monthly, one CSV per month; but Mexico City's rows carry no municipality (`cve_municipio` "NA"), so it says nothing per alcaldia that DENUE's staff bands do not |
 | INEGI INPC (consumer prices) | needs a token | the indicators API takes its own token, not DENUE's; would deflate SIAP's and PROFECO's nominal prices |
 | SCA Specialty Coffee Transaction Guide | needs a person | a form asking for personal data |
 | Open-Meteo | not used | its robots.txt forbids this project's agent |
-| Censo Agropecuario 2022 | not found | the open-data link tried was not valid |
+| Censo Agropecuario 2022 (INEGI) | verified, not read | its open data (`ca_2022_upaf_csv.zip`, 3 KB) is the national summary, 11 rows; coffee by municipality (358,301 production units in 2022) is only in the interactive tables, with no file to download |

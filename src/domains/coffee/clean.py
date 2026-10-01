@@ -8,6 +8,10 @@
 - DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough, as
   each register lists it now) and `coffee_shop_history` (each place in every read).
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
+- Cup of Excellence Mexico -> `cup_of_excellence` (one row per lot of a year's
+  competition, with its auction); see `domains.coffee.excellence`.
+- INEGI's household survey (ENIGH) -> `household_coffee` (one row per household of its
+  sample, with what it spent on coffee to drink at home); see `domains.coffee.households`.
 - The roasters' shops -> `roaster_coffees`, `roaster_origins`, `roaster_offers`; see
   `domains.coffee.roaster_sheets`.
 - The ICO and the World Bank -> `price_indicators`, and FRED's peso-dollar rate ->
@@ -38,6 +42,7 @@ from domains.coffee.config import (
     BoroughProfileConfig,
     CleaningConfig,
     ConsumerPricesConfig,
+    HouseholdSpendingConfig,
     ProducerPricesConfig,
     ProductionConfig,
     ShopKindRule,
@@ -45,6 +50,8 @@ from domains.coffee.config import (
     ZonesConfig,
 )
 from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
+from domains.coffee.excellence import clean_cup_of_excellence
+from domains.coffee.households import clean_household_coffee
 from domains.coffee.prices import (
     clean_exchange_rates,
     clean_price_indicators,
@@ -603,6 +610,7 @@ def clean_tables(
     profile: BoroughProfileConfig,
     transit: TransitConfig,
     zones: ZonesConfig,
+    survey: HouseholdSpendingConfig,
     read_at: Mapping[str, datetime],
 ) -> dict[str, CleanTable]:
     """Validated raw frames -> the domain's clean tables, each with its sources."""
@@ -663,5 +671,13 @@ def clean_tables(
         "consumer_prices": CleanTable(
             clean_consumer_prices(shelf_reads(frames, shelves, read_at), areas, shelves),
             (shelves.source, *shelves.closed_years, "cdmx_boroughs"),
+        ),
+        "household_coffee": CleanTable(
+            clean_household_coffee(frames[survey.spending], frames[survey.households], survey),
+            (survey.spending, survey.households),
+        ),
+        "cup_of_excellence": CleanTable(
+            clean_cup_of_excellence(frames["cup_of_excellence"], rules.roaster_sheets, production),
+            ("cup_of_excellence", "siap_agricola"),
         ),
     }

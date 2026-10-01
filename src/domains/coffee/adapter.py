@@ -30,9 +30,12 @@ from domains.coffee.features import (
 from domains.coffee.forecast import PRICES_TABLE, add_price_history
 from domains.coffee.request import Lot, Offer, PriceMonth
 from domains.coffee.schemas import (
+    ENIGH_HOUSEHOLDS_RAW,
+    ENIGH_SPENDING_RAW,
     RAW_SCHEMAS,
     borough_profile_schema,
     clean_schemas,
+    household_coffee_schema,
     intercensal_schema,
 )
 from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
@@ -109,11 +112,13 @@ class CoffeeAdapter:
         # A closed year of the shelf survey is the same file as the year in course; the
         # survey of who lives where is read for the columns its profile names.
         closed = self.config.consumer_prices.closed_years
-        profile = self.config.borough_profile
+        profile, survey = self.config.borough_profile, self.config.household_spending
         return {
             **RAW_SCHEMAS,
             **dict.fromkeys(closed, RAW_SCHEMAS["profeco_prices"]),
             profile.source: intercensal_schema(profile),
+            survey.spending: ENIGH_SPENDING_RAW,
+            survey.households: ENIGH_HOUSEHOLDS_RAW,
         }
 
     def json_readers(self) -> Mapping[str, JsonReader]:
@@ -135,12 +140,17 @@ class CoffeeAdapter:
 
     def file_readers(self) -> Mapping[str, FileReader]:
         from domains.coffee.sources.census_zones import read_census_zones
+        from domains.coffee.sources.coe import read_competition
+        from domains.coffee.sources.enigh import read_households, read_spending
         from domains.coffee.sources.faostat import read_producer_prices
         from domains.coffee.sources.ico import read_indicator_prices
         from domains.coffee.sources.profeco import read_shelf_prices
 
         shelves, farmers = self.config.consumer_prices, self.config.producer_prices
-        readers: dict[str, FileReader] = {"ico_prices": read_indicator_prices}
+        readers: dict[str, FileReader] = {
+            "ico_prices": read_indicator_prices,
+            "cup_of_excellence": read_competition,
+        }
         # CoffeeConfig refuses a producer price source without a member.
         readers[farmers.source] = partial(read_producer_prices,
                                           member=str(self.config.sources[farmers.source].member),
@@ -148,6 +158,14 @@ class CoffeeAdapter:
         # CoffeeConfig refuses a zones census without a member too.
         zones = self.config.census_zones.census
         readers[zones] = partial(read_census_zones, member=str(self.config.sources[zones].member))
+        # And a household survey's files without one.
+        survey, sources = self.config.household_spending, self.config.sources
+        readers[survey.spending] = partial(read_spending,
+                                           member=str(sources[survey.spending].member),
+                                           codes=list(survey.products))  # fmt: skip
+        readers[survey.households] = partial(
+            read_households, member=str(sources[survey.households].member)
+        )
         for name in (shelves.source, *shelves.closed_years):
             folder = self.config.sources[name].member
             if folder is None:  # pragma: no cover - CoffeeConfig refuses such a config
@@ -171,12 +189,18 @@ class CoffeeAdapter:
             config.borough_profile,
             config.transit,
             config.census_zones,
+            config.household_spending,
             read_at,
         )
 
     def clean_contracts(self) -> Mapping[str, pa.DataFrameSchema]:
         profile = borough_profile_schema(self.config.borough_profile)
-        return {**clean_schemas(self.config.cleaning), "borough_profile": profile}
+        households = household_coffee_schema(self.config.household_spending)
+        return {
+            **clean_schemas(self.config.cleaning),
+            "borough_profile": profile,
+            "household_coffee": households,
+        }
 
     def context_tables(self, model: str) -> tuple[str, ...]:
         return hooks(model).context_tables
@@ -202,12 +226,14 @@ class CoffeeAdapter:
             config.cleaning.roaster_sheets.home_country,
             config.analysis.min_rows,
             config.cleaning.register_match.radius_m,
+            config.household_spending,
         )
 
     def figures(self, tables: Mapping[str, pl.DataFrame]) -> Mapping[str, Figure]:
         from domains.coffee.analysis import figures
 
-        return figures(tables, self.config.market_analysis)
+        survey = self.config.household_spending
+        return figures(tables, self.config.market_analysis, survey.states[survey.city])
 
 
 def hooks(model: str) -> ModelHooks:

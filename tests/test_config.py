@@ -39,6 +39,9 @@ def test_coffee_config_declares_its_file_sources() -> None:
         "transit_stops",
         "census_2020_ageb",
         "cdmx_ageb",
+        "enigh_2024_spending",
+        "enigh_2024_households",
+        "cup_of_excellence",
     }
     # The boundary layer is a map, not a table, and says how to read itself.
     boundaries = config.sources["cdmx_boroughs"]
@@ -237,6 +240,16 @@ def test_a_file_a_year_writes_its_year_where_it_changes() -> None:
         SourceConfig(**yearly, years={"first": 2023, "last": 2025}, link="x")
     with pytest.raises(ValidationError, match="2025 > 2023"):
         SourceConfig(**yearly, years={"first": 2025, "last": 2023})
+    # In a path, the year's braces are escaped by the URL type, and still the year.
+    paged = SourceConfig(url="https://c.test/mexico-{year}/", filename="mexico-{year}.html",
+                         years={"first": 2012, "last": 2013})  # fmt: skip
+    assert [u for _, u, _ in paged.editions()] == ["https://c.test/mexico-2012/",
+                                                   "https://c.test/mexico-2013/"]  # fmt: skip
+    # A year never published is skipped, not a download that fails; the last one cannot be.
+    held = SourceConfig(**yearly, years={"first": 2023, "last": 2025, "missing": [2024]})
+    assert [y for y, _, _ in held.editions()] == [2023, 2025]
+    with pytest.raises(ValidationError, match=r"missing years \[2025\]"):
+        SourceConfig(**yearly, years={"first": 2023, "last": 2025, "missing": [2025]})
     with pytest.raises(ValidationError, match="thousands"):
         SourceConfig(url="https://s.test/", filename="one.csv", thousands=",,")
 

@@ -66,6 +66,9 @@ def test_recorded_sources_pass_and_come_out_typed(
         "cdmx_ageb": 2431,  # the framework's urban AGEBs, as many as the real layer
         "transit_stops": 9,  # every system's: the stations keep the Metro's and Metrobús'
         "faostat_prices": 9,  # coffee's rows; the other crop left in the file
+        "enigh_2024_spending": 7,  # the coffee purchases; the bread left in the file
+        "enigh_2024_households": 8,
+        "cup_of_excellence": 57,  # rows of lots and of sales, 13 years of pages
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()

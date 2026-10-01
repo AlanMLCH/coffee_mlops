@@ -52,3 +52,5 @@
 {"id": "data-22", "question": "Which Mexico City borough has the highest share of homes rented, according to INEGI's 2025 Intercensal Survey?", "route": "data"}
 {"id": "data-23", "question": "How many people entered the Mexico City Metro on an average day of 2025?", "route": "data"}
 {"id": "data-24", "question": "How many of Mexico City's urban AGEBs have at least one of DENUE's coffee shops?", "route": "data"}
+{"id": "data-25", "question": "What share of Mexico City's households bought coffee to drink at home in the week of INEGI's 2024 household survey?", "route": "data"}
+{"id": "data-26", "question": "What was the median auction price per pound of the Cup of Excellence Mexico lots sold in 2026?", "route": "data"}

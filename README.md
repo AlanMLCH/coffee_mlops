@@ -15,13 +15,15 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 21 sources of four kinds** - static files (CQI cupping scores, USDA's world
-  coffee balance, SIAP's harvests, INEGI's borough and AGEB polygons, 2020 Census (by borough and by AGEB) and 2025 Intercensal Survey, World Bank and ICO prices,
-  FAOSTAT's producer prices, PROFECO's shelf prices, FRED's exchange rate, the Metro's and
-  Metrobús' daily entries and the city's transit feed), token-authenticated and paginated APIs
-  (INEGI's business register, OpenStreetMap, USDA FAS), four roasters' online shops read
-  politely (robots.txt first) - their tasting notes read into the SCA's flavour
-  categories - and 22 documents for the agent to read.
+- **Reads 24 sources of four kinds** - static files (CQI cupping scores, USDA's world
+  coffee balance, SIAP's harvests, INEGI's borough and AGEB polygons, 2020 Census (by
+  borough and by AGEB), 2025 Intercensal Survey and 2024 household income and expenditure
+  survey, World Bank and ICO prices, FAOSTAT's producer prices, PROFECO's shelf prices,
+  FRED's exchange rate, the Metro's and Metrobús' daily entries and the city's transit
+  feed), token-authenticated and paginated APIs (INEGI's business register, OpenStreetMap,
+  USDA FAS), web pages read politely (robots.txt first) - four roasters' online shops,
+  their tasting notes read into the SCA's flavour categories, and the results and
+  auctions of thirteen Cups of Excellence in Mexico - and 22 documents for the agent to read.
 - **Keeps every download untouched and forever** in a content-addressed raw layer:
   running again only adds what is new, never overwrites. Every source and every clean
   table is held to a Pandera contract that stops the pipeline when broken.
@@ -88,6 +90,14 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Block by block - the census' 2,431 urban AGEBs - the gradient fades (schooling 0.34,
   against 0.92 by borough), and a zone with a Metro station has 3.8 coffee shops on
   average against 1.4 without one (+2.4, 95% interval +1.7 to +3.3).
+- Who buys coffee to drink at home (INEGI's 2024 household survey, per state): 14% of
+  Mexico's households bought some in the survey's week, mostly instant; Chiapas leads
+  (26%), the city is third (18.5%) and spends the most a household, 65 pesos a month
+  against the country's 37. Coffee takes 5.4‰ of the poorest tenth's income and 0.9‰ of
+  the richest's.
+- Mexico's best lots at auction (Cup of Excellence, 2012-2026): the median winning lot
+  fetches four to eight times the market price of its year, and each point of score adds
+  about 41% to the price (95% interval 37% to 44%).
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
@@ -106,7 +116,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["21 sources + 22 documents"]
+    subgraph SOURCES["24 sources + 22 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]

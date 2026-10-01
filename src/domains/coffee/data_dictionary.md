@@ -429,6 +429,54 @@ México'` or `borough_id IS NOT NULL`; across the country, filter no state. **Pl
 ground or instant with nothing else in it - is `NOT sweetened AND NOT decaf`. PROFECO
 reports by fortnight: group by `fortnight` for its periods.
 
+## `clean.household_coffee` — one household of INEGI's 2024 income and expenditure survey (ENIGH)
+
+91,414 households in the sample, standing for 38.8 million; representative of each state,
+not of a borough. What a household spent on coffee **to drink at home**, bought in the
+survey's week and stated per quarter (coffee in a coffee shop is not here).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `year` | Int | The survey's year, 2024 |
+| `household_id` | String | The survey's dwelling and household |
+| `state_id`, `state` | String | INEGI's code and the state's name (`Ciudad de México`; `México` is the State of Mexico) |
+| `municipality_id` | String | State + municipality, 5 digits |
+| `stratum`, `psu` | String | The survey's design: stratum and primary sampling unit |
+| `weight` | Int | How many households this one stands for |
+| `members` | Int | People in it |
+| `income_quarter_mxn` | Float | Current income in the quarter, pesos |
+| `income_decile` | Int | 1 (the country's poorest tenth of households) to 10 |
+| `instant_quarter_mxn`, `ground_quarter_mxn`, `prepared_quarter_mxn` | Float | Pesos paid in the quarter for instant coffee, beans or ground coffee, preparations for coffee drinks; 0 if none |
+| `own_harvest_quarter_mxn` | Float | Coffee taken from its own harvest, valued in pesos |
+
+Every figure is weighted: a share of households is `sum(weight * (condition)::INT) /
+sum(weight)`; spending per household a month is `sum(weight * spent) / sum(weight) / 3`.
+Never count rows.
+
+## `clean.cup_of_excellence` — one lot of a year's Cup of Excellence Mexico, and its auction
+
+Mexico's best lots each year (2012-2026; none in 2016 or 2020), judged blind by a national
+and an international jury, then sold at an online auction. Green coffee, US dollars.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `year` | Int | The competition's year |
+| `lot_id` | String | `<year>-<n>`, page order |
+| `rank` | String? | As published: `1`, `1a`, `nw` (national winner); null for a national winner listed without one |
+| `national_winner` | Bool | Scored below the international round (86-87 points), sold in its own auction |
+| `score` | Float | Cup score, 0-100 |
+| `farm`, `farmer`, `region` | String | As published |
+| `state` | String? | The state, in SIAP's names; null where the region does not tell |
+| `varieties` | List[String]? | Lower-case, as the roasters' sheets spell them (`gesha`); null before 2018 |
+| `processing_method` | String? | `washed`, `natural`, `honey`, `semi_washed`, `other`; null before 2018 |
+| `weight_kg` | Float? | The lot's green coffee, kg |
+| `price_usd_per_lb` | Float? | The auction's high bid, US dollars a pound of green coffee; null if unsold |
+| `total_usd` | Float? | What the lot fetched |
+| `buyers` | String? | Who bought it |
+
+A pound is 0.4536 kg: US$ per kg = `price_usd_per_lb * 2.20462`. Prices rose year by
+year: compare within a year, or with the year's market (`clean.price_indicators`).
+
 ## `features.review_features` — model input
 
 `clean.coffee_reviews` joined to the market context of **the previous market year**

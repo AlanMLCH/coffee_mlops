@@ -15,7 +15,7 @@ from mlops_core.explore.shapes import feature_collection
 logger = logging.getLogger(__name__)
 
 MAP_ROWS = 20_000  # a layer is drawn, not read by a model: a city's places fit
-AREA_ROWS = 1_000
+AREA_ROWS = 5_000  # a city drawn block by block, not only district by district
 
 
 def load_areas(con: duckdb.DuckDBPyConnection, areas: AreasConfig) -> Areas:
@@ -30,10 +30,15 @@ def areas_if_built(con: duckdb.DuckDBPyConnection, explore: ExploreConfig | None
     map of places still draws, only a map of areas cannot."""
     if explore is None or explore.areas is None:
         return None
+    return areas_built(con, explore.areas)
+
+
+def areas_built(con: duckdb.DuckDBPyConnection, areas: AreasConfig) -> Areas | None:
+    """These areas, or None while their table is not built yet."""
     try:
-        return load_areas(con, explore.areas)
+        return load_areas(con, areas)
     except duckdb.CatalogException:
-        logger.warning("%s is not built yet: no map of areas until it is", explore.areas.table)
+        logger.warning("%s is not built yet: no map of areas until it is", areas.table)
         return None
 
 

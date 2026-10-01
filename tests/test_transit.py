@@ -186,4 +186,5 @@ def test_each_system_has_an_average_day_a_year(
         schema=dict.fromkeys(columns[:2], pl.String) | dict.fromkeys(columns[2:], pl.Float64)
     )
     tables = defaultdict(lambda: nothing, {"transit_by_year": by_year})
-    assert list(figures(tables, coffee_config.market_analysis)) == ["transit_ridership"]
+    drawn = figures(tables, coffee_config.market_analysis, "Ciudad de México")
+    assert list(drawn) == ["transit_ridership"]

@@ -399,6 +399,32 @@ class ZonesConfig(BaseModel):
     layer: str
 
 
+class HouseholdSpendingConfig(BaseModel):
+    """What households spend on coffee to drink at home, from INEGI's survey of household
+    income and expenditure: the sources of its purchases and of its households, which of
+    its product codes are coffee, and its states under the domain's names."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spending: str  # the source of every purchase the survey's households reported
+    households: str  # the source of each household's weight, place, design and income
+    year: int
+    # The survey's product code -> the domain's name for that coffee, a column each.
+    products: dict[str, str] = Field(min_length=1)
+    states: dict[str, str] = Field(min_length=1)  # INEGI's state code -> its name
+    city: str  # the state code whose households are set apart, decile by decile
+
+    @model_validator(mode="after")
+    def _names_are_columns(self) -> Self:
+        names = list(self.products.values())
+        bad = [name for name in names if not re.fullmatch(r"[a-z][a-z_]*", name)]
+        if bad or len(set(names)) < len(names):
+            raise ValueError(f"`household_spending.products` names {names}: one column each")
+        if self.city not in self.states:
+            raise ValueError(f"`household_spending.city` {self.city!r} is not in `states`")
+        return self
+
+
 class MarketAnalysisConfig(BaseModel):
     """Which slice of the world market the coffee-only studies summarise."""
 
@@ -426,6 +452,7 @@ class CoffeeConfig(DomainConfig):
     borough_profile: BoroughProfileConfig
     transit: TransitConfig
     census_zones: ZonesConfig
+    household_spending: HouseholdSpendingConfig
 
     @model_validator(mode="after")
     def _title_notes_name_shops(self) -> Self:
@@ -489,4 +516,16 @@ class CoffeeConfig(DomainConfig):
             )
         if layer is None or layer.spatial is None:
             raise ValueError(f"`census_zones` draws {zones.layer!r}: it has to be a map layer")
+        return self
+
+    @model_validator(mode="after")
+    def _household_spending_is_downloaded(self) -> Self:
+        survey = self.household_spending
+        for name in (survey.spending, survey.households):
+            source = self.sources.get(name)
+            if source is None or source.member is None:
+                raise ValueError(
+                    f"`household_spending` reads {name!r}: it has to be a source whose "
+                    "`member` names the CSV inside INEGI's ZIP"
+                )
         return self
