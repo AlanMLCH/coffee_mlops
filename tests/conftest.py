@@ -8,6 +8,7 @@ another pipeline happens to pull in.
 
 import csv
 import functools
+import importlib.util
 import io
 import tempfile
 import zipfile
@@ -285,7 +286,11 @@ def ageb_code(latitude: float, longitude: float) -> str:
 
 @functools.cache
 def framework_archive() -> bytes:
-    from mlops_core.data.geo import spatial_connection  # DuckDB: not in the API's image
+    if importlib.util.find_spec("duckdb") is None:
+        # The API's isolated tests run without DuckDB and read no map: the boroughs'
+        # fixture alone stands in for the framework.
+        return (FIXTURES / "cdmx_boroughs_sample.zip").read_bytes()
+    from mlops_core.data.geo import spatial_connection
 
     west, south = AGEB_ORIGIN
     query = f"""
