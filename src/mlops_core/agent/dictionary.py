@@ -68,9 +68,10 @@ class SchemaLinker:
     and the ones those name (the other side of a join they describe), in the dictionary's
     order.
 
-    The whole dictionary is ~4,700 of the SQL writer's 8,192 tokens, and a small model
-    reads past what it was told in a long prompt. Schema linking is the usual remedy in
-    text to SQL; whether it helps here is measured, not assumed (`agent.schema_sections`).
+    The whole dictionary is most of the SQL writer's prompt (about 8,000 tokens by
+    September 2026), and a small model reads past what it was told in a long prompt.
+    Schema linking is the usual remedy in text to SQL; whether it helps here is measured,
+    not assumed (`agent.schema_sections`).
     """
 
     def __init__(

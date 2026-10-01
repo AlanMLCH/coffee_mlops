@@ -40,9 +40,11 @@ from mlops_core.storage import write_table
 
 SQL_BAR = 0.70
 ROUTE_BAR = 0.90
-# Deterministic, and a context that holds the data dictionary (about 3,300 tokens) with
-# room for the question, a failed query and its error.
-GENERATOR_OPTIONS = {"temperature": 0.0, "seed": 7, "num_ctx": 8192}
+# Deterministic, and a context that holds the data dictionary with room for the question,
+# a failed query and its error. 8,192 held it until the domain's tables grew past it (the
+# SQL prompt measured 8,119 tokens on 30 September 2026); 16,384 costs the 4B model 0.26
+# GiB of VRAM more (3.30 GiB), still beside the embedding model on a 6 GB card.
+GENERATOR_OPTIONS = {"temperature": 0.0, "seed": 7, "num_ctx": 16384}
 # The decided generator first; the alternative CLAUDE.md names if it misses the bar.
 CANDIDATES = ("granite4.2:3b", "qwen3.5:4b")
 COMPARED_ROWS = 1000  # an answer longer than this is not the reference's anyway
