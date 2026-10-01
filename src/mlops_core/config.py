@@ -731,6 +731,11 @@ class AgentConfig(BaseModel):
     # How many of the data dictionary's sections the SQL writer sees, chosen per question
     # by similarity (with the tables they name); unset, all of them.
     schema_sections: int | None = Field(default=None, ge=1)
+    # How many queries the SQL writer writes and lets vote on the answer: the usual one,
+    # and the rest sampled at `vote_temperature`, each with a seed of its own
+    # (`text_to_sql.voted`). 1: no vote.
+    sql_votes: int = Field(default=1, ge=1)
+    vote_temperature: float = Field(default=0.7, gt=0, le=2)
 
 
 class DomainConfig(BaseModel):

@@ -52,8 +52,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
-| The agent, 48 questions end to end | **79%** correct, 98% verified | 73% before the fixes of 29 September |
-| The agent, 25 held-out questions written before those fixes | **88%** correct, 100% verified | 52% before them; +12 measured blind, the rest optimistic |
+| The agent, 56 questions end to end | **73%** correct, 98% verified | 78% on 54 of them before two more tables reached it: each table the local 4B model reads costs a few points |
+| The agent, 25 held-out questions written before the fixes of 29 September | **88%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns

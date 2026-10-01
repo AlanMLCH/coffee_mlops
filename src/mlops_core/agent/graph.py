@@ -35,6 +35,7 @@ from mlops_core.agent.prompts import (
     FIX,
     NEEDS,
     PLAN,
+    PLAN_AGAIN,
     AnswerReply,
     NeedsReply,
     PlanReply,
@@ -48,7 +49,7 @@ from mlops_core.config import SqlGuard
 
 # Chosen by the benchmark (2026-09-25): the one candidate that cleared both bars.
 AGENT_GENERATOR = "qwen3.5:4b"
-PASSAGES = 5  # dense search had the answer in the top five for three questions in four
+PASSAGES = 8  # dense search had the answer in the top eight for 77% of 108 questions (73% in five)
 MAX_ANSWERS = 2  # the first answer and one rewrite
 # A passage less similar to the question than this is not evidence. Measured on
 # 2026-09-29: the best passage for the 108 retrieval questions scored 0.428 at the lowest
@@ -132,9 +133,13 @@ class Agent:
     guards: list[SqlGuard] = field(default_factory=list)  # the domain's rules for its SQL
     # The sections a question needs (`dictionary.SchemaLinker`); unset, the whole schema.
     linker: Callable[[str], str] | None = None
+    # More SQL writers, each with its own sampling, whose queries vote on the answer
+    # (`text_to_sql.voted`); none, the generator's query is the answer.
+    voters: list[Generator] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.generator = TracedGenerator(self.generator)
+        self.voters = [TracedGenerator(voter) for voter in self.voters]
         graph = StateGraph(State)
         for name, step in (
             ("route", self._route),
@@ -204,8 +209,15 @@ class Agent:
             plan: dict[str, str | None] = {chosen: question}
         else:
             with _span("plan"):
-                prompt = PLAN.format(subject=self.routing["subject"], question=question)
-                plan = self.generator.ask(prompt, PlanReply).model_dump()
+                prompt = PLAN.format(
+                    subject=self.routing["subject"],
+                    models=self.routing["models"],
+                    question=question,
+                )
+                reply = self.generator.ask(prompt, PlanReply)
+                if reply.repeats():  # handed whole to two tools: asked once more
+                    reply = self.generator.ask(prompt + PLAN_AGAIN, PlanReply)
+                plan = reply.by_tool()
             if not any(plan.values()):  # a plan with no tool: ask the tables and the documents
                 plan = {"data": question, "knowledge": question}
         if needs.predicts and not plan.get("prediction"):
@@ -226,14 +238,18 @@ class Agent:
             return {"sql": None}
         schema = self.linker(part) if self.linker else self.schema
         with _span("data"):
-            return {"sql": write_sql(self.generator, self.con, schema, part, guards=self.guards)}
+            answer = write_sql(
+                self.generator, self.con, schema, part, guards=self.guards, voters=self.voters
+            )
+            return {"sql": answer}
 
     def _prediction(self, state: State) -> State:
         part = state["plan"].get("prediction")
         if not part:
             return {"prediction": None}
         with _span("prediction"):
-            return {"prediction": predict(self.generator, self.adapter, self.api, part)}
+            answer = predict(self.generator, self.adapter, self.api, part, state["question"])
+            return {"prediction": answer}
 
     def _knowledge(self, state: State) -> State:
         part = state["plan"].get("knowledge")

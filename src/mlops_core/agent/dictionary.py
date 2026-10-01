@@ -89,12 +89,18 @@ class SchemaLinker:
     def chosen(self, question: str) -> list[str]:
         similarity = self._vectors @ self._embed([self._query(question)])[0]
         top = {self._names[i] for i in np.argsort(-similarity)[: self._k]}
-        named = {
-            name
-            for name in self._names
-            if any(f"`{name}`" in self._sections[t] for t in top) and name not in top
-        }
+        named = named_by(self._sections, top)
         return [name for name in self._names if name in top | named]
 
     def __call__(self, question: str) -> str:
         return "\n\n".join(self._sections[name] for name in self.chosen(question))
+
+
+def named_by(sections: dict[str, str], chosen: Collection[str]) -> set[str]:
+    """The sections the chosen ones name and are not among them: the other side of a join
+    a chosen section describes."""
+    return {
+        name
+        for name in sections
+        if name not in chosen and any(f"`{name}`" in sections[t] for t in chosen)
+    }

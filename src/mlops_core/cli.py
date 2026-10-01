@@ -923,6 +923,7 @@ def agent_session(
     from mlops_core.agent.registry import register_prompts
     from mlops_core.agent.routing import routing_context
     from mlops_core.agent.sql import read_only, views
+    from mlops_core.agent.text_to_sql import VOTE_SEED, Generator
     from mlops_core.rag.llm import LocalModel, ollama_client
     from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
 
@@ -951,6 +952,13 @@ def agent_session(
             client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
         )
         linker = _linker(config, dictionary, views(con), embedder)
+        # The votes are the local model's, sampled: whichever model answers first.
+        voters: list[Generator] = [
+            LocalModel(http, AGENT_GENERATOR,
+                       GENERATOR_OPTIONS | {"temperature": config.agent.vote_temperature,
+                                            "seed": VOTE_SEED + n})
+            for n in range(config.agent.sql_votes - 1)
+        ]  # fmt: skip
         yield (
             Agent(
                 chosen,
@@ -964,6 +972,7 @@ def agent_session(
                 prompts,
                 list(config.agent.sql_guards),
                 linker,
+                voters,
             ),
             identity,
         )

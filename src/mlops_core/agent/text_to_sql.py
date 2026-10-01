@@ -10,8 +10,19 @@ wrong goes back to the model - each kind of trouble a bounded number of times.
   changed is a spelling of the same one - shown the shops there are, the model once put
   another shop in the place of one the data does not have. If nothing is found, that is
   what the agent reports - the answer step then has nothing to invent a figure from.
+- A count of zero is checked the same way, and goes back only if a value it filtered on
+  is not in the data: zero is an answer, but a filter on a place the data names otherwise
+  counts zero of anything.
+- A query that matched more rows than the answer reads goes back once: the rows the
+  question asks about may be past the cut.
+- A query that selects a sentence of its own is refused the same way: asked what a
+  standard measures and which score is highest, it selected its own explanation.
 - A query that reads no table is refused, like an error: a figure it returns is the
   model's, not the data's (asked who won a World Cup, it wrote `SELECT 'Brazil'`).
+
+With voters, several queries are written that way - the usual one and a few sampled -
+and the result most of them give is the answer (execution-guided self-consistency): a
+small model's wrong queries tend to disagree with each other, its right ones to agree.
 
 A query that runs and answers another question looks, from inside the agent, like a
 right one: that is what the benchmark exists to measure.
@@ -19,15 +30,25 @@ right one: that is what the benchmark exists to measure.
 
 import re
 import unicodedata
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from difflib import SequenceMatcher
 from typing import Protocol
 
 import duckdb
 from pydantic import BaseModel
 
-from mlops_core.agent.prompts import EMPTY, GUARD, REPAIR, SQL, SqlReply
+from mlops_core.agent.prompts import (
+    EMPTY,
+    GUARD,
+    REPAIR,
+    REPAIR_HINTS,
+    SQL,
+    TRUNCATED,
+    SqlReply,
+)
 from mlops_core.agent.sql import (
     MAX_ROWS,
     QueryResult,
@@ -39,13 +60,21 @@ from mlops_core.agent.sql import (
 from mlops_core.config import SqlGuard
 
 MAX_ATTEMPTS = 3  # the first query and two repairs
+VOTE_SEED = 100  # the sampled queries' seeds count from here: reproducible votes
 SHOWN_VALUES = 12  # of a column whose filter value matched nothing
 # How alike two spellings of one value are, at least: "São Paulo" and "sao paulo",
 # "Zurich" and "Zürich" pass; "acme" and "apex" do not.
 SAME_VALUE = 0.8
 NO_TABLE = "The query reads no table: every figure must come from the tables described."
+PROSE = (
+    "The query writes sentences of its own into its result: every value must come from the "
+    "tables. Leave out the part of the question they cannot answer."
+)
+PROSE_WORDS = 6  # a string this long, selected, is the model's writing, not a filter
+# A string in a query, a quote inside it doubled - or, wrongly, escaped.
+_LITERAL = re.compile(r"'(?:[^'\\]|''|\\.)*'")
 # `column = 'value'`, `column ILIKE 'value'` or `column IN ('a', 'b')`, qualified or not.
-_COMPARED = re.compile(r"(?:\w+\.)?(\w+)\s*(?:=|I?LIKE)\s*'((?:[^']|'')*)'", re.IGNORECASE)
+_COMPARED = re.compile(r"(?:\w+\.)?(\w+)\s*(=|I?LIKE)\s*'((?:[^']|'')*)'", re.IGNORECASE)
 _LISTED = re.compile(r"(?:\w+\.)?(\w+)\s+IN\s*\(([^)]*)\)", re.IGNORECASE)
 _QUOTED = re.compile(r"'((?:[^']|'')*)'")
 
@@ -73,6 +102,15 @@ def nothing_in(result: QueryResult) -> bool:
     return not result.rows or all(value is None for row in result.rows for value in row)
 
 
+def counted_nothing(result: QueryResult) -> bool:
+    """One row of zeros: a count, a sum or a share of nothing at all."""
+    # By exact type: False ("is it above?") is an answer, not a count.
+    return len(result.rows) == 1 and all(
+        value is None or (type(value) in (int, float, Decimal) and value == 0)
+        for value in result.rows[0]
+    )
+
+
 def write_sql(
     generator: Generator,
     con: duckdb.DuckDBPyConnection,
@@ -80,10 +118,51 @@ def write_sql(
     question: str,
     max_rows: int = MAX_ROWS,
     guards: Sequence[SqlGuard] = (),
+    voters: Sequence[Generator] = (),
 ) -> SqlAnswer:
     """Ask for a query and run it; repair what failed, then check what ran against the
     domain's guards and, if it found nothing, against the data. A view's whole name quoted
-    as one identifier is unquoted first (`sql.unquoted_views`)."""
+    as one identifier is unquoted first (`sql.unquoted_views`). With `voters`, each writes
+    its own query the same way, and the answer is the one most of them agree on."""
+    first = _written(generator, con, schema, question, max_rows, guards)
+    if not voters:
+        return first
+    others = [_written(voter, con, schema, question, max_rows, guards) for voter in voters]
+    return voted([first, *others])
+
+
+def voted(answers: Sequence[SqlAnswer]) -> SqlAnswer:
+    """The answer most queries agree on, by their results (rows in any order, numbers to
+    four significant figures); a tie, or nothing found by any, keeps the first: the usual
+    query's. A query that failed or found nothing has no vote."""
+    found = [a for a in answers if a.result is not None and not a.empty]
+    if not found:
+        return answers[0]
+    counts = Counter(_vote(a) for a in found)
+    most = max(counts.values())
+    return next(a for a in answers if a in found and counts[_vote(a)] == most)
+
+
+def _vote(answer: SqlAnswer) -> tuple[tuple[object, ...], ...]:
+    assert answer.result is not None  # voted only counts answers that found something
+    rows = (tuple(_rounded(value) for value in row) for row in answer.result.rows)
+    return tuple(sorted(rows, key=repr))
+
+
+def _rounded(value: object) -> object:
+    numeric = isinstance(value, int | float | Decimal) and not isinstance(value, bool)
+    return float(f"{value:.4g}") if numeric else value
+
+
+def _written(
+    generator: Generator,
+    con: duckdb.DuckDBPyConnection,
+    schema: str,
+    question: str,
+    max_rows: int,
+    guards: Sequence[SqlGuard],
+) -> SqlAnswer:
+    """One query, written, repaired and checked."""
     prompt = SQL.format(schema=schema, question=question)
     names = views(con)
     answer = _repaired(generator, con, prompt, names, max_rows)
@@ -94,12 +173,22 @@ def write_sql(
             hint = GUARD.format(sql=answer.sql, hint=guard.hint)
             answer = _again(generator, con, prompt + hint, names, max_rows, answer)
             break
-    if answer.empty:
-        absent = "\n".join(absent_values(con, answer.sql, names))
-        again = EMPTY.format(sql=answer.sql, absent=absent)
+    absent = []
+    if answer.empty or (answer.result is not None and counted_nothing(answer.result)):
+        absent = absent_values(con, answer.sql, names) + unasked_values(answer.sql, question)
+    if answer.empty or absent:
+        again = EMPTY.format(sql=answer.sql, absent="\n".join(absent))
         rewritten = _again(generator, con, prompt + again, names, max_rows, answer)
         answer = rewritten if same_values(answer.sql, rewritten.sql) else answer
+    elif answer.result is not None and answer.result.truncated:
+        cut = TRUNCATED.format(sql=answer.sql, rows=max_rows)
+        answer = _again(generator, con, prompt + cut, names, max_rows, answer)
     return answer
+
+
+def repair_hint(error: str) -> str:
+    """What an error means for the query, where its own words do not say: "" if nothing."""
+    return next((h for pattern, h in REPAIR_HINTS.items() if re.search(pattern, error)), "")
 
 
 def same_values(before: str, after: str) -> bool:
@@ -107,9 +196,9 @@ def same_values(before: str, after: str) -> bool:
     compared that column with, spelled alike: a rewrite may fix a spelling, never swap in
     another value."""
     first: dict[str, list[str]] = {}
-    for column, value in _compared(before):
+    for column, _, value in _compared(before):
         first.setdefault(column.lower(), []).append(_folded(value))
-    for column, value in _compared(after):
+    for column, _, value in _compared(after):
         earlier = first.get(column.lower())
         if earlier is not None and not any(
             SequenceMatcher(None, _folded(value), old).ratio() >= SAME_VALUE for old in earlier
@@ -125,16 +214,18 @@ def absent_values(con: duckdb.DuckDBPyConnection, sql: str, names: set[str]) -> 
     compared = _compared(sql)
     read = [n for n in sorted(names) if re.search(rf"\b{re.escape(n)}\b", sql, re.IGNORECASE)]
     lines = []
-    for column, value in compared:
+    for column, operator, value in compared:
+        # A pattern is matched as the query matches it; a value, ignoring capitals. The
+        # literal as the query wrote it: a quote inside it is already doubled.
+        cell = f"CAST({column} AS VARCHAR)"
+        if operator.upper().endswith("LIKE"):
+            test = f"{cell} ILIKE '{value}'"
+        else:
+            test = f"lower({cell}) = lower('{value}')"
         for table in read:
             if column not in _columns(con, table):
                 continue
-            # The literal as the query wrote it: a quote inside it is already doubled.
-            found = _scalar(
-                con,
-                f"SELECT count(*) FROM {table} WHERE lower(CAST({column} AS VARCHAR)) = "
-                f"lower('{value}')",
-            )
+            found = _scalar(con, f"SELECT count(*) FROM {table} WHERE {test}")
             if found:
                 continue
             values = run_select(
@@ -144,16 +235,40 @@ def absent_values(con: duckdb.DuckDBPyConnection, sql: str, names: set[str]) -> 
             ).rows
             shown = ", ".join(str(row[0]) for row in values)
             lines.append(
-                f"{column} = '{value}' matches no row of {table}; its values include: {shown}"
+                f"{column} {operator} '{value}' matches no row of {table}; "
+                f"its values include: {shown}"
             )
     return lines
 
 
-def _compared(sql: str) -> list[tuple[str, str]]:
-    """Each (column, text value) the query compares: `=`, `LIKE`, `ILIKE` and `IN`."""
-    compared = [(column, value) for column, value in _COMPARED.findall(sql)]
+def writes_prose(sql: str) -> bool:
+    """A string of several words among what the query selects (before its first FROM): a
+    sentence the model wrote, not a value from the data. A long value in a filter is not
+    this: it is compared with the data."""
+    selected = re.split(r"\bFROM\b", sql, maxsplit=1, flags=re.IGNORECASE)[0]
+    return any(len(text.split()) >= PROSE_WORDS for text in _LITERAL.findall(selected))
+
+
+def unasked_values(sql: str, question: str) -> list[str]:
+    """Each text value the query filters on that the question never names: no word of it
+    (its first four letters, accents and capitals aside) is in the question. A filter the
+    model added on its own finds nothing as surely as a misspelt one (asked for one
+    variety's median price, it also filtered on a country the question never named)."""
+    asked = _folded(question)
+    lines = []
+    for column, operator, value in _compared(sql):
+        words = [w for w in re.findall(r"[a-z0-9]+", _folded(value)) if len(w) >= 4]
+        if words and not any(word[:4] in asked for word in words):
+            lines.append(f"{column} {operator} '{value}': the question does not name it")
+    return lines
+
+
+def _compared(sql: str) -> list[tuple[str, str, str]]:
+    """Each (column, operator, text value) the query compares: `=`, `LIKE`, `ILIKE` and
+    `IN` (as `=`)."""
+    compared = [(column, operator, value) for column, operator, value in _COMPARED.findall(sql)]
     for column, listed in _LISTED.findall(sql):
-        compared += [(column, value) for value in _QUOTED.findall(listed)]
+        compared += [(column, "=", value) for value in _QUOTED.findall(listed)]
     return compared
 
 
@@ -176,10 +291,13 @@ def _repaired(
     """The first query that runs, an error handed back for repair each time."""
     sql, error = "", ""
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        repair = REPAIR.format(sql=sql, error=error) if attempt > 1 else ""
+        repair = REPAIR.format(sql=sql, error=error, hint=repair_hint(error)) if attempt > 1 else ""
         sql = unquoted_views(generator.ask(prompt + repair, SqlReply).sql.strip(), names)
         if not _reads_a_table(sql, names):
             error = NO_TABLE
+            continue
+        if writes_prose(sql):
+            error = PROSE
             continue
         try:
             return SqlAnswer(sql, run_select(con, sql, max_rows), None, attempt)
@@ -200,7 +318,7 @@ def _again(
     """One more query; kept only if it runs - a rewrite that fails loses nothing."""
     sql = unquoted_views(generator.ask(prompt, SqlReply).sql.strip(), names)
     kept = SqlAnswer(before.sql, before.result, None, before.attempts + 1)
-    if not _reads_a_table(sql, names):
+    if not _reads_a_table(sql, names) or writes_prose(sql):
         return kept
     try:
         return SqlAnswer(sql, run_select(con, sql, max_rows), None, before.attempts + 1)

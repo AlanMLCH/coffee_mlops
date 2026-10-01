@@ -8,7 +8,7 @@ version it used: a changed prompt is a new candidate, judged like a new model.
 
 import hashlib
 import json
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel
 
@@ -25,12 +25,32 @@ class RouteReply(BaseModel):
     route: Route
 
 
-class PlanReply(BaseModel):
-    """The part of a question each tool answers, as a question of its own."""
+class PlanPart(BaseModel):
+    question: str  # one part of the question, as a question of its own
+    tool: Tool
 
-    data: str | None
-    prediction: str | None
-    knowledge: str | None
+
+class PlanReply(BaseModel):
+    """A question split into its parts, each a question of its own with the one tool that
+    answers it. A list of parts, not a field per tool (the first version): given a field
+    for each tool, the small model copied the whole question into two of them, or left a
+    part out."""
+
+    parts: list[PlanPart]
+
+    def repeats(self) -> bool:
+        """Two parts ask the same: the question was handed whole to two tools, unsplit."""
+        asked = [" ".join(part.question.casefold().split()) for part in self.parts]
+        return len(set(asked)) < len(asked)
+
+    def by_tool(self) -> dict[str, str | None]:
+        """What each tool is asked - its parts, joined - or None if no part needs it."""
+        plan: dict[str, str | None] = {tool: None for tool in get_args(Tool)}
+        for part in self.parts:
+            text, asked = part.question.strip(), plan[part.tool]
+            if text:
+                plan[part.tool] = f"{asked} {text}" if asked else text
+        return plan
 
 
 class NeedsReply(BaseModel):
@@ -56,6 +76,9 @@ Rules:
 - For "the most", "the highest" or "the top N", order and limit accordingly.
 - Null means not reported. Leave nulls out of rankings, and count them only when the
   question asks about missing values.
+- Filter only on what the question names or plainly implies.
+- If part of the question is not about the records - what a term means, why something
+  happens - leave that part out: the query answers the rest.
 
 {schema}
 
@@ -68,8 +91,34 @@ Your previous query was:
 
 It failed with:
 {error}
-
+{hint}
 Write a corrected query.
+"""
+
+# What a DuckDB error means, where its words do not say how to mend the query: first line
+# of the error (a pattern) -> the hint that goes back with it. Each one a small model was
+# seen to repeat across both repairs (2026-10-01).
+REPAIR_HINTS = {
+    r"UNNEST not supported here": (
+        "UNNEST cannot go in WHERE. To test a list column use list_contains(column, "
+        "'value'), or len(list_filter(column, x -> x ILIKE '%value%')) > 0 for part of a value."
+    ),
+    r"syntax error at or near": (
+        "A quote inside a string is written twice ('it''s'), never with a backslash; and "
+        "every string the query returns comes from a table, not from the query's text."
+    ),
+}
+
+# A query that matched more rows than the answer reads: the rows the question asks about
+# may be past the cut (Brazil's production for 1960-2009 shown, 2024 and 2025 cut off).
+TRUNCATED = """
+Your previous query was:
+{sql}
+
+It ran and matched more than {rows} rows; whoever answers sees only the first {rows}.
+If the question asks about some of them - a year, a place, the top few - write the query
+again so it returns only those, or aggregates them. If it needs every row, write the same
+query again.
 """
 
 # A query that ran and found nothing is not an answer yet: a filter may name a value the
@@ -79,11 +128,12 @@ EMPTY = """
 Your previous query was:
 {sql}
 
-It ran and found nothing: no rows, or only empty values.
+It ran and found nothing: no rows, only empty values, or a count of zero.
 {absent}
 If a filter spelled a value differently from the data - its accents, its capitals - write
-the query again with the value as the data spells it. Never put another value in its
-place: if the data has nothing for what the question names, write the same query again.
+the query again with the value as the data spells it. If a filter names what the question
+does not, leave it out. Never put another value in its place: if the data has nothing for
+what the question names, write the same query again.
 """
 
 # A rule a domain declares for a table (`agent.sql_guards`), when a query that reads the
@@ -137,16 +187,31 @@ Question: {question}
 """
 
 
-PLAN = """A question about {subject} needs more than one tool. Split it into the part
-each tool answers, written as a question of its own, and leave a tool out (null) when
-the question does not need it.
+# The models are listed as the second opinion lists them (`NEEDS`): without them the plan
+# sent an item the question describes - a bag, its size, its shop - to the tables.
+PLAN = """A question about {subject} needs more than one tool. Split it into its parts,
+each written as a question of its own that reads without the rest, and give each part
+the one tool that answers it:
 
-- data: figures, counts and rankings read from the tables.
-- prediction: what a model would predict for an item the question describes rather
-  than one the tables list. Keep every detail the question gives about the item.
+- data: figures, counts and rankings read from the records in the tables - a median, an
+  average, a maximum of what they list.
+- prediction: what one of these models would predict for one item the question describes
+  by its attributes, an item that may not be in the tables. Keep every detail the question
+  gives about the item. A question that describes no such item has no prediction part.
+{models}
 - knowledge: how and why, explained by documents.
 
+Each part asks one thing the question asks, and no two parts ask the same. Comparing what
+the parts find is left to the answer: it is not a part of its own.
+
 Question: {question}
+"""
+
+# Once, when a plan gave two tools the same question (`PlanReply.repeats`): the tables
+# were asked what a document explains, and the query that came back was a string.
+PLAN_AGAIN = """
+Your plan gave two tools the same question. Split it: each part asks only what its own
+tool answers.
 """
 
 CHOOSE_MODEL = """Which model answers this question?
@@ -205,17 +270,17 @@ def version(template: str, reply: type[BaseModel]) -> str:
     return hashlib.sha256((template + schema).encode()).hexdigest()[:8]
 
 
-SQL_VERSION = version(SQL + REPAIR + EMPTY + GUARD, SqlReply)
+SQL_VERSION = version(SQL + REPAIR + str(REPAIR_HINTS) + EMPTY + GUARD + TRUNCATED, SqlReply)
 ROUTER_VERSION = version(ROUTER, RouteReply)
 
 # Every prompt the agent sends, with the shape of its reply: what is registered in
 # MLflow's prompt registry and linked from each trace. CHOOSE_MODEL and DESCRIBE_ITEM
 # are answered in a shape built from the domain's own models, so none is recorded here.
 PROMPTS: dict[str, tuple[str, type[BaseModel] | None]] = {
-    "sql": (SQL + REPAIR + EMPTY + GUARD, SqlReply),
+    "sql": (SQL + REPAIR + EMPTY + GUARD + TRUNCATED, SqlReply),
     "router": (ROUTER, RouteReply),
     "needs": (NEEDS, NeedsReply),
-    "plan": (PLAN, PlanReply),
+    "plan": (PLAN + PLAN_AGAIN, PlanReply),
     "choose-model": (CHOOSE_MODEL, None),
     "describe-item": (DESCRIBE_ITEM, None),
     "answer": (ANSWER + FIX, AnswerReply),

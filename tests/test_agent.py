@@ -8,7 +8,7 @@ answer is written again and which one is kept - not a model.
 
 import asyncio
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
@@ -33,8 +33,20 @@ from mlops_core.agent import registry
 from mlops_core.agent.graph import Agent
 from mlops_core.agent.prompts import PROMPTS
 from mlops_core.agent.registry import PREFIX, register_prompts
-from mlops_core.agent.sql import read_only, views
-from mlops_core.agent.text_to_sql import NO_TABLE, absent_values, same_values, write_sql
+from mlops_core.agent.sql import QueryResult, read_only, views
+from mlops_core.agent.text_to_sql import (
+    NO_TABLE,
+    PROSE,
+    SqlAnswer,
+    absent_values,
+    counted_nothing,
+    repair_hint,
+    same_values,
+    unasked_values,
+    voted,
+    write_sql,
+    writes_prose,
+)
 from mlops_core.agent.tools import predict
 from mlops_core.agent.verify import cited_ids, figures, problems
 from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, SqlGuard
@@ -105,17 +117,19 @@ def agent(
     generator: Scripted,
     session: duckdb.DuckDBPyConnection,
     responder: Callable[[httpx.Request], httpx.Response] | None = None,
+    voters: Sequence[Scripted] = (),
 ) -> Agent:
     return Agent(
         generator,
         domains.coffee.adapter(),
         session,
         "## `clean.mexico_production` — coffee grown",
-        {"subject": "coffee", "tables": "", "models": "", "topics": ""},
+        {"subject": "coffee", "tables": "", "models": "  - review: a cup score", "topics": ""},
         lambda question, k: [PASSAGE],
         api(responder or (lambda request: httpx.Response(200, json=PREDICTED))),
         {"fao": {"title": "Arabica coffee manual", "publisher": "FAO", "year": 2005}},
         {"answer": "prompts:/mlops-agent-answer/1"},
+        voters=list(voters),
     )
 
 
@@ -214,7 +228,13 @@ def test_a_mixed_question_is_split_and_each_part_goes_to_its_tool(
 ) -> None:
     generator = Scripted(
         RouteReply=lambda p: {"route": "mixed"},
-        PlanReply=lambda p: {"data": "Top state?", "prediction": None, "knowledge": "Why?"},
+        PlanReply=lambda p: {
+            "parts": [
+                {"question": "Top state?", "tool": "data"},
+                {"question": "Why?", "tool": "knowledge"},
+                {"question": "And why altitude?", "tool": "knowledge"},  # one tool, two parts
+            ]
+        },
         SqlReply=lambda p: {"sql": "SELECT max(production_t) FROM clean.mexico_production"},
         AnswerReply=lambda p: {
             "text": "391,690.56 t [sql]; cooler temperatures [c1].",
@@ -231,6 +251,8 @@ def test_a_mixed_question_is_split_and_each_part_goes_to_its_tool(
     ]
     assert "Question: Top state?" in generator.asked("SqlReply")[0]
     assert reply.prediction is None
+    # The planner is told what each model predicts, as the second opinion is.
+    assert "  - review: a cup score" in generator.asked("PlanReply")[0]
 
 
 def test_a_prediction_question_cites_the_model_and_its_version(
@@ -262,7 +284,7 @@ def test_a_plan_that_names_no_tool_asks_the_tables_and_the_documents(
 ) -> None:
     generator = Scripted(
         RouteReply=lambda p: {"route": "mixed"},
-        PlanReply=lambda p: {"data": None, "prediction": None, "knowledge": None},
+        PlanReply=lambda p: {"parts": [{"question": " ", "tool": "data"}]},
         SqlReply=lambda p: {"sql": "SELECT 1 AS one"},
         AnswerReply=lambda p: {"text": "Yes [c1].", "citations": ["c1"]},
     )
@@ -271,6 +293,28 @@ def test_a_plan_that_names_no_tool_asks_the_tables_and_the_documents(
 
     assert reply.sql is not None
     assert "[c1]" in generator.asked("AnswerReply")[0]
+
+
+def test_a_plan_that_hands_the_question_whole_to_two_tools_is_asked_once_more(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    whole = "What does the standard measure, and which state grew the most?"
+    unsplit = {"parts": [{"question": whole, "tool": "knowledge"},
+                         {"question": f" {whole.upper()}", "tool": "data"}]}  # fmt: skip
+    split = {"parts": [{"question": "What does the standard measure?", "tool": "knowledge"},
+                       {"question": "Which state grew the most?", "tool": "data"}]}  # fmt: skip
+    generator = Scripted(
+        RouteReply=lambda p: {"route": "mixed"},
+        PlanReply=iter([unsplit, split]),
+        SqlReply=lambda p: {"sql": TOP},
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+
+    agent(generator, session).ask(whole)
+
+    plans = generator.asked("PlanReply")
+    assert len(plans) == 2 and "gave two tools the same question" in plans[1]
+    assert "Question: Which state grew the most?" in generator.asked("SqlReply")[0]
 
 
 def test_an_unsupported_answer_is_written_again_and_the_better_one_kept(
@@ -432,8 +476,9 @@ def test_ask_shows_the_query_the_item_and_what_it_could_not_verify(
     def script(shape: dict[str, Any]) -> dict[str, Any]:
         if "route" in shape:
             return {"route": "mixed"}
-        if "knowledge" in shape:
-            return {"data": "How many chunks?", "prediction": "Price?", "knowledge": None}
+        if "parts" in shape:
+            parts = [("How many chunks?", "data"), ("Price?", "prediction")]
+            return {"parts": [{"question": q, "tool": tool} for q, tool in parts]}
         if "sql" in shape:
             return {"sql": "SELECT count(*) AS n FROM clean.document_chunks"}
         if "model" in shape:
@@ -477,7 +522,12 @@ def test_a_query_that_finds_nothing_is_checked_against_the_data_once(
     empty = "SELECT production_t FROM clean.mexico_production WHERE state = 'Chiapaz'"
     generator = Scripted(
         RouteReply=lambda p: {"route": "mixed"},
-        PlanReply=lambda p: {"data": "Chiapas?", "prediction": None, "knowledge": "Why?"},
+        PlanReply=lambda p: {
+            "parts": [
+                {"question": "Chiapas?", "tool": "data"},
+                {"question": "Why?", "tool": "knowledge"},
+            ]
+        },
         SqlReply=[{"sql": empty}, {"sql": empty}],
         AnswerReply=lambda p: {"text": "Altitude delays ripening [c1].", "citations": ["c1"]},
     )
@@ -500,7 +550,7 @@ def test_a_passage_far_from_the_question_is_not_evidence(
     far = PASSAGE | {"score": 0.2}
     asked = Agent(
         generator, domains.coffee.adapter(), session, "",
-        {"subject": "coffee", "tables": "", "models": "", "topics": ""},
+        {"subject": "coffee", "tables": "", "models": "  - review: a cup score", "topics": ""},
         lambda question, k: [far], api(lambda r: httpx.Response(500)), {}, {},
     ).ask("Who won the 2022 World Cup?")  # fmt: skip
 
@@ -588,6 +638,122 @@ def test_only_a_value_the_data_lacks_is_reported(session: duckdb.DuckDBPyConnect
 
     assert absent_values(session, there, names) == []
     assert absent_values(session, renamed, names) == []
+    # A pattern is matched as a pattern: '%iapa%' is there, '%Mexico City%' is not.
+    pattern = "SELECT count(*) FROM clean.mexico_production WHERE state ILIKE '{}'"
+    assert absent_values(session, pattern.format("%iapa%"), names) == []
+    assert absent_values(session, pattern.format("%Mexico City%"), names) == [
+        "state ILIKE '%Mexico City%' matches no row of clean.mexico_production; "
+        "its values include: Chiapas, Puebla"
+    ]
+
+
+def test_a_count_of_zero_goes_back_only_for_a_value_the_data_lacks(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Zero is an answer when the filter names what is there; a filter on something the
+    data names otherwise counts zero of anything, and is checked like nothing found."""
+    count = "SELECT count(*) AS n FROM clean.mexico_production"
+    lacking, fixed = f"{count} WHERE state LIKE '%Mexico City%'", count
+    there = f"{count} WHERE state = 'Chiapas' AND production_t < 0"
+    asked = Scripted(SqlReply=[{"sql": lacking}, {"sql": fixed}])
+
+    rewritten = write_sql(asked, session, "", "How many?")
+    kept = write_sql(Scripted(SqlReply=[{"sql": there}]), session, "", "How many in Chiapas?")
+
+    assert "or a count of zero" in asked.asked("SqlReply")[1]
+    assert rewritten.sql == fixed and rewritten.attempts == 2
+    assert kept.sql == there and kept.attempts == 1 and kept.result is not None
+    assert kept.result.rows == [(0,)]
+    assert counted_nothing(QueryResult("", ["n", "sum"], [(0, None)], False))
+    assert not counted_nothing(QueryResult("", ["above"], [(False,)], False))  # an answer
+    assert not counted_nothing(QueryResult("", ["n"], [(0,), (0,)], False))
+
+
+def test_a_filter_the_question_never_names_is_reported_when_nothing_is_found(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Asked for the roasters' Gesha coffees, the model also filtered on Ethiopia."""
+    sql = "SELECT 1 FROM t WHERE variety ILIKE '%gesha%' AND country = 'Ethiopia' AND x = 'ab'"
+
+    assert unasked_values(sql, "The median price of the Gésha coffees?") == [
+        "country = 'Ethiopia': the question does not name it"  # 'ab': too short to tell
+    ]
+    unasked = "SELECT production_t FROM clean.mexico_production WHERE state = 'Chiapas' AND 1 = 0"
+    asked = Scripted(SqlReply=[{"sql": unasked}, {"sql": unasked}])
+    write_sql(asked, session, "", "How much was grown?")
+    assert "state = 'Chiapas': the question does not name it" in asked.asked("SqlReply")[1]
+
+
+def test_queries_vote_and_a_tie_keeps_the_usual_one(session: duckdb.DuckDBPyConnection) -> None:
+    """The usual query and two sampled ones: two agree, the usual one is outvoted. Alone
+    against one, or when no query found anything, the usual one stands."""
+    bottom = "SELECT state FROM clean.mexico_production ORDER BY production_t LIMIT 1"
+    voters = [Scripted(SqlReply=[{"sql": TOP}]), Scripted(SqlReply=[{"sql": f"{TOP};"}])]
+
+    outvoted = write_sql(Scripted(SqlReply=[{"sql": bottom}]), session, "", "Top?", voters=voters)
+    one = [Scripted(SqlReply=[{"sql": TOP}])]
+    tied = write_sql(Scripted(SqlReply=[{"sql": bottom}]), session, "", "Top?", voters=one)
+
+    assert outvoted.result is not None and outvoted.result.rows == [("Chiapas",)]
+    assert tied.sql == bottom
+    nothing = SqlAnswer("SELECT 1 WHERE false", QueryResult("", ["x"], [], False), None, 1)
+    failed = SqlAnswer("SELECT nonsense", None, "Binder Error", 3)
+    assert voted([nothing, failed]) is nothing
+    # Rows in any order, numbers to four significant figures, are one result.
+    ran = SqlAnswer("q1", QueryResult("", ["a"], [(1.00001,), (2,)], False), None, 1)
+    same = SqlAnswer("q2", QueryResult("", ["b"], [(2.0,), (1.0,)], False), None, 1)
+    other = SqlAnswer("q3", QueryResult("", ["a"], [(3,)], False), None, 1)
+    assert voted([other, ran, same]) is ran
+
+
+def test_the_agent_lets_its_voters_write_the_query(session: duckdb.DuckDBPyConnection) -> None:
+    voter = Scripted(SqlReply=lambda p: {"sql": TOP})
+    generator = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        SqlReply=lambda p: {"sql": TOP},
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+
+    agent(generator, session, voters=[voter]).ask("Which state grew the most?")
+
+    assert "Question: Which state grew the most?" in voter.asked("SqlReply")[0]
+
+
+def test_a_result_past_the_row_cap_goes_back_once(session: duckdb.DuckDBPyConnection) -> None:
+    """The rows asked about may be past the cut: the writer is told, once."""
+    every = "SELECT state FROM clean.mexico_production"
+    generator = Scripted(SqlReply=[{"sql": every}, {"sql": TOP}])
+
+    answer = write_sql(generator, session, "", "Which state grew the most?", max_rows=1)
+
+    assert "matched more than 1 rows" in generator.asked("SqlReply")[1]
+    assert answer.sql == TOP and answer.attempts == 2
+    assert write_sql(Scripted(SqlReply=[{"sql": TOP}]), session, "", "?", max_rows=1).attempts == 1
+
+
+def test_an_error_goes_back_with_what_it_means_and_a_sentence_is_not_a_value(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A query that selects its own sentence is refused before it runs; an error whose words
+    do not say how to mend the query goes back with a hint."""
+    prose = (
+        "SELECT 'The standard measures ten attributes of the cup' AS what, max(production_t) "
+        "FROM clean.mexico_production"
+    )
+    listed = "SELECT state FROM clean.mexico_production WHERE unnest([state]) = 'Chiapas'"
+    generator = Scripted(SqlReply=[{"sql": prose}, {"sql": listed}, {"sql": TOP}])
+
+    answer = write_sql(generator, session, "", "What does it measure, and the top state?")
+
+    repairs = generator.asked("SqlReply")[1:]
+    assert PROSE in repairs[0]
+    assert "UNNEST not supported here" in repairs[1] and "list_contains" in repairs[1]
+    assert answer.sql == TOP and answer.attempts == 3
+    assert writes_prose("SELECT 'It''s what the cup holds, in short' AS x FROM t")
+    assert not writes_prose(
+        "SELECT n FROM t WHERE kind = 'Cafeterías, fuentes de sodas y neverías'"
+    )
+    assert repair_hint("Binder Error: something else") == ""
 
 
 def test_when_the_tables_find_nothing_the_reply_says_what_the_query_did(
@@ -689,8 +855,9 @@ def test_evaluate_asks_every_question_and_compares_with_the_last_run(
         def script(shape: dict[str, Any]) -> dict[str, Any]:
             if "route" in shape:
                 return {"route": "mixed"}
-            if "knowledge" in shape:
-                return {"data": "Top state?", "prediction": None, "knowledge": "Why altitude?"}
+            if "parts" in shape:
+                parts = [("Top state?", "data"), ("Why altitude?", "knowledge")]
+                return {"parts": [{"question": q, "tool": tool} for q, tool in parts]}
             if "sql" in shape:
                 return {"sql": sql}
             return {"text": "It is so [sql] [c1].", "citations": ["sql", "c1"]}

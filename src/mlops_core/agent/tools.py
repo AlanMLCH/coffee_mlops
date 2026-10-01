@@ -63,9 +63,16 @@ def fields(body: type[BaseModel]) -> str:
 
 
 def predict(
-    generator: Generator, adapter: DomainAdapter, api: httpx.Client, question: str
+    generator: Generator,
+    adapter: DomainAdapter,
+    api: httpx.Client,
+    question: str,
+    asked: str | None = None,
 ) -> PredictionAnswer:
-    """Choose the model, describe the item, and ask the API."""
+    """Choose the model for `question`, describe the item, and ask the API. The item is
+    read from `asked` - the words of whoever asked, when `question` is a plan's part of
+    them: a plan restates its part, and a detail it drops is a field left empty (a bag's
+    shop, once, and the price came back for no shop at all)."""
     config = adapter.config
     names = Enum("ModelName", {model.name: model.name for model in config.models})  # type: ignore[misc]
     choice = create_model("ModelChoice", model=(names, ...))
@@ -80,7 +87,9 @@ def predict(
 
     body = adapter.request_model(name)
     prompt = DESCRIBE_ITEM.format(
-        description=config.model_named(name).description, fields=fields(body), question=question
+        description=config.model_named(name).description,
+        fields=fields(body),
+        question=asked or question,
     )
     described = generator.ask(prompt, body)
     request = described.model_dump(mode="json", exclude_none=True)
