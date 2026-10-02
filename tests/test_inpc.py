@@ -21,6 +21,7 @@ from domains.coffee.prices import clean_consumer_price_index
 from domains.coffee.schemas import CONSUMER_PRICE_INDEX, INPC_RAW
 from domains.coffee.sources.inpc import ingest_index, to_frame
 from mlops_core.agent.dictionary import reads_any, shown
+from mlops_core.agent.routing import routing_context
 from mlops_core.config import AgentConfig
 from mlops_core.contracts import check_contract
 from mlops_core.data.api import ApiClient
@@ -115,3 +116,17 @@ def test_the_agent_is_not_shown_what_the_domain_keeps_from_it(
     assert not reads_any("SELECT * FROM clean.boroughs", hidden)  # a prefix is not a name
     with pytest.raises(ValidationError, match=r"write them as schema\.table"):
         AgentConfig(hidden_tables=["borough_profile"])
+
+
+def test_the_agent_is_offered_only_the_models_the_domain_shows_it(
+    coffee_config: CoffeeConfig,
+) -> None:
+    offered = [model.name for model in coffee_config.agent.shown_models(coffee_config.models)]
+    context = routing_context(coffee_config, "", set())
+
+    assert offered == ["review", "offer", "green_price"]
+    assert "  - offer: " in context["models"] and "zones" not in context["models"]
+    with pytest.raises(ValidationError, match="names no model of the domain"):
+        coffee_config.model_validate(
+            coffee_config.model_dump() | {"agent": {"hidden_models": ["tasting"]}}
+        )

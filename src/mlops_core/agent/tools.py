@@ -111,13 +111,13 @@ def predict(
     them: a plan restates its part, and a detail it drops is a field left empty (a bag's
     shop, once, and the price came back for no shop at all)."""
     config = adapter.config
-    names = Enum("ModelName", {model.name: model.name for model in config.models})  # type: ignore[misc]
+    models = config.agent.shown_models(config.models)
+    names = Enum("ModelName", {model.name: model.name for model in models})  # type: ignore[misc]
     choice = create_model("ModelChoice", model=(names, ...))
     # A model's name need not say what it predicts: its target does. Measured: without
     # it, a question about one model's target was sent to the other model.
     listing = "\n".join(
-        f"- {model.name} (predicts {model.spec.target}): {model.description}"
-        for model in config.models
+        f"- {model.name} (predicts {model.spec.target}): {model.description}" for model in models
     )
     chosen = generator.ask(CHOOSE_MODEL.format(models=listing, question=question), choice)
     name = str(chosen.model.value)  # type: ignore[attr-defined]

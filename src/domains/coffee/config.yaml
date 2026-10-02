@@ -1684,6 +1684,10 @@ agent:
   # v1.1.1 reach the agent through its prediction tool, one item at a time; their batch
   # tables are the map's and the findings' (2026-10-02): twelve more tables would cost the
   # 4B's queries more than they give it.
+  # The models of v1.1.1 too (2026-10-02): offered nine, the 4B routed two of the ten
+  # prediction questions of the evaluation to the tables, which three had routed right -
+  # and it sent four questions about the new models' items to the tables as well.
+  hidden_models: [zones, green_range, shelf_price, shop_kind, auction, households]
   hidden_tables:
     - clean.census_zones
     - clean.transit_stations

@@ -197,6 +197,8 @@ def test_a_prediction_is_the_model_chosen_and_the_item_it_describes() -> None:
     assert sent == [{"shop": "almanegra", "bag_grams": 250.0, "variety": "gesha"}]
     assert "- offer (predicts price_mxn_per_kg): The price" in generator.asked("ModelChoice")[0]
     assert "A model predicts The price per kilogram" in generator.asked("Offer")[0]
+    # The models the domain keeps from the local agent are not offered to it.
+    assert "- zones (predicts" not in generator.asked("ModelChoice")[0]
 
 
 def test_a_prediction_service_that_fails_is_said_rather_than_raised() -> None:

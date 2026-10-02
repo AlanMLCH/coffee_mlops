@@ -827,6 +827,15 @@ class AgentConfig(BaseModel):
     # model a little accuracy on the rest. They stay queryable, and the MCP server - whose
     # clients bring their own, larger models - still offers them.
     hidden_tables: list[str] = []
+    # Models the local agent is not offered, for the same reason: the router reads every
+    # model's description, and a longer list moves its choices (nine models sent two of ten
+    # prediction questions to the tables that three had routed right). The API, the MCP
+    # server and the explorer still serve them.
+    hidden_models: list[str] = []
+
+    def shown_models(self, models: list[ModelConfig]) -> list[ModelConfig]:
+        """The domain's models the local agent may route to and ask."""
+        return [model for model in models if model.name not in self.hidden_models]
 
     @field_validator("hidden_tables")
     @classmethod
@@ -889,6 +898,9 @@ class DomainConfig(BaseModel):
         repeated = sorted({name for name in names if names.count(name) > 1})
         if repeated:
             raise ValueError(f"Model names must be unique; repeated: {repeated}")
+        unknown = sorted(set(self.agent.hidden_models) - set(names))
+        if unknown:
+            raise ValueError(f"`agent.hidden_models` names no model of the domain: {unknown}")
         return self
 
     @property

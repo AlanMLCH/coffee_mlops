@@ -26,7 +26,9 @@ def routing_context(
     return {
         "subject": config.name,
         "tables": "\n".join(headings),
-        "models": "\n".join(f"  - {m.name}: {m.description}" for m in config.models),
+        "models": "\n".join(
+            f"  - {m.name}: {m.description}" for m in config.agent.shown_models(config.models)
+        ),
         "topics": "\n".join(f"  - {name}: {t.description}" for name, t in topics.items()),
     }
 
