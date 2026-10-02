@@ -18,7 +18,8 @@ from mlops_core.config import DomainConfig
 
 
 class CoffeeCredentials(BaseSettings):
-    """The domain's keys, under its own prefix: `COFFEE_DENUE_TOKEN`, `COFFEE_USDA_FAS_API_KEY`.
+    """The domain's keys, under its own prefix: `COFFEE_DENUE_TOKEN`, `COFFEE_USDA_FAS_API_KEY`,
+    `COFFEE_INPC_TOKEN`.
 
     SecretStr so a value cannot leak through a repr, a log line or a traceback: printing
     one shows `SecretStr('**********')`, and reading it takes an explicit
@@ -29,6 +30,7 @@ class CoffeeCredentials(BaseSettings):
 
     denue_token: SecretStr | None = None  # INEGI, free
     usda_fas_api_key: SecretStr | None = None  # USDA FAS Open Data, free
+    inpc_token: SecretStr | None = None  # INEGI's indicators API (the INPC), free
 
 
 class WorkplacesConfig(BaseModel):
@@ -86,6 +88,22 @@ class FasConfig(BaseModel):
     base_url: str
     commodity_code: str  # PSD commodity; "0711100" is "Coffee, Green"
     first_year: int
+    filename: str
+    rate_limit_seconds: float
+    cache_hours: float  # see DenueConfig
+
+
+class InpcConfig(BaseModel):
+    """INEGI's national consumer price index, from its indicators API: one indicator's
+    monthly series, the whole of it in one request."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    base_url: str
+    indicator: str  # the API's id of the series
+    source: str  # the API's bank: "BIE-BISE" since INEGI merged the two
+    area: str  # "00": the country
     filename: str
     rate_limit_seconds: float
     cache_hours: float  # see DenueConfig
@@ -443,6 +461,7 @@ class CoffeeConfig(DomainConfig):
     denue: DenueConfig | None = None
     overpass: OverpassConfig | None = None
     fas: FasConfig | None = None
+    inpc: InpcConfig | None = None
     roasters: RoastersConfig | None = None
     cleaning: CleaningConfig
     production: ProductionConfig

@@ -15,13 +15,13 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 
 ## What it does
 
-- **Reads 24 sources of four kinds** - static files (CQI cupping scores, USDA's world
+- **Reads 25 sources of four kinds** - static files (CQI cupping scores, USDA's world
   coffee balance, SIAP's harvests, INEGI's borough and AGEB polygons, 2020 Census (by
   borough and by AGEB), 2025 Intercensal Survey and 2024 household income and expenditure
   survey, World Bank and ICO prices, FAOSTAT's producer prices, PROFECO's shelf prices,
   FRED's exchange rate, the Metro's and Metrobús' daily entries and the city's transit
-  feed), token-authenticated and paginated APIs (INEGI's business register, OpenStreetMap,
-  USDA FAS), web pages read politely (robots.txt first) - four roasters' online shops,
+  feed), token-authenticated and paginated APIs (INEGI's business register and consumer
+  price index, OpenStreetMap, USDA FAS), web pages read politely (robots.txt first) - four roasters' online shops,
   their tasting notes read into the SCA's flavour categories, and the results and
   auctions of thirteen Cups of Excellence in Mexico - and 22 documents for the agent to read.
 - **Keeps every download untouched and forever** in a content-addressed raw layer:
@@ -52,8 +52,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
-| The agent, 56 questions end to end | **73%** correct, 98% verified | 78% on 54 of them before two more tables reached it: each table the local 4B model reads costs a few points |
-| The agent, 25 held-out questions written before the fixes of 29 September | **88%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic |
+| The agent, 54 questions end to end | **78%** correct, 96% verified | seven peripheral tables are kept from the local 4B model; the two questions that read them are left out (75% counting them as wrong) |
+| The agent, 25 held-out questions written before the fixes of 29 September | **84%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
@@ -98,6 +98,10 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Mexico's best lots at auction (Cup of Excellence, 2012-2026): the median winning lot
   fetches four to eight times the market price of its year, and each point of score adds
   about 41% to the price (95% interval 37% to 44%).
+- In today's pesos (INEGI's consumer price index): a kilogram of coffee cherry paid 4.90
+  pesos of August 2026 in 2003, 11.91 at its 2012 peak and 8.45 in 2025 - 4.5 times more in
+  nominal pesos, 1.7 in real ones. Plain ground coffee on the shelf rose 28% in real terms
+  from January 2024 to July 2026.
 - Read into the SCA's flavour categories, the roasters' own tasting notes call Mexican
   coffees floral half as often as imported ones (26% against 53%) - and no flavour word
   makes a bag dearer once its shop and size are accounted for.
@@ -116,7 +120,7 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 
 ```mermaid
 flowchart LR
-    subgraph SOURCES["24 sources + 22 documents"]
+    subgraph SOURCES["25 sources + 22 documents"]
         files["files"]
         apis["APIs"]
         shops["roasters' shops"]
@@ -239,8 +243,10 @@ current month; run it before a month ends). `make help` lists every target.
 | 3 | Scraping | Semi-structured parsing, RAG, the agent, MCP | done |
 | 4 | Time series | Accumulating sources, forecasting, drift, retraining, the explorer | done: v1.0 |
 
-A second domain (video games) comes once coffee is finished: it is the test of whether
-the framework is reusable, and its cost in new lines will be published here.
+The coffee domain closes at **v1.1**: 25 sources, the household survey, Cup of Excellence,
+prices in real pesos, the map block by block. Next, v1.2 measures larger hosted models for
+the agent. A second domain (video games) is the test of whether the framework is reusable,
+and its cost in new lines will be published here.
 
 > **The CQI data is not current.** Both public snapshots of the Coffee Quality
 > Institute's database end in May 2023, and no newer public version exists. It bootstraps

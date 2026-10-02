@@ -99,6 +99,7 @@ class CoffeeAdapter:
         return {
             "DENUE token (COFFEE_DENUE_TOKEN)": keys.denue_token,
             "USDA FAS key (COFFEE_USDA_FAS_API_KEY)": keys.usda_fas_api_key,
+            "INEGI indicators token (COFFEE_INPC_TOKEN)": keys.inpc_token,
         }
 
     def extract(
@@ -122,7 +123,7 @@ class CoffeeAdapter:
         }
 
     def json_readers(self) -> Mapping[str, JsonReader]:
-        from domains.coffee.sources import denue, fas, overpass, roasters
+        from domains.coffee.sources import denue, fas, inpc, overpass, roasters
 
         config = self.config
         readers: dict[str, JsonReader] = {}
@@ -134,6 +135,8 @@ class CoffeeAdapter:
             readers[config.overpass.name] = overpass.to_frame
         if config.fas is not None:
             readers[config.fas.name] = fas.to_frame
+        if config.inpc is not None:
+            readers[config.inpc.name] = inpc.to_frame
         if config.roasters is not None:
             readers[config.roasters.name] = roasters.to_frame
         return readers

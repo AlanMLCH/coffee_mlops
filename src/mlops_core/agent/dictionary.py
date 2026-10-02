@@ -53,6 +53,17 @@ def offered(text: str, views: Collection[str]) -> dict[str, str]:
     }
 
 
+def shown(views: Collection[str], hidden: Collection[str]) -> set[str]:
+    """The views the agent is shown: all of them but those the domain keeps from it."""
+    return set(views) - set(hidden)
+
+
+def reads_any(sql: str, tables: Collection[str]) -> bool:
+    """Whether a query names one of these tables: a case the agent cannot answer when
+    they are kept from it."""
+    return any(re.search(rf"\b{re.escape(table)}\b", sql, re.IGNORECASE) for table in tables)
+
+
 def schema_context(text: str, views: Collection[str]) -> str:
     """The offered tables' sections, in the dictionary's own order."""
     return "\n\n".join(offered(text, views).values())

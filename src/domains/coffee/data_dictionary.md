@@ -453,6 +453,16 @@ Every figure is weighted: a share of households is `sum(weight * (condition)::IN
 sum(weight)`; spending per household a month is `sum(weight * spent) / sum(weight) / 3`.
 Never count rows.
 
+## `clean.consumer_price_index` — Mexico's consumer price index, one month (INEGI's INPC)
+
+| Column | Type | Meaning |
+|---|---|---|
+| `month` | Date | The month's first day, January 1969 on |
+| `index` | Float | The general index; the second half of July 2018 = 100 |
+
+A price of month A in pesos of month B: `price * index_B / index_A`. Empty when the INPC
+token is not set.
+
 ## `clean.cup_of_excellence` — one lot of a year's Cup of Excellence Mexico, and its auction
 
 Mexico's best lots each year (2012-2026; none in 2016 or 2020), judged blind by a national

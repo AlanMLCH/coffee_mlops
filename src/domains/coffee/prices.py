@@ -114,6 +114,17 @@ def clean_exchange_rates(daily: pl.DataFrame) -> pl.DataFrame:
     return rates
 
 
+def clean_consumer_price_index(index: pl.DataFrame | None) -> pl.DataFrame:
+    """INEGI's monthly index, a month a row (its first day). Without the token the source
+    is never downloaded, and the table is empty: everything else still builds."""
+    if index is None:
+        return pl.DataFrame(schema={"month": pl.Date, "index": pl.Float64})
+    return index.select(
+        pl.col("period").str.to_date("%Y/%m").alias("month"),
+        pl.col("value").alias("index"),
+    ).sort("month")
+
+
 # FAOSTAT's elements of a producer price that the table keeps, by code. The "standard
 # local currency" (5531) is the local one before a redenomination: the dollar column
 # already makes years comparable.

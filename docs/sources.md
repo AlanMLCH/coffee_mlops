@@ -285,6 +285,26 @@ of a month's days is FRED's monthly `EXMXUS` to four decimals in 394 of 394 mont
 the daily series is enough. Chosen over Banxico's FIX because Banxico's API needs a token
 and a clean clone should build without one.
 
+### INEGI's consumer price index (INPC): `inpc`
+
+INEGI's indicators API, token required (`COFFEE_INPC_TOKEN`; free, sent by email):
+`https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/INDICATOR/<id>/es/00/false/BIE-BISE/2.0/<token>?type=json`.
+Verified 2026-10-01 with the project's client:
+
+- The token travels in the **URL path**, like DENUE's: nothing logs a URL, and the cache
+  key and the manifest carry the documented endpoint only.
+- The bank is **`BIE-BISE`**: asked of `BIE` or `BISE` alone, the index answers 400 "No se
+  encontraron resultados". The country is area **`00`**; the documentation's `0700` answers
+  the same 400. (A made-up token also got an answer: the token is not what failed.)
+- **`910392`** is "Índice general" of the INPC as INEGI updated it in August 2024 (weights
+  from the 2022 ENIGH; base: the second half of July 2018 = 100), monthly from January 1969,
+  last updated 9 September 2026 with August (145.462). **`628194`**, the id most references
+  give, is the series before that update: it stops in July 2024.
+- One request brings the whole series: `Series[0].OBSERVATIONS`, newest first, values as
+  text with twenty decimals.
+- The coffee subindices (generics 096 "Café soluble" and 097 "Café tostado") were not
+  found among the ids that follow 910392 (910392-911027 scanned, 25 at a time); not read.
+
 ### PROFECO, Quién es Quién en los Precios: `profeco_prices`, `profeco_prices_2024`, `profeco_prices_2025`
 
 Page `https://datos.profeco.gob.mx/datos_abiertos/qqp.php`; the links are opaque tokens
@@ -537,7 +557,6 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 | FRED `PCOFFOTMUSDM`, `PCOFFROBUSDM` | verified alternative, not chosen | the IMF's monthly other milds and robustas (¢/lb, 1992→); the World Bank's go back to 1960 |
 | Banxico SIE (FIX) | not chosen | its API needs a token; FRED does not |
 | IMSS jobs by employer (`asg-<date>.csv`, datos abiertos) | verified, not read | monthly, one CSV per month; but Mexico City's rows carry no municipality (`cve_municipio` "NA"), so it says nothing per alcaldia that DENUE's staff bands do not |
-| INEGI INPC (consumer prices) | needs a token | the indicators API takes its own token, not DENUE's; would deflate SIAP's and PROFECO's nominal prices |
-| SCA Specialty Coffee Transaction Guide | needs a person | a form asking for personal data |
+| SCA Specialty Coffee Transaction Guide | not pursued | a form asking for personal data; left out by the owner's decision (2026-10-01) |
 | Open-Meteo | not used | its robots.txt forbids this project's agent |
 | Censo Agropecuario 2022 (INEGI) | verified, not read | its open data (`ca_2022_upaf_csv.zip`, 3 KB) is the national summary, 11 rows; coffee by municipality (358,301 production units in 2022) is only in the interactive tables, with no file to download |

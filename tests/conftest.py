@@ -641,7 +641,9 @@ def coffee_config(coffee_adapter: CoffeeAdapter) -> CoffeeConfig:
 
 # Every credential the domain can use, so fixtures exercise every source.
 FIXTURE_CREDENTIALS = CoffeeCredentials(
-    denue_token=SecretStr("fixture-token"), usda_fas_api_key=SecretStr("fixture-key")
+    denue_token=SecretStr("fixture-token"),
+    usda_fas_api_key=SecretStr("fixture-key"),
+    inpc_token=SecretStr("fixture-inpc-token"),
 )
 
 

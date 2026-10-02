@@ -524,6 +524,17 @@ CUP_OF_EXCELLENCE_RAW = pa.DataFrameSchema(
     },
 )
 
+# INEGI's consumer price index as the API gives it: a month ("2026/08") and its value.
+INPC_RAW = pa.DataFrameSchema(
+    name="inpc",
+    coerce=True,
+    unique=["period"],
+    columns={
+        "period": pa.Column(pl.String, pa.Check.str_matches(r"^\d{4}/(0[1-9]|1[0-2])$")),
+        "value": pa.Column(pl.Float64, pa.Check.gt(0)),
+    },
+)
+
 RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "cqi_2018": CQI_2018,
     "cqi_2023": CQI_2023,
@@ -539,6 +550,7 @@ RAW_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "ico_prices": ICO_PRICES,
     "profeco_prices": PROFECO_PRICES,
     "fred_usd_mxn": FRED_USD_MXN,
+    "inpc": INPC_RAW,
     "census_2020": CENSUS_2020,
     "denue_workplaces": DENUE_WORKPLACES,
     "faostat_prices": FAOSTAT_PRICES,
@@ -782,6 +794,7 @@ def clean_schemas(rules: CleaningConfig) -> dict[str, pa.DataFrameSchema]:
         "census_zones": CENSUS_ZONES,
         "transit_ridership": TRANSIT_RIDERSHIP,
         "cup_of_excellence": cup_of_excellence_schema(rules),
+        "consumer_price_index": CONSUMER_PRICE_INDEX,
     }
 
 
@@ -1015,6 +1028,18 @@ EXCHANGE_RATES = pa.DataFrameSchema(
     columns={
         "date": pa.Column(pl.Date),
         "mxn_per_usd": pa.Column(pl.Float64, pa.Check.gt(0)),
+    },
+)
+
+
+# The national consumer price index, a month a row: base, the second half of July 2018 = 100.
+CONSUMER_PRICE_INDEX = pa.DataFrameSchema(
+    name="consumer_price_index",
+    strict=True,
+    unique=["month"],
+    columns={
+        "month": pa.Column(pl.Date),  # its first day
+        "index": pa.Column(pl.Float64, pa.Check.gt(0)),
     },
 )
 

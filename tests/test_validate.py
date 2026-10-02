@@ -24,7 +24,7 @@ def test_every_configured_source_has_a_contract(coffee_adapter: CoffeeAdapter) -
     """Including the API sources, which are configured apart from the file downloads, and
     the shelf survey's closed years, which share the year in course's."""
     config = coffee_adapter.config
-    apis = (config.denue, config.overpass, config.fas, config.roasters)
+    apis = (config.denue, config.overpass, config.fas, config.inpc, config.roasters)
     api = {source.name for source in apis if source}
     api |= {config.denue.workplaces.name} if config.denue and config.denue.workplaces else set()
     contracts = coffee_adapter.raw_contracts()
@@ -69,6 +69,7 @@ def test_recorded_sources_pass_and_come_out_typed(
         "enigh_2024_spending": 7,  # the coffee purchases; the bread left in the file
         "enigh_2024_households": 8,
         "cup_of_excellence": 57,  # rows of lots and of sales, 13 years of pages
+        "inpc": 4,  # months, from the indicators API
     }
     # Latin-1 on disk, decoded on read: the accents come through as accents.
     assert "Café cereza" in frames["siap_agricola"]["Nomcultivo"].to_list()

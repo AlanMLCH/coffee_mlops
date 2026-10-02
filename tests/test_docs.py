@@ -12,6 +12,7 @@ import pytest
 from domains.coffee.schemas import (
     BOROUGHS,
     CENSUS_ZONES,
+    CONSUMER_PRICE_INDEX,
     CONSUMER_PRICES,
     EXCHANGE_RATES,
     MARKET_CONTEXT,
@@ -74,6 +75,7 @@ def schema_columns(coffee_config: DomainConfig) -> dict[str, list[str]]:
         "census_zones": list(CENSUS_ZONES.columns),
         "household_coffee": list(household_coffee_schema(coffee_config.household_spending).columns),
         "cup_of_excellence": list(cup_of_excellence_schema(coffee_config.cleaning).columns),
+        "consumer_price_index": list(CONSUMER_PRICE_INDEX.columns),
         "transit_ridership": list(TRANSIT_RIDERSHIP.columns),
         "roaster_offer_history": list(ROASTER_OFFER_HISTORY.columns),
         "roaster_flavors": list(roaster_flavors_schema(coffee_config.cleaning).columns),
@@ -119,6 +121,7 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "census_zones",
         "household_coffee",
         "cup_of_excellence",
+        "consumer_price_index",
         "roaster_offer_history",
         "roaster_origin_history",
         "roaster_flavors",

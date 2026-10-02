@@ -150,6 +150,7 @@ def studies(
             GREEN_STEP,
         ),
         "coe_score_price": coe_score_price(clean["cup_of_excellence"]),
+        "real_prices": real_prices(production, green, prices, clean["consumer_price_index"]),
     }
 
 
@@ -195,6 +196,8 @@ def figures(
         drawn["household_deciles"] = household_deciles_figure(tables["household_coffee_by_decile"])
     if not tables["coe_by_year"].is_empty():
         drawn["cup_of_excellence"] = coe_figure(tables["coe_by_year"])
+    if not tables["real_prices"].is_empty():
+        drawn["real_prices"] = real_prices_figure(tables["real_prices"])
     return drawn
 
 
@@ -1566,6 +1569,97 @@ def price_ladder(
               "measure": pl.String, "mxn_per_kg": pl.Float64, "observations": pl.Int64,
               "period": pl.String}  # fmt: skip
     return pl.DataFrame(rows, schema=schema, orient="row").sort("mxn_per_kg")
+
+
+def real_prices(
+    production: pl.DataFrame, green: pl.DataFrame, prices: pl.DataFrame, cpi: pl.DataFrame
+) -> pl.DataFrame:
+    """The steps of the ladder that have a history, in pesos of the index's latest month:
+    the cherry at the farm gate year by year (SIAP's value over volume, against the year's
+    mean index), green coffee at the port and plain ground coffee on the country's shelves
+    month by month (PROFECO's median). Without the index, nothing: a nominal series is
+    already in its own study."""
+    if cpi.is_empty():
+        return pl.DataFrame(schema=REAL_PRICES)
+    latest = cpi.sort("month").row(-1, named=True)
+    yearly = cpi.group_by(pl.col("month").dt.year().cast(pl.Int64).alias("year")).agg(
+        pl.col("index").mean()
+    )
+    cherry = (
+        production.group_by("year")
+        .agg((pl.col("value_mxn").sum() / pl.col("production_t").sum() / 1000).alias("nominal"))
+        .join(yearly, on="year", how="inner")
+        .select(
+            pl.lit("cherry at the farm gate").alias("step"),
+            pl.date(pl.col("year"), 1, 1).alias("period"),
+            pl.lit("annual").alias("frequency"),
+            "nominal",
+            "index",
+        )
+    )
+    port = (
+        green.filter(pl.col("indicator") == GREEN_STEP)
+        .join(cpi, left_on="period", right_on="month", how="inner")
+        .select(
+            pl.lit("green coffee at the port").alias("step"),
+            "period",
+            pl.lit("monthly").alias("frequency"),
+            pl.col("mxn_per_kg").alias("nominal"),
+            "index",
+        )
+    )
+    shelf = (
+        prices.filter((pl.col("product") == "ground") & ~pl.col("sweetened") & ~pl.col("decaf"))
+        .group_by(pl.col("date").dt.truncate("1mo").alias("period"))
+        .agg(pl.col("price_mxn_per_kg").median().alias("nominal"))
+        .join(cpi, left_on="period", right_on="month", how="inner")
+        .select(
+            pl.lit("ground coffee on a shelf").alias("step"),
+            "period",
+            pl.lit("monthly").alias("frequency"),
+            "nominal",
+            "index",
+        )
+    )
+    return (
+        pl.concat([cherry, port, shelf])
+        .with_columns(
+            (pl.col("nominal") * latest["index"] / pl.col("index")).alias("real_mxn_per_kg"),
+            pl.lit(latest["month"]).alias("pesos_of"),
+        )
+        .rename({"nominal": "nominal_mxn_per_kg"})
+        .drop("index")
+        .sort("step", "period")
+    )
+
+
+REAL_PRICES = {
+    "step": pl.String,
+    "period": pl.Date,
+    "frequency": pl.String,
+    "nominal_mxn_per_kg": pl.Float64,
+    "real_mxn_per_kg": pl.Float64,
+    "pesos_of": pl.Date,
+}
+
+
+def real_prices_figure(real: pl.DataFrame) -> Figure:
+    """Each step's price in pesos of one month: the cherry and green coffee over decades."""
+    pesos_of = real["pesos_of"][0]
+    figure, ax = canvas(
+        "A kilogram, in today's pesos",
+        f"pesos of {pesos_of:%B %Y} (INEGI's INPC); log scale",
+    )
+    for color, (step, rows) in zip(SERIES, real.group_by("step", maintain_order=True),
+                                   strict=False):  # fmt: skip
+        ax.plot(rows["period"], rows["real_mxn_per_kg"], color=color, label=str(step[0]),
+                marker="o" if rows.height < 40 else None, markersize=3)  # fmt: skip
+    ax.set_yscale("log")
+    ax.set_ylabel("pesos a kilogram", color=MUTED)
+    ax.legend(frameon=False, fontsize=8)
+    value_grid(ax, "y")
+    figure.tight_layout()
+    return figure
 
 
 def price_ladder_figure(ladder: pl.DataFrame) -> Figure:

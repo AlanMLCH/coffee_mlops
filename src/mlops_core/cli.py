@@ -535,7 +535,12 @@ def benchmark(
             meets_bar,
             run_benchmark,
         )
-        from mlops_core.agent.dictionary import dictionary_path, schema_context
+        from mlops_core.agent.dictionary import (
+            dictionary_path,
+            reads_any,
+            schema_context,
+            shown,
+        )
         from mlops_core.agent.routing import routing_context
         from mlops_core.agent.sql import read_only, views
         from mlops_core.rag.llm import LocalModel, ollama_client
@@ -547,11 +552,19 @@ def benchmark(
     data_dir = _data_dir(config)
     con = read_only(data_dir)
     dictionary = dictionary_path(home).read_text(encoding="utf-8")
-    schema = schema_context(dictionary, views(con))
-    context = routing_context(config, dictionary, views(con))
+    hidden = config.agent.hidden_tables
+    names = shown(views(con), hidden)
+    schema = schema_context(dictionary, names)
+    context = routing_context(config, dictionary, names)
     case_files = [case_file(home, SQL_CASES_FILE, cases), case_file(home, ROUTE_CASES_FILE, cases)]
     sql_cases = load_cases(case_files[0], SqlCase)
     route_cases = load_cases(case_files[1], RouteCase)
+    # A question whose reference reads a table the agent is not shown is not its to answer.
+    unseen = {case.question for case in sql_cases if reads_any(case.sql, hidden)}
+    sql_cases = [case for case in sql_cases if case.question not in unseen]
+    route_cases = [case for case in route_cases if case.question not in unseen]
+    if unseen:
+        typer.echo(f"{len(unseen)} questions read tables the agent is not shown: left out")
     settings = Settings()
     hosted = {provider.name for provider in load_providers(settings.providers_file)}
     for name in generator or CANDIDATES:
@@ -564,7 +577,7 @@ def benchmark(
                 else (local, _identified(local))
             )
             embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
-            linker = _linker(config, dictionary, views(con), embedder)
+            linker = _linker(config, dictionary, names, embedder)
             sql, routes = run_benchmark(
                 model, con, schema, context, sql_cases, route_cases, config.agent.sql_guards, linker
             )
@@ -711,6 +724,7 @@ def evaluate_agent(
             case_file,
             load_cases,
         )
+        from mlops_core.agent.dictionary import reads_any
         from mlops_core.agent.evaluate import (
             known_answers,
             log_evaluation,
@@ -731,6 +745,11 @@ def evaluate_agent(
         load_cases(case_files[1], SqlCase),
         load_questions(case_files[2], _corpus(config).topics),
     )
+    hidden = config.agent.hidden_tables
+    unseen = [t for t in truths if t.sql is not None and reads_any(t.sql, hidden)]
+    truths = [t for t in truths if t not in unseen]
+    if unseen:
+        typer.echo(f"{len(unseen)} questions read tables the agent is not shown: left out")
     settings = Settings()
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     mlflow.set_experiment(f"{config.name}-agent-eval")
@@ -918,7 +937,7 @@ def agent_session(
     already point at MLflow: the prompts are registered there. Public: the explorer app
     asks this same agent."""
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
-    from mlops_core.agent.dictionary import dictionary_path, schema_context
+    from mlops_core.agent.dictionary import dictionary_path, schema_context, shown
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
     from mlops_core.agent.registry import register_prompts
     from mlops_core.agent.routing import routing_context
@@ -951,7 +970,8 @@ def agent_session(
         search = IndexSearch(
             client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
         )
-        linker = _linker(config, dictionary, views(con), embedder)
+        names = shown(views(con), config.agent.hidden_tables)
+        linker = _linker(config, dictionary, names, embedder)
         # The votes are the local model's, sampled: whichever model answers first.
         voters: list[Generator] = [
             LocalModel(http, AGENT_GENERATOR,
@@ -964,8 +984,8 @@ def agent_session(
                 chosen,
                 adapter,
                 con,
-                schema_context(dictionary, views(con)),
-                routing_context(config, dictionary, views(con)),
+                schema_context(dictionary, names),
+                routing_context(config, dictionary, names),
                 search.passages,
                 api,
                 {row["document_id"]: row for row in documents.iter_rows(named=True)},

@@ -736,6 +736,18 @@ class AgentConfig(BaseModel):
     # (`text_to_sql.voted`). 1: no vote.
     sql_votes: int = Field(default=1, ge=1)
     vote_temperature: float = Field(default=0.7, gt=0, le=2)
+    # Views the local agent is not shown (`schema.table`): each one it reads costs a small
+    # model a little accuracy on the rest. They stay queryable, and the MCP server - whose
+    # clients bring their own, larger models - still offers them.
+    hidden_tables: list[str] = []
+
+    @field_validator("hidden_tables")
+    @classmethod
+    def _tables_are_qualified(cls, names: list[str]) -> list[str]:
+        bad = [name for name in names if not re.fullmatch(r"\w+\.\w+", name)]
+        if bad:
+            raise ValueError(f"`agent.hidden_tables` names {bad}: write them as schema.table")
+        return names
 
 
 class DomainConfig(BaseModel):

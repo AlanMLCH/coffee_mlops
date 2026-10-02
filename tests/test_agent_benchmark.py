@@ -243,11 +243,21 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
     home = tmp_path / "domain"
     (home / "evals").mkdir(parents=True)
     (home / "data_dictionary.md").write_text("## `clean.coffee_reviews` — lots\n", "utf-8")
+    # And a question whose reference reads a table the agent is not shown: left out.
+    unseen = "SELECT count(*) FROM clean.borough_profile"
     (home / SQL_CASES_FILE).write_text(
-        SqlCase(id="one", question="One?", sql=READS).model_dump_json() + "\n", "utf-8"
+        SqlCase(id="one", question="One?", sql=READS).model_dump_json()
+        + "\n"
+        + SqlCase(id="hid", question="Hidden?", sql=unseen).model_dump_json()
+        + "\n",
+        "utf-8",
     )
     (home / ROUTE_CASES_FILE).write_text(
-        RouteCase(id="d", question="Data?", route="data").model_dump_json() + "\n", "utf-8"
+        RouteCase(id="d", question="Data?", route="data").model_dump_json()
+        + "\n"
+        + RouteCase(id="h", question="Hidden?", route="data").model_dump_json()
+        + "\n",
+        "utf-8",
     )
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(cli, "domain_dir", lambda domain: home)
@@ -271,6 +281,7 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
     result = CliRunner().invoke(cli.app, ["agent", "benchmark", "--generator", "qwen3.5:4b"])
 
     assert result.exit_code == 0, result.output
+    assert "1 questions read tables the agent is not shown: left out" in result.output
     assert "qwen3.5:4b@2a654d98e6fb: SQL 100% right" in result.output
     assert "meets the bar" in result.output
 

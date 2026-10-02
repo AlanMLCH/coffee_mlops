@@ -342,6 +342,24 @@ fas:
   # Recent market years are revised with each circular; a day keeps up with that.
   cache_hours: 24
 
+# Stage 4, token required (COFFEE_INPC_TOKEN): INEGI's indicators API, for the national
+# consumer price index - what turns a peso of 2003 into a peso of today. Verified
+# 2026-10-01: the token rides in the path, like DENUE's; the bank is "BIE-BISE" (BIE and
+# BISE answer "no results") and the country is area "00" (the documented "0700" answers
+# "no results" too). 910392 is "Índice general" of the INPC as INEGI updated it in 2024 (base:
+# second half of July 2018 = 100), monthly since January 1969, last update 9 Sep 2026
+# with August's; 628194, the id most references give, is the series before that update,
+# which stops in July 2024.
+inpc:
+  name: inpc
+  base_url: https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml
+  indicator: "910392"
+  source: BIE-BISE
+  area: "00"
+  filename: inpc.json
+  rate_limit_seconds: 1.0
+  cache_hours: 24 # published monthly; a day keeps up with it
+
 # Stage 3, no credential: Mexico City's specialty roasters, read from their own shops'
 # catalogs. Verified 2026-09-21: robots.txt allows this project's agent on all four, and
 # none asks for a Crawl-delay. What each shop needs to be read right is data, below.
@@ -1344,6 +1362,19 @@ consumer_prices:
 # DENUE's class 722515 (juice stands, soda fountains, school tuck shops) and OSM's ice-cream
 # parlours: counted whole, "coffee shops" came out 3,705 instead of 1,528 (2026-09-29).
 agent:
+  # Kept from the local agent (2026-10-01): each table the 4B reads costs it accuracy on
+  # the rest. No evaluation question reads the first four; the history tables repeat the
+  # current ones read by read (the agent filtered a snapshot for a register edition); the
+  # city's census zones, transit and the borough survey are the map's and the studies',
+  # and the price index is a tool of the studies, not a question's answer.
+  hidden_tables:
+    - clean.census_zones
+    - clean.transit_stations
+    - clean.coffee_shop_history
+    - clean.roaster_origin_history
+    - clean.transit_ridership
+    - clean.borough_profile
+    - clean.consumer_price_index
   sql_guards:
     - table: clean.coffee_shops
       requires: kind
@@ -1672,10 +1703,24 @@ explore:
         richest's. Per state, not per alcaldia; coffee drunk in a coffee shop is not here.
       sql: >-
         SELECT state, round(100 * bought_share, 1) AS bought_pct
-        FROM analysis.household_coffee_by_state ORDER BY bought_share DESC
+        FROM analysis.household_coffee_by_state WHERE state_id IS NOT NULL
+        ORDER BY bought_share DESC LIMIT 12
       kind: bar
       x: state
       y: bought_pct
+    - title: The cherry, in today's pesos
+      text: >-
+        SIAP's rural price of a kilogram of coffee cherry, in pesos of August 2026 (INEGI's
+        consumer price index): 4.90 in 2003, a peak of 11.91 in 2012 and 8.45 in 2025 - up
+        4.5 times in nominal pesos, 1.7 in real ones, and still 29% under 2012. On the
+        country's shelves, plain ground coffee rose 28% in real terms from January 2024 to
+        July 2026.
+      sql: >-
+        SELECT year(period) AS year, round(real_mxn_per_kg, 2) AS real_mxn_per_kg
+        FROM analysis.real_prices WHERE step = 'cherry at the farm gate' ORDER BY year
+      kind: line
+      x: year
+      y: real_mxn_per_kg
     - title: Mexico's best lots at auction
       text: >-
         Cup of Excellence Mexico, 2012-2026: the median winning lot fetches four to eight

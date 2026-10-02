@@ -77,6 +77,30 @@ def denue_response(path: str) -> httpx.Response | None:
     return None
 
 
+# INEGI's indicators API as it answers for the INPC: newest first, values as text with
+# twenty decimals, the months the fixtures' other prices fall in.
+INPC_OBSERVATIONS = [
+    ("2026/08", "145.46199999999999000000"),
+    ("2026/07", "145.16900000000001000000"),
+    ("2025/01", "138.34300000000000000000"),
+    ("2024/01", "133.55500000000001000000"),
+]
+
+
+def inpc_response(path: str) -> httpx.Response | None:
+    """Answer the INPC's request, or None if it is not one: the token rides in the path."""
+    if "/INDICATOR/910392/es/00/false/BIE-BISE/2.0/" not in path:
+        return None
+    observations = [{"TIME_PERIOD": period, "OBS_VALUE": value, "OBS_EXCEPTION": None,
+                     "OBS_STATUS": "3", "OBS_SOURCE": "", "OBS_NOTE": "", "COBER_GEO": "0"}
+                    for period, value in INPC_OBSERVATIONS]  # fmt: skip
+    series = {"INDICADOR": "910392", "FREQ": "8", "TOPIC": "189115", "UNIT": "1051",
+              "UNIT_MULT": "", "NOTE": "", "SOURCE": "3371",
+              "LASTUPDATE": "09/09/2026 12:00:00 a. m.", "STATUS": None,
+              "OBSERVATIONS": observations}  # fmt: skip
+    return httpx.Response(200, json={"Header": {"Name": "Datos compactos BIE"}, "Series": [series]})
+
+
 def with_training[Config: DomainConfig](config: Config, model: str, **update: Any) -> Config:
     """The config with one model's training settings changed: a tiny tuning budget, say."""
     models = [
@@ -213,6 +237,9 @@ class RecordedServer:
         denue = denue_response(request.url.path)
         if denue is not None:
             return denue
+        inpc = inpc_response(request.url.path)
+        if inpc is not None:
+            return inpc
         # Overpass carries the whole query in the query string, so this matches on the
         # path: a change to the query must not silently turn into a 404.
         if self.overpass is not None and request.url.path.endswith("/api/interpreter"):

@@ -8,6 +8,8 @@
 - DENUE + OpenStreetMap -> `coffee_shops` (one row per place, placed in a borough, as
   each register lists it now) and `coffee_shop_history` (each place in every read).
 - SIAP's municipal harvest -> `mexico_production` (one row per municipality and year).
+- INEGI's consumer price index -> `consumer_price_index` (a month a row; empty without
+  the token).
 - Cup of Excellence Mexico -> `cup_of_excellence` (one row per lot of a year's
   competition, with its auction); see `domains.coffee.excellence`.
 - INEGI's household survey (ENIGH) -> `household_coffee` (one row per household of its
@@ -53,6 +55,7 @@ from domains.coffee.consumer_prices import clean_consumer_prices, shelf_reads
 from domains.coffee.excellence import clean_cup_of_excellence
 from domains.coffee.households import clean_household_coffee
 from domains.coffee.prices import (
+    clean_consumer_price_index,
     clean_exchange_rates,
     clean_price_indicators,
     clean_producer_prices,
@@ -675,6 +678,9 @@ def clean_tables(
         "household_coffee": CleanTable(
             clean_household_coffee(frames[survey.spending], frames[survey.households], survey),
             (survey.spending, survey.households),
+        ),
+        "consumer_price_index": CleanTable(
+            clean_consumer_price_index(frames.get("inpc")), ("inpc",) if "inpc" in frames else ()
         ),
         "cup_of_excellence": CleanTable(
             clean_cup_of_excellence(frames["cup_of_excellence"], rules.roaster_sheets, production),

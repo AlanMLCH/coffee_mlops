@@ -16,6 +16,7 @@ import httpx
 from domains.coffee.config import CoffeeConfig, CoffeeCredentials
 from domains.coffee.sources.denue import ingest_establishments, ingest_workplaces
 from domains.coffee.sources.fas import ingest_balance
+from domains.coffee.sources.inpc import ingest_index
 from domains.coffee.sources.overpass import ingest_places
 from domains.coffee.sources.roasters import ingest_catalogs
 from mlops_core.adapter import ApiExtraction
@@ -64,6 +65,14 @@ def extract(
             api = _client(client, data_dir, fas.name, fas.rate_limit_seconds, fas.cache_hours)
             key = credentials.usda_fas_api_key.get_secret_value()
             result.artifacts[fas.name] = ingest_balance(api, fas, key, raw_dir, now)
+
+    if (inpc := config.inpc) is not None:
+        if credentials.inpc_token is None:
+            result.skipped[inpc.name] = "COFFEE_INPC_TOKEN is not set"
+        else:
+            api = _client(client, data_dir, inpc.name, inpc.rate_limit_seconds, inpc.cache_hours)
+            token = credentials.inpc_token.get_secret_value()
+            result.artifacts[inpc.name] = ingest_index(api, inpc, token, raw_dir, now)
 
     if (roasters := config.roasters) is not None:
         clients: dict[str, ApiClient] = {}

@@ -254,11 +254,14 @@ def test_the_champion_is_read_from_the_registry_by_its_alias(tmp_path: Path) -> 
 
 
 def test_keys_are_said_set_or_missing_never_shown(coffee_adapter: CoffeeAdapter) -> None:
-    keys = CoffeeCredentials(denue_token=SecretStr("secret-token"), usda_fas_api_key=None)
+    # Every key named: a developer's .env would fill in the ones left out.
+    keys = CoffeeCredentials(
+        denue_token=SecretStr("secret-token"), usda_fas_api_key=None, inpc_token=None
+    )
 
     findings = checks.key_findings(CoffeeAdapter(coffee_adapter.config, keys))
 
-    assert [(f.ready, f.fix) for f in findings] == [(True, ""), (None, "")]  # optional
+    assert [(f.ready, f.fix) for f in findings] == [(True, ""), (None, ""), (None, "")]
     assert findings[1].detail.startswith("missing: optional")
     assert "secret-token" not in repr(findings)
 

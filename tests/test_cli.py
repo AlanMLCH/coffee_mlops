@@ -134,6 +134,7 @@ def test_clean_builds_the_clean_layer(data_dir: Path) -> None:
         "census_zones",
         "household_coffee",
         "cup_of_excellence",
+        "consumer_price_index",
         "documents",
         "document_chunks",
     }
@@ -177,6 +178,7 @@ def test_data_run_chains_the_whole_etl(data_dir: Path) -> None:
         "census_zones",
         "household_coffee",
         "cup_of_excellence",
+        "consumer_price_index",
         "documents",
         "document_chunks",
     }

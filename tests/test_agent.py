@@ -834,8 +834,13 @@ def test_evaluate_asks_every_question_and_compares_with_the_last_run(
         "routing_questions.jsonl": [
             {"id": "data-01", "question": "Top state?", "route": "data"},
             {"id": "knowledge-01", "question": "Why altitude?", "route": "knowledge"},
+            {"id": "data-02", "question": "Who rents?", "route": "data"},  # not its to answer
         ],
-        "sql_questions.jsonl": [{"id": "production-01", "question": "Top state?", "sql": TOP}],
+        "sql_questions.jsonl": [
+            {"id": "production-01", "question": "Top state?", "sql": TOP},
+            {"id": "profile-01", "question": "Who rents?",
+             "sql": "SELECT borough FROM clean.borough_profile"},
+        ],
         "retrieval_questions.jsonl": [
             {"id": "cultivation-01", "topic": "cultivation", "question": "Why altitude?",
              "answer": "It delays ripening.", "status": "draft", "drafted_by": "m@1",
@@ -869,6 +874,7 @@ def test_evaluate_asks_every_question_and_compares_with_the_last_run(
     second = run(TOP.replace("DESC", "ASC"))
 
     assert first.exit_code == 0, first.output
+    assert "1 questions read tables the agent is not shown: left out" in first.output
     assert "100% correct, 100% verified, routing 0%" in first.output
     assert "sql: 100% of the questions it applies to" in first.output
     assert "passage: 100% of the questions it applies to" in first.output
