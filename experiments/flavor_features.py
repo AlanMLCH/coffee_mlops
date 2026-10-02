@@ -96,7 +96,7 @@ def main() -> None:
             train, _ = split_items(widened, candidate)  # tuning never sees the test coffees
             params, cv_mae = tune(train, candidate)
             observed, predicted, _ = out_of_fold(widened, candidate, params)
-            errors[name] = absolute_errors(observed, predicted)
+            errors[name] = absolute_errors(observed, predicted.point)
             slug = name.replace(" ", "_")
             mlflow.log_metrics({f"cv_mae_{slug}": cv_mae, f"oof_mae_{slug}": errors[name].mean()})
             logger.info(

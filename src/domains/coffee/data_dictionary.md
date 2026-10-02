@@ -568,6 +568,7 @@ date. A month whose month before is missing is left out.
 |---|---|---|
 | `observation_id`, `offer_id`, `snapshot`, `observed_on`, `coffee_id` | | Keys: one row per offer per read. Join `clean.roaster_offer_history` on `observation_id` for the shop, size or price listed in that read |
 | `prediction` | Float | Predicted `price_mxn_per_kg` |
+| `held_out_prediction` | Float | The same, from the champion's recipe refitted without the offer's coffee: what the price looks like to a model that never saw it. Residuals that rank offers use this one |
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
 

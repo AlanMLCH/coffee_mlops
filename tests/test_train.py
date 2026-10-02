@@ -31,7 +31,7 @@ from mlops_core.ml.train import (
     CHAMPION,
     baseline_predictions,
     build_pipeline,
-    champion_errors,
+    champion_losses,
     cv_folds,
     experiment_name,
     fit_params,
@@ -49,6 +49,8 @@ from mlops_core.storage import content_version, write_table
 from tests.fakes import with_training
 
 REVIEW = "review"
+# A quantity, judged by its absolute error: what the champion tests compare.
+QUANTITY = ModelSpec(target="t", categorical=[], numeric=["a"], leakage=[])
 
 
 @pytest.fixture
@@ -251,7 +253,7 @@ def test_the_champion_is_scored_on_the_very_same_rows(
     monkeypatch.chdir(tmp_path)
     register_champion(f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", constant=82.0)
 
-    errors = champion_errors("m", pl.DataFrame({"a": [0.0, 0.0]}), np.array([80.0, 84.0]))
+    errors = champion_losses("m", pl.DataFrame({"a": [0.0, 0.0]}), np.array([80.0, 84.0]), QUANTITY)
 
     assert errors is not None
     assert errors.tolist() == [2.0, 2.0]
@@ -269,7 +271,7 @@ def test_the_champion_is_fed_the_columns_it_was_trained_on(
     # Today's table has a new feature, and keeps the old column the champion needs.
     test = pl.DataFrame({"old_feature": [0.0, 0.0], "new_feature": [1.0, 2.0]})
 
-    errors = champion_errors("m", test, np.array([80.0, 84.0]))
+    errors = champion_losses("m", test, np.array([80.0, 84.0]), QUANTITY)
 
     assert errors is not None
     assert errors.tolist() == [2.0, 2.0]
@@ -283,7 +285,7 @@ def test_a_champion_whose_columns_are_gone_is_not_compared(
         f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}", "m", 82.0, columns=["retired_feature"]
     )
 
-    errors = champion_errors("m", pl.DataFrame({"new_feature": [0.0]}), np.array([80.0]))
+    errors = champion_losses("m", pl.DataFrame({"new_feature": [0.0]}), np.array([80.0]), QUANTITY)
 
     assert errors is None
     assert "retired_feature" in caplog.text
@@ -308,7 +310,7 @@ def test_a_champion_logged_without_a_signature_is_not_compared(
         "unsigned", CHAMPION, info.registered_model_version
     )
 
-    errors = champion_errors("unsigned", pl.DataFrame({"a": [0.0]}), np.array([80.0]))
+    errors = champion_losses("unsigned", pl.DataFrame({"a": [0.0]}), np.array([80.0]), QUANTITY)
 
     assert errors is None
     assert "no input signature" in caplog.text
@@ -320,7 +322,10 @@ def test_without_a_champion_there_is_nothing_to_compare(
     monkeypatch.chdir(tmp_path)
     mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'empty.db').as_posix()}")
 
-    assert champion_errors("never-trained", pl.DataFrame({"a": [0.0]}), np.array([80.0])) is None
+    unknown = champion_losses(
+        "never-trained", pl.DataFrame({"a": [0.0]}), np.array([80.0]), QUANTITY
+    )
+    assert unknown is None
 
 
 GROUPED = GroupSplit(kind="group", column="lot", test_share=0.25)
@@ -463,11 +468,11 @@ def test_every_item_is_predicted_by_a_model_that_never_saw_its_group() -> None:
 
     observed, predicted, baseline = out_of_fold(features, model, {"n_estimators": 5})
 
-    assert len(observed) == len(predicted) == len(baseline) == features.height
+    assert len(observed) == len(predicted.point) == len(baseline.point) == features.height
     assert observed.tolist() == features.sort("item_id")["price"].to_list()
     # The baseline is refitted per fold too, or it alone would have seen the held-out
     # groups: predicting each group's own mean would make it unbeatable.
-    assert len(set(baseline.tolist())) > 1
+    assert len(set(baseline.point.tolist())) > 1
 
 
 def test_out_of_fold_needs_groups_to_hold_out_by() -> None:

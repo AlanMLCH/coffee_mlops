@@ -446,9 +446,25 @@ def show_prediction(prediction: Any) -> None:
     if prediction.error:
         st.warning(f"No prediction from {prediction.model}: {prediction.error}")
         return
-    value = (prediction.response or {}).get("prediction")
+    response = prediction.response or {}
+    value = response.get("prediction")
     shown = f"{value:,.2f}" if isinstance(value, float) else str(value)
     st.metric(f"The {prediction.model} model predicts", shown, border=True)
+    if response.get("lower") is not None:
+        st.caption(
+            f"Between {response['lower']:,.2f} and {response['upper']:,.2f}, "
+            f"{response['coverage']:.0%} of the time"
+        )
+    if level := response.get("level"):
+        range_ = (
+            f" (between {level['lower']:,.2f} and {level['upper']:,.2f})"
+            if level.get("lower") is not None
+            else ""
+        )
+        st.caption(
+            f"In {label(level['of'])}: {level['now']:,.2f} now, "
+            f"{level['prediction']:,.2f} predicted{range_}"
+        )
     with st.expander("The item, as the model was given it"):
         st.json(prediction.request)
 

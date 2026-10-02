@@ -23,10 +23,22 @@ from pydantic import BaseModel, ConfigDict
 
 from mlops_core.adapter import DomainAdapter, ItemRequest, load_adapter
 from mlops_core.config import Settings
+from mlops_core.ml.band import predicted
 from mlops_core.ml.registry import ServedModel, load_champion
 from mlops_core.storage import read_table
 
 logger = logging.getLogger(__name__)
+
+
+class Level(BaseModel):
+    """A prediction of a percent change, in the units of what changes: the item's value
+    of that feature now, and where the prediction (and its range) would take it."""
+
+    of: str  # the feature, named as the domain names it
+    now: float
+    prediction: float
+    lower: float | None = None
+    upper: float | None = None
 
 
 class Prediction(BaseModel):
@@ -34,6 +46,11 @@ class Prediction(BaseModel):
 
     target: str  # what was predicted, named as the domain names it
     prediction: float
+    # A model with a range: where the truth should fall, `coverage` of the time.
+    lower: float | None = None
+    upper: float | None = None
+    coverage: float | None = None
+    level: Level | None = None  # when the target is a percent change of a feature
     model_version: str
     model_source: str
     # Every feature the request did not supply: what the domain looked up for it, so a
@@ -145,15 +162,47 @@ class Service:
         dtypes = {column: "float64" for column in spec.numeric}
         dtypes |= {column: "str" for column in spec.categorical}
         model_input = pd.DataFrame(features.select(spec.features).to_dicts()).astype(dtypes)
-        prediction = served.model.predict(model_input)
+        scored = predicted(served.model, model_input)
+        point = float(scored.point[0])
+        lower = float(scored.lower[0]) if scored.lower is not None else None
+        upper = float(scored.upper[0]) if scored.upper is not None else None
         looked_up = [c for c in spec.features if c not in item]
         return Prediction(
             target=spec.target,
-            prediction=float(prediction[0]),
+            prediction=point,
+            lower=lower,
+            upper=upper,
+            coverage=spec.interval if lower is not None else None,
+            level=_level(spec.relative_to, features, point, lower, upper),
             model_version=served.version,
             model_source=served.source,
             context={c: features[c].item() for c in looked_up},
         )
+
+
+def _level(
+    relative_to: str | None,
+    features: pl.DataFrame,
+    point: float,
+    lower: float | None,
+    upper: float | None,
+) -> Level | None:
+    """A percent change read back in the units of what changes, when the item has a
+    value of it to change from."""
+    now = features[relative_to].item() if relative_to else None
+    if relative_to is None or now is None:
+        return None
+
+    def at(change: float | None) -> float | None:
+        return None if change is None else float(now * (1 + change / 100))
+
+    return Level(
+        of=relative_to,
+        now=float(now),
+        prediction=float(now * (1 + point / 100)),
+        lower=at(lower),
+        upper=at(upper),
+    )
 
 
 def create_app(adapter: DomainAdapter, settings: Settings) -> FastAPI:

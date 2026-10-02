@@ -12,6 +12,10 @@ evidence: it is judged out of fold instead, on every item, each one predicted by
 fitted without its group. That is not a softer test - no item is ever scored by a model
 that saw it - it is the same test run on four times as much of the data.
 
+What is learned depends on the model's task: a quantity, a count or a probability, all
+three with LightGBM and a different objective, and a quantity can carry a range. Each is
+judged by its own loss (`evaluation.row_losses`) against baselines of its own kind.
+
 sklearn, LightGBM and MLflow speak pandas, so frames cross to pandas at this boundary.
 """
 
@@ -45,14 +49,19 @@ from mlops_core.config import (
     GroupSplit,
     ModelConfig,
     ModelSpec,
+    Task,
     TemporalSplit,
+    TrainingConfig,
 )
+from mlops_core.ml.band import Band, Predicted, predicted
 from mlops_core.ml.evaluation import (
     absolute_errors,
+    loss_name,
     mae_interval,
     recalibration_gain,
-    regression_metrics,
+    row_losses,
     stratified_metrics,
+    task_metrics,
 )
 from mlops_core.provenance import DATA_VERSION, code_version, experiment_name
 from mlops_core.stats import Comparison, compare
@@ -63,12 +72,28 @@ logger = logging.getLogger(__name__)
 CHAMPION = "champion"
 # MLflow stores sklearn models with skops, which refuses to load types it was not told
 # to trust (unlike pickle, which runs arbitrary code on load). These are the LightGBM
-# internals the pipeline contains.
+# internals the pipeline contains, and the core's own range.
 TRUSTED_MODEL_TYPES = [
     "collections.OrderedDict",
     "lightgbm.basic.Booster",
     "lightgbm.sklearn.LGBMRegressor",
+    "mlops_core.ml.band.Band",
 ]
+# What LightGBM minimises for each task. All three are regressors: a cross-entropy
+# regressor predicts the probability itself, so nothing downstream needs a classifier's
+# `predict_proba`.
+OBJECTIVES: dict[Task, str] = {
+    "regression": "regression",
+    "count": "poisson",
+    "probability": "cross_entropy",
+}
+# How a trial is scored on the folds: the task's own loss, as scikit-learn names it (a
+# mean squared error of a probability against 0 and 1 is its Brier score).
+TUNING_SCORES: dict[Task, str] = {
+    "regression": "neg_mean_absolute_error",
+    "count": "neg_mean_poisson_deviance",
+    "probability": "neg_mean_squared_error",
+}
 
 
 @dataclass(frozen=True)
@@ -77,6 +102,11 @@ class TrainResult:
     model_version: str
     promoted: bool
     metrics: dict[str, float]
+
+
+def labelled(features: pl.DataFrame, spec: ModelSpec) -> pl.DataFrame:
+    """The items whose target is known: the only ones a model learns from or is judged on."""
+    return features.filter(pl.col(spec.target).is_not_null()) if spec.unlabelled else features
 
 
 def split_items(features: pl.DataFrame, model: ModelConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -115,7 +145,7 @@ def group_split(
 
 def out_of_fold(
     features: pl.DataFrame, model: ModelConfig, params: dict[str, Any]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, Predicted, Predicted]:
     """Predict every item from a model fitted without its group, and the baseline the same
     way. Returns (observed, predicted, baseline prediction), aligned row by row."""
     spec, cfg = model.spec, model.training
@@ -125,22 +155,41 @@ def out_of_fold(
     ordered = features.sort(model.items.id)
     x, y = xy(ordered, spec)
     groups = ordered[split.column].to_numpy()
-    predicted, from_baseline = np.zeros(len(y)), np.zeros(len(y))
+    scored, from_baseline = _Rows(len(y), spec), _Rows(len(y), spec)
     folds = GroupKFold(n_splits=cfg.cv_folds)
     for fitted_rows, held_out_rows in folds.split(x, y, groups=groups):
         fit, held_out = ordered[fitted_rows], ordered[held_out_rows]
-        pipeline = build_pipeline(spec, params, cfg.seed)
-        pipeline.fit(x.iloc[fitted_rows], y[fitted_rows], **fit_params(spec))
-        predicted[held_out_rows] = pipeline.predict(x.iloc[held_out_rows])
+        fitted = build_model(spec, params, cfg.seed)
+        fitted.fit(x.iloc[fitted_rows], y[fitted_rows], **fit_params(spec))
+        scored.put(held_out_rows, predicted(fitted, x.iloc[held_out_rows]))
         # The baseline is refitted per fold too, or it would be the only one that saw
         # the held-out groups.
-        baselines = baseline_predictions(
-            fit, held_out, spec, cfg.baseline_group, cfg.baseline_constant
+        y_held = y[held_out_rows]
+        from_baseline.put(
+            held_out_rows,
+            min(
+                baselines(fit, held_out, spec, cfg).values(),
+                key=lambda b: float(row_losses(spec, y_held, b).mean()),
+            ),
         )
-        from_baseline[held_out_rows] = min(
-            baselines.values(), key=lambda p: float(np.abs(p - y[held_out_rows]).mean())
-        )
-    return y, predicted, from_baseline
+    return y, scored.done(), from_baseline.done()
+
+
+class _Rows:
+    """Predictions assembled fold by fold into one set, aligned with the rows."""
+
+    def __init__(self, n: int, spec: ModelSpec) -> None:
+        self.point = np.zeros(n)
+        self.lower = np.zeros(n) if spec.interval is not None else None
+        self.upper = np.zeros(n) if spec.interval is not None else None
+
+    def put(self, rows: np.ndarray, scored: Predicted) -> None:
+        self.point[rows] = scored.point
+        if self.lower is not None and self.upper is not None:
+            self.lower[rows], self.upper[rows] = scored.lower, scored.upper
+
+    def done(self) -> Predicted:
+        return Predicted(self.point, self.lower, self.upper)
 
 
 def cv_folds(train: pl.DataFrame, model: ModelConfig) -> tuple[BaseCrossValidator, Any]:
@@ -163,9 +212,27 @@ def cv_folds(train: pl.DataFrame, model: ModelConfig) -> tuple[BaseCrossValidato
     )
 
 
-def build_pipeline(spec: ModelSpec, params: dict[str, Any], seed: int) -> Pipeline:
+def build_model(spec: ModelSpec, params: dict[str, Any], seed: int) -> Pipeline | Band:
+    """What the model's spec serves: one pipeline, or with an `interval` a point and the
+    two quantile pipelines at the edges of its range, all with the same hyperparameters
+    (tuned for the point: tuning each edge would triple the search for a second-order gain)."""
+    point = build_pipeline(spec, params, seed)
+    if spec.interval is None:
+        return point
+    tail = (1 - spec.interval) / 2
+    return Band(
+        point,
+        build_pipeline(spec, params, seed, quantile=tail),
+        build_pipeline(spec, params, seed, quantile=1 - tail),
+    )
+
+
+def build_pipeline(
+    spec: ModelSpec, params: dict[str, Any], seed: int, quantile: float | None = None
+) -> Pipeline:
     """Encoder and model are fitted together, so rare-category grouping is learned on
-    the training split only and travels with the model to serving."""
+    the training split only and travels with the model to serving. With a `quantile` the
+    model learns that quantile of the target instead of the task's own objective."""
     model_params = dict(params)
     encoder = OrdinalEncoder(
         handle_unknown="use_encoded_value",
@@ -178,7 +245,12 @@ def build_pipeline(spec: ModelSpec, params: dict[str, Any], seed: int) -> Pipeli
         remainder="passthrough",
         verbose_feature_names_out=False,
     )
-    model = LGBMRegressor(random_state=seed, verbose=-1, **model_params)
+    objective: dict[str, Any] = (
+        {"objective": "quantile", "alpha": quantile}
+        if quantile is not None
+        else {"objective": OBJECTIVES[spec.task]}
+    )
+    model = LGBMRegressor(random_state=seed, verbose=-1, **objective, **model_params)
     return Pipeline([("prep", prep), ("model", model)])
 
 
@@ -197,23 +269,77 @@ def baseline_predictions(
     spec: ModelSpec,
     group: str,
     constant: float | None = None,
+    exposure: str | None = None,
 ) -> dict[str, np.ndarray]:
     """What anyone could predict without a model: the training mean, the mean of the
-    item's group, and - when the model names one - a constant, such as "no change"."""
+    item's group, and - when the model names them - a constant, such as "no change", and
+    the training rate per unit of an exposure times the item's own. For a probability
+    the means are rates of yes, so every baseline is a probability too."""
     overall = float(train[spec.target].mean())  # type: ignore[arg-type]
     group_means = train.group_by(group).agg(pl.col(spec.target).mean().alias("_pred"))
     by_group = test.join(group_means, on=group, how="left")["_pred"].fill_null(overall)
-    baselines = {
+    predictions = {
         "global_mean": np.full(test.height, overall),
         f"{group}_mean": by_group.to_numpy(),
     }
     if constant is not None:
-        baselines["constant"] = np.full(test.height, constant)
-    return baselines
+        predictions["constant"] = np.full(test.height, constant)
+    if exposure is not None:
+        known = train.drop_nulls(exposure)
+        rate = float(known[spec.target].sum()) / float(known[exposure].sum())
+        per_unit = (test[exposure] * rate).fill_null(overall)
+        predictions[f"{exposure}_rate"] = per_unit.to_numpy()
+    return predictions
+
+
+def baseline_bands(
+    train: pl.DataFrame, test: pl.DataFrame, spec: ModelSpec, group: str
+) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+    """The range anyone could give without a model: the training target's own quantiles,
+    over all items and within the item's group. For a change it is the historical range,
+    which is what a forecast's range has to be narrower than while still holding."""
+    if spec.interval is None:
+        raise ValueError("Only a model with an interval has a range to compare")
+    tail = (1 - spec.interval) / 2
+    target = pl.col(spec.target)
+    low, high = (
+        float(train[spec.target].quantile(tail)),  # type: ignore[arg-type]
+        float(train[spec.target].quantile(1 - tail)),  # type: ignore[arg-type]
+    )
+    edges = train.group_by(group).agg(
+        target.quantile(tail).alias("_low"), target.quantile(1 - tail).alias("_high")
+    )
+    by_group = test.join(edges, on=group, how="left")
+    return (
+        (np.full(test.height, low), np.full(test.height, high)),
+        (
+            by_group["_low"].fill_null(low).to_numpy(),
+            by_group["_high"].fill_null(high).to_numpy(),
+        ),
+    )
+
+
+def baselines(
+    train: pl.DataFrame, test: pl.DataFrame, spec: ModelSpec, cfg: TrainingConfig
+) -> dict[str, Predicted]:
+    """Every baseline as a prediction of the model's own kind: with an interval, the
+    group's mean comes with the group's range and every other one with the overall range."""
+    points = baseline_predictions(
+        train, test, spec, cfg.baseline_group, cfg.baseline_constant, cfg.baseline_exposure
+    )
+    if spec.interval is None:
+        return {name: Predicted(point) for name, point in points.items()}
+    overall, by_group = baseline_bands(train, test, spec, cfg.baseline_group)
+    grouped = f"{cfg.baseline_group}_mean"
+    return {
+        name: Predicted(point, *(by_group if name == grouped else overall))
+        for name, point in points.items()
+    }
 
 
 def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float]:
-    """TPE search over the model's CV folds; each trial is a nested MLflow run."""
+    """TPE search over the model's CV folds; each trial is a nested MLflow run. A model
+    with a range is tuned for its point: the edges reuse what the point found."""
     spec, cfg = model.spec, model.training
     x, y = xy(train, spec)
     folds, groups = cv_folds(train, model)
@@ -242,14 +368,14 @@ def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float
             y,
             groups=groups,
             cv=folds,
-            scoring="neg_mean_absolute_error",
+            scoring=TUNING_SCORES[spec.task],
             params=fit_params(spec),
         )
-        cv_mae = float(-scores.mean())
+        cv_loss = float(-scores.mean())
         with mlflow.start_run(run_name=f"trial-{trial.number}", nested=True):
             mlflow.log_params(params)
-            mlflow.log_metric("cv_mae", cv_mae)
-        return cv_mae
+            mlflow.log_metric(cv_metric(spec), cv_loss)
+        return cv_loss
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(
@@ -257,6 +383,11 @@ def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float
     )
     study.optimize(objective, n_trials=cfg.trials)
     return study.best_params, study.best_value
+
+
+def cv_metric(spec: ModelSpec) -> str:
+    """The name of the loss the folds were scored by: the point's, for a range."""
+    return f"cv_{loss_name(spec.model_copy(update={'interval': None}))}"
 
 
 def _whole(bounds: tuple[float, float]) -> tuple[int, int]:
@@ -292,9 +423,12 @@ def promote_if_better(
     return True
 
 
-def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.ndarray | None:
-    """Absolute errors of the current champion on the same rows, or None if it cannot
-    be scored on them.
+def champion_losses(
+    name: str, test: pl.DataFrame, y_test: np.ndarray, spec: ModelSpec
+) -> np.ndarray | None:
+    """The current champion's losses on the same rows, or None if it cannot be scored on
+    them - or not by the same loss: a champion without a range cannot be compared with a
+    candidate judged by its range.
 
     The champion is fed **its own** input columns, read from the signature it was logged
     with, not today's feature list. Without that, changing the feature spec would make
@@ -321,7 +455,11 @@ def champion_errors(name: str, test: pl.DataFrame, y_test: np.ndarray) -> np.nda
             missing,
         )
         return None
-    return absolute_errors(y_test, champion.predict(test.select(columns).to_pandas()))
+    scored = predicted(champion, test.select(columns).to_pandas())
+    if spec.interval is not None and scored.lower is None:
+        logger.warning("The champion predicts no range: promoting on the baseline alone")
+        return None
+    return row_losses(spec, y_test, scored)
 
 
 def train_model(
@@ -329,8 +467,10 @@ def train_model(
 ) -> TrainResult:
     model = config.model_named(model_name)
     spec, cfg, split = model.spec, model.training, model.training.split
+    loss = loss_name(spec)
     table_dir = data_dir / "features" / model.features_table
-    features = read_table(table_dir)
+    every_item = read_table(table_dir)
+    features = labelled(every_item, spec)
     partition = latest_partition(table_dir)
     train, test = split_items(features, model)
     x_train, y_train = xy(train, spec)
@@ -346,13 +486,16 @@ def train_model(
             {
                 "features_partition": partition.name if partition else "",
                 # The rows it learned from: retraining on the same rows is pointless.
-                DATA_VERSION: rows_version(features),
+                # Unlabelled items count too: scoring new ones is what the model is for.
+                DATA_VERSION: rows_version(every_item),
             }
             | (version_tags.as_tags() if version_tags else {})
         )
         mlflow.log_params(
             {
                 "target": spec.target,
+                "task": spec.task,
+                "interval": spec.interval or "",
                 "categorical": ",".join(spec.categorical),
                 "numeric": ",".join(spec.numeric),
                 "n_train": train.height,
@@ -364,50 +507,61 @@ def train_model(
         mlflow.log_input(from_pandas(x_train, source=source, name="train"), "training")
         mlflow.log_input(from_pandas(x_test, source=source, name="test"), "testing")
 
-        baseline_errors = {
-            name: absolute_errors(y_test, pred)
-            for name, pred in baseline_predictions(
-                train, test, spec, cfg.baseline_group, cfg.baseline_constant
-            ).items()
+        scored_baselines = baselines(train, test, spec, cfg)
+        baseline_losses = {
+            name: row_losses(spec, y_test, scored) for name, scored in scored_baselines.items()
         }
         mlflow.log_metrics(
-            {f"baseline_{name}_test_mae": float(e.mean()) for name, e in baseline_errors.items()}
+            {
+                f"baseline_{name}_test_mae": float(absolute_errors(y_test, scored.point).mean())
+                for name, scored in scored_baselines.items()
+            }
+            | {
+                f"baseline_{name}_test_{loss}": float(e.mean())
+                for name, e in baseline_losses.items()
+            }
         )
         # The gate compares against the strongest baseline, not the most flattering one.
-        best_baseline = min(baseline_errors.values(), key=lambda e: e.mean())
+        best_baseline = min(baseline_losses.values(), key=lambda e: e.mean())
 
-        best_params, cv_mae = tune(train, model)
+        best_params, cv_loss = tune(train, model)
         mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
 
-        pipeline = build_pipeline(spec, best_params, cfg.seed)
-        pipeline.fit(x_train, y_train, **fit_params(spec))
-        predictions = pipeline.predict(x_test)
-        errors = absolute_errors(y_test, predictions)
-        # Families are resampled whole: one product priced wrong is one mistake, not five.
-        families = test[split.column].to_numpy() if isinstance(split, GroupSplit) else None
+        fitted = build_model(spec, best_params, cfg.seed)
+        fitted.fit(x_train, y_train, **fit_params(spec))
+        scored = predicted(fitted, x_test)
+        predictions = scored.point
+        losses = row_losses(spec, y_test, scored)
+        families = resampled_together(test, model)
         resamples, seed = cfg.bootstrap_resamples, cfg.seed
-        ci_low, ci_high = mae_interval(errors, resamples, seed, families)
-        versus_baseline = compare(errors, best_baseline, resamples, seed, families)
-        champion = champion_errors(cfg.registered_model, test, y_test)
+        ci_low, ci_high = mae_interval(
+            absolute_errors(y_test, predictions), resamples, seed, families
+        )
+        versus_baseline = compare(losses, best_baseline, resamples, seed, families)
+        champion = champion_losses(cfg.registered_model, test, y_test, spec)
         versus_champion = (
-            compare(errors, champion, resamples, seed, families) if champion is not None else None
+            compare(losses, champion, resamples, seed, families) if champion is not None else None
         )
         # A group model's evidence against the baseline is gathered on every group.
         out_of_fold_metrics: dict[str, float] = {}
         if isinstance(split, GroupSplit):
             observed, predicted_oof, baseline_oof = out_of_fold(features, model, best_params)
-            oof_errors = absolute_errors(observed, predicted_oof)
-            oof_baseline = absolute_errors(observed, baseline_oof)
-            all_families = features.sort(model.items.id)[split.column].to_numpy()
-            versus_baseline = compare(oof_errors, oof_baseline, resamples, seed, all_families)
+            oof_losses = row_losses(spec, observed, predicted_oof)
+            oof_baseline = row_losses(spec, observed, baseline_oof)
+            all_families = resampled_together(features.sort(model.items.id), model)
+            versus_baseline = compare(oof_losses, oof_baseline, resamples, seed, all_families)
             out_of_fold_metrics = {
-                "out_of_fold_mae": float(oof_errors.mean()),
-                "out_of_fold_baseline_mae": float(oof_baseline.mean()),
+                f"out_of_fold_{loss}": float(oof_losses.mean()),
+                f"out_of_fold_baseline_{loss}": float(oof_baseline.mean()),
             }
 
         metrics = (
-            {"cv_mae": cv_mae, "test_mae_ci_low": ci_low, "test_mae_ci_high": ci_high}
-            | {f"test_{k}": v for k, v in regression_metrics(y_test, predictions).items()}
+            {
+                cv_metric(spec): cv_loss,
+                "test_mae_ci_low": ci_low,
+                "test_mae_ci_high": ci_high,
+            }
+            | {f"test_{k}": v for k, v in task_metrics(spec, y_test, scored).items()}
             | versus_baseline.as_metrics("versus_baseline")
             | out_of_fold_metrics
             | (versus_champion.as_metrics("versus_champion") if versus_champion else {})
@@ -423,13 +577,13 @@ def train_model(
         # Logged as a table, not as metrics: one row per group, and group names change.
         mlflow.log_table(
             stratified_metrics(
-                train, test, predictions, spec, cfg.stratify_by, cfg.min_group_size
+                train, test, scored, spec, cfg.stratify_by, cfg.min_group_size
             ).to_pandas(),
             artifact_file="stratified_metrics.json",
         )
 
         info = mlflow.sklearn.log_model(
-            pipeline,
+            fitted,
             name="model",
             signature=infer_signature(x_test, predictions),
             input_example=x_test.head(3),
@@ -452,8 +606,20 @@ def train_model(
         run.info.run_id,
         version,
         promoted,
-        metrics | {"best_baseline_test_mae": float(best_baseline.mean())},
+        metrics | {f"best_baseline_test_{loss}": float(best_baseline.mean())},
     )
+
+
+def resampled_together(rows: pl.DataFrame, model: ModelConfig) -> np.ndarray | None:
+    """What the gate's bootstrap resamples whole, row by row: the `resample_by` blocks
+    when the model names them, else a group split's families - one product priced wrong
+    is one mistake, not five - else nothing, and rows are resampled one by one."""
+    cfg = model.training
+    if cfg.resample_by is not None:
+        return rows[cfg.resample_by].to_numpy()
+    if isinstance(cfg.split, GroupSplit):
+        return rows[cfg.split.column].to_numpy()
+    return None
 
 
 def split_params(split: TemporalSplit | GroupSplit) -> dict[str, str | float]:

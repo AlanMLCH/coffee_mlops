@@ -269,8 +269,8 @@ class ConstantModel(RegressorMixin, BaseEstimator):  # type: ignore[misc]
     def __init__(self, prediction: float = 82.0) -> None:
         self.prediction = prediction
 
-    def fit(self, x: object, y: object = None) -> "ConstantModel":
-        return self
+    def fit(self, x: object, y: object = None, **fit_params: object) -> "ConstantModel":
+        return self  # refitted without a group, it predicts the same constant
 
     def predict(self, x: Sized) -> np.ndarray:
         return np.full(len(x), self.prediction)

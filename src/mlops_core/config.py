@@ -355,6 +355,15 @@ class ItemsConfig(BaseModel):
     entity: str | None = None
 
 
+# What a model predicts, which decides how it learns and how its errors are counted:
+# - regression: a quantity; each row's error is its absolute error.
+# - count: how many of something, never negative; learned as a Poisson rate, each row
+#   judged by its Poisson deviance (an absolute error would reward the median count).
+# - probability: how likely a yes is, from targets of 0 and 1; learned by cross-entropy,
+#   each row judged by its Brier score, the squared distance from what happened.
+Task = Literal["regression", "count", "probability"]
+
+
 class ModelSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -363,6 +372,19 @@ class ModelSpec(BaseModel):
     numeric: list[str]
     # Columns that must never be features (target leakage).
     leakage: list[str]
+    task: Task = "regression"
+    # With a share, a regression also predicts a range meant to hold the truth that share
+    # of the time (0.8: four times in five), from two more models at its edges' quantiles.
+    # The gate then judges the range, by its interval score: width, plus a penalty for
+    # every miss that grows with how far the truth fell outside.
+    interval: float | None = Field(default=None, gt=0, lt=1)
+    # Items whose target is not known yet are kept: scored in batch, never learned from or
+    # judged on. Without it, an item without a target breaks the feature contract.
+    unlabelled: bool = False
+    # A numeric feature the target is the percent change of. A model learns a change
+    # because a tree never predicts beyond the values it saw; whoever asks gets the answer
+    # back in that feature's units as well.
+    relative_to: str | None = None
 
     @property
     def features(self) -> list[str]:
@@ -373,6 +395,14 @@ class ModelSpec(BaseModel):
         leaked = set(self.features) & {*self.leakage, self.target}
         if leaked:
             raise ValueError(f"Leaking columns declared as features: {sorted(leaked)}")
+        return self
+
+    @model_validator(mode="after")
+    def _interval_and_change_fit_the_task(self) -> Self:
+        if self.interval is not None and self.task != "regression":
+            raise ValueError(f"A range is predicted around a quantity, not a {self.task}")
+        if self.relative_to is not None and self.relative_to not in self.numeric:
+            raise ValueError(f"relative_to must be a numeric feature: '{self.relative_to}'")
         return self
 
 
@@ -439,6 +469,14 @@ class TrainingConfig(BaseModel):
     # offered as one more baseline. For a series it is the random walk: tomorrow is
     # today, which is what any forecast of a price has to beat before it is worth anything.
     baseline_constant: float | None = None
+    # For a count, what it is a count *of*: a numeric feature such as the people living
+    # there. The baseline is then the training rate per unit of it, times the item's own:
+    # what a count model has to beat is more than the average count.
+    baseline_exposure: str | None = None
+    # A column whose values the gate's bootstrap resamples whole. Items that overlap in
+    # time - twelve-month changes a month apart share eleven months - are not independent
+    # evidence, and resampling them one by one would make the gate overconfident.
+    resample_by: str | None = None
     bootstrap_resamples: int
     min_probability_better: float
     stratify_by: str
@@ -511,6 +549,15 @@ class ModelConfig(BaseModel):
     def _example_is_json(cls, example: dict[str, Any]) -> dict[str, Any]:
         """As a request body travels: YAML reads 2026-09-01 as a date, JSON has none."""
         return to_jsonable_python(example)  # type: ignore[no-any-return]
+
+    @model_validator(mode="after")
+    def _training_names_its_columns(self) -> Self:
+        cfg, spec = self.training, self.spec
+        if cfg.baseline_exposure is not None and cfg.baseline_exposure not in spec.numeric:
+            raise ValueError(f"{self.name}: baseline_exposure must be a numeric feature")
+        if cfg.resample_by is not None and cfg.resample_by not in {*self.keys, *spec.features}:
+            raise ValueError(f"{self.name}: resample_by must be a key or a feature")
+        return self
 
     @model_validator(mode="after")
     def _group_is_its_own_column(self) -> Self:

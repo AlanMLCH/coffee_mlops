@@ -21,7 +21,8 @@ from mlops_core.storage import latest_partition, read_table, write_table
 def features_schema(model: ModelConfig) -> pa.DataFrameSchema:
     """The feature table's contract, derived from the model's config: keys, the declared
     features with their types, and the target - nothing else, so a leaking column
-    cannot ride along."""
+    cannot ride along. The target may be missing only where the model says items can be
+    unlabelled."""
     items, spec, split = model.items, model.spec, model.training.split
     group = {split.column: pa.Column(pl.String)} if isinstance(split, GroupSplit) else {}
     entity = {items.entity: pa.Column(pl.String)} if items.entity else {}
@@ -37,7 +38,7 @@ def features_schema(model: ModelConfig) -> pa.DataFrameSchema:
             **group,
             **{c: pa.Column(pl.String, nullable=True) for c in spec.categorical},
             **{c: pa.Column(pl.Float64, nullable=True) for c in spec.numeric},
-            spec.target: pa.Column(pl.Float64),
+            spec.target: pa.Column(pl.Float64, nullable=spec.unlabelled),
         },
     )
 

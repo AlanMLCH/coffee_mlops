@@ -43,7 +43,7 @@ from mlops_core.agent.prompts import (
 )
 from mlops_core.agent.routing import route
 from mlops_core.agent.text_to_sql import Generator, SqlAnswer, write_sql
-from mlops_core.agent.tools import PredictionAnswer, cite, predict
+from mlops_core.agent.tools import PredictionAnswer, cite, described, predict
 from mlops_core.agent.verify import cited_ids, problems
 from mlops_core.config import SqlGuard
 
@@ -313,8 +313,7 @@ class Agent:
                 response = prediction.response
                 blocks.append(
                     f"[prediction] The {prediction.model} model's prediction for the item "
-                    f"{json.dumps(prediction.request)}: {response['target']} = "
-                    f"{response['prediction']:.2f}"
+                    f"{json.dumps(prediction.request)}: {described(response)}"
                 )
             else:
                 blocks.append(f"No prediction: {prediction.error}")

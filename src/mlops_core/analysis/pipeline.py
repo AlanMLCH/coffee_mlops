@@ -32,7 +32,7 @@ from mlops_core.analysis.studies import (
 )
 from mlops_core.config import DomainConfig, ModelConfig
 from mlops_core.ml.registry import load_champion
-from mlops_core.ml.train import split_items, xy
+from mlops_core.ml.train import TUNING_SCORES, labelled, split_items, xy
 from mlops_core.storage import (
     MANIFEST_NAME,
     TableManifest,
@@ -72,7 +72,7 @@ def champion_importance(
     except Exception as unavailable:  # nothing trained yet, or the registry is down
         logger.warning("Skipping permutation importance for %s: %s", model.name, unavailable)
         return None
-    features = read_table(data_dir / "features" / model.features_table)
+    features = labelled(read_table(data_dir / "features" / model.features_table), model.spec)
     _, test = split_items(features, model)
     x_test, y_test = xy(test, model.spec)
     result = permutation_importance(
@@ -81,7 +81,7 @@ def champion_importance(
         y_test,
         n_repeats=config.analysis.permutation_repeats,
         random_state=model.training.seed,
-        scoring="neg_mean_absolute_error",
+        scoring=TUNING_SCORES[model.spec.task],  # the point's own loss
     )
     return pl.DataFrame(
         {
@@ -154,9 +154,10 @@ def model_studies(
     data_dir: Path,
     tracking_uri: str,
 ) -> dict[str, pl.DataFrame]:
-    """The studies every model gets: its target, its features, and its champion's errors."""
+    """The studies every model gets: its target, its features, and its champion's errors -
+    on the items whose target is known."""
     analysis, spec, items = config.analysis, model.spec, model.items
-    features = read_table(data_dir / "features" / model.features_table)
+    features = labelled(read_table(data_dir / "features" / model.features_table), spec)
     numeric = numeric_profile(features, spec, items.period, items.time)
     categorical = categorical_profile(features, spec, items.period, items.time, analysis.min_rows)
     importance = champion_importance(config, model, data_dir, tracking_uri)

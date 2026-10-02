@@ -44,6 +44,43 @@ def cite(passage: dict[str, Any], documents: dict[str, dict[str, Any]]) -> str:
     return f'{document.get("publisher", "")}, "{title}"{year}, {where}'.lstrip(", ")
 
 
+def unstated_dates(body: type[BaseModel], request: dict[str, Any], question: str) -> dict[str, Any]:
+    """The request without the optional dates the question never states.
+
+    Told a date field defaults to today, the 4B filled it anyway, with a day of its own -
+    2023-10-07, across questions that named no date at all - and the model was then asked
+    about a day nobody asked about. A date whose year the question does not give is the
+    model's invention: it is dropped, and the API applies its default."""
+    schema = body.model_json_schema()
+    required = set(schema.get("required", ()))
+    kept = dict(request)
+    for name, spec in schema["properties"].items():
+        is_date = any(s.get("format") == "date" for s in spec.get("anyOf", [spec]))
+        value = kept.get(name)
+        unstated = isinstance(value, str) and value[:4] not in question
+        if is_date and name not in required and unstated:
+            del kept[name]
+    return kept
+
+
+def described(response: dict[str, Any]) -> str:
+    """A prediction in words, its range and its level included: what the answer is
+    written from. A 4B does not multiply a price by a percent change reliably, so the
+    level comes computed."""
+    text = f"{response['target']} = {response['prediction']:.2f}"
+    if response.get("lower") is not None and response.get("upper") is not None:
+        text += (
+            f", between {response['lower']:.2f} and {response['upper']:.2f} "
+            f"{response['coverage']:.0%} of the time"
+        )
+    level = response.get("level")
+    if level:
+        text += f"; in {level['of']}, from {level['now']:.2f} now to {level['prediction']:.2f}"
+        if level.get("lower") is not None and level.get("upper") is not None:
+            text += f" (between {level['lower']:.2f} and {level['upper']:.2f})"
+    return text
+
+
 def fields(body: type[BaseModel]) -> str:
     """A request body's fields as the model is told them: name, type, whether required,
     and the description. Ollama constrains the reply to the schema but never shows it to
@@ -91,8 +128,10 @@ def predict(
         fields=fields(body),
         question=asked or question,
     )
-    described = generator.ask(prompt, body)
-    request = described.model_dump(mode="json", exclude_none=True)
+    item = generator.ask(prompt, body)
+    request = unstated_dates(
+        body, item.model_dump(mode="json", exclude_none=True), asked or question
+    )
     try:
         response = api.post(f"/models/{name}/predict", json=request)
         response.raise_for_status()
