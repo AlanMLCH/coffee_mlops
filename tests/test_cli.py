@@ -484,7 +484,8 @@ def test_monitor_says_what_drifted_and_retrains_only_what_calls_for_it(
     assert "  due for retraining: the target, total_cup_points, drifted" in result.output
     assert "offer: one period only, nothing to compare it with yet" in result.output
     assert (data_dir / "coffee" / "monitoring" / "review_drift").is_dir()
-    assert retrained == ["review"]
+    # The fixtures' auctions span several years too, and theirs drifted as well.
+    assert retrained == ["review", "auction"]
 
 
 def test_a_model_that_did_not_drift_is_left_alone(
@@ -526,3 +527,15 @@ def test_a_model_already_trained_on_the_rows_is_not_retrained_and_its_drift_is_r
     assert "the same rows run run-9 learned from: no retraining due" in result.output
     assert "drift, recorded: the target drifted" in result.output
     assert retrained == []
+
+
+def test_export_writes_the_showcase_snapshot_and_says_what_stays_home(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    CliRunner().invoke(cli.app, ["data", "run"])
+
+    result = CliRunner().invoke(cli.app, ["export", "--to", str(tmp_path / "dist")])
+
+    assert result.exit_code == 0, result.output
+    assert "coffee-showcase-" in result.output and "1 of them in part" in result.output
+    assert "withheld clean.roaster_flavors: the tasting notes come from" in result.output

@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from domains.coffee.adapter import CoffeeAdapter
@@ -12,7 +13,7 @@ from mlops_core.data.clean import build_clean
 from mlops_core.ml.features import build_features
 from mlops_core.ml.predict import batch_predict
 from mlops_core.ml.registry import ServedModel
-from mlops_core.storage import MANIFEST_NAME, latest_partition, read_table
+from mlops_core.storage import MANIFEST_NAME, latest_partition, read_table, write_table
 from tests.fakes import ConstantModel
 
 AT = datetime(2026, 9, 20, 12, tzinfo=UTC)
@@ -30,6 +31,13 @@ EMPTY_ON_THE_FIXTURES = {
     "farmgate_prices",
     "borough_profile_coffee",
     "zone_coffee_correlations",
+    # Too few months, municipalities or readings on the fixtures to say anything.
+    "price_transmission",
+    "municipality_types",
+    "municipality_type_profiles",
+    "chain_strategies",
+    "price_outlook",
+    "zones_categorical_profile",  # the zones model has no categorical feature
 }
 # The core's studies are computed per model and named after it; the domain's are not.
 ALWAYS_WRITTEN = {
@@ -208,6 +216,28 @@ def test_an_empty_study_does_not_take_the_figures_down_with_it(
 
     assert "market_share" not in output.figures
     assert {"review_target_distribution", "review_numeric_signal"} <= set(output.figures)
+
+
+def test_a_model_whose_items_all_wait_for_their_target_is_skipped(
+    analysis_adapter: CoffeeAdapter,
+    data_dir: Path,
+    champion: ServedModel,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = analysis_adapter.config
+    review = config.model_named("review")
+    waiting = review.model_copy(
+        update={"name": "waiting", "spec": review.spec.model_copy(update={"unlabelled": True})}
+    )
+    reviewed = read_table(data_dir / "features" / review.features_table)
+    unknown = reviewed.with_columns(pl.lit(None, pl.Float64).alias(review.spec.target))
+    write_table(unknown, data_dir / "features" / waiting.features_table, {})
+    adapter = CoffeeAdapter(config.model_copy(update={"models": [*config.models, waiting]}))
+
+    output = build_analysis(adapter, data_dir, "sqlite:///unused", at=AT)
+
+    assert "waiting has no item with a known target yet" in caplog.text
+    assert not any(name.startswith("waiting_") for name in output.tables)
 
 
 def test_a_model_without_features_yet_is_skipped_not_fatal(

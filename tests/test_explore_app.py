@@ -23,6 +23,7 @@ from mlops_core.config import MapView
 from mlops_core.data.clean import build_clean
 from mlops_core.explore import app as app_module
 from mlops_core.explore.charts import Areas
+from mlops_core.explore.export import export_snapshot
 from mlops_core.explore.layers import ranked
 from mlops_core.explore.maps import (
     NO_VALUE,
@@ -588,3 +589,20 @@ def test_a_domain_without_a_map_says_so(
     page = explorer(data_dir, monkeypatch)
 
     assert "declares no `explore:` section" in page.error[0].value
+
+
+def test_a_showcase_is_the_page_over_a_snapshot_without_the_agent(
+    data_dir: Path, coffee_adapter: CoffeeAdapter, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    snapshot = export_snapshot(coffee_adapter.config, data_dir / "coffee", tmp_path / "dist")
+    elsewhere = tmp_path / "cloud"  # nothing built there: the snapshot is all it has
+    monkeypatch.setenv("MLOPS_SHOWCASE", str(snapshot.archive))
+
+    page = explorer(elsewhere, monkeypatch, view=ABOUT)
+
+    assert not page.exception
+    assert ASK not in [tab.label for tab in page.tabs]
+    assert any("A snapshot of" in caption.value for caption in page.caption)
+    assert any("ODbL" in m.value for m in page.markdown)  # whose data it is
+    assert (elsewhere / "coffee" / "clean" / "coffee_shops").is_dir()
+    assert not (elsewhere / "coffee" / "clean" / "cup_of_excellence").exists()

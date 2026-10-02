@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     reply_cache: bool = True
     # Where `make explore` serves the explorer: the MCP server's results link to it.
     explore_url: str = "http://localhost:8502"
+    # A snapshot `mlops export` wrote - a URL, such as a release asset, or a path: set, the
+    # explorer runs as a showcase, from it alone, without the agent.
+    showcase: str | None = None
 
 
 def unread_settings(names: Iterable[str], domain: str) -> dict[str, str]:
@@ -725,6 +728,29 @@ class ExploreFinding(BaseModel):
     color: str | None = None
 
 
+class ShowcaseConfig(BaseModel):
+    """What a published snapshot of the explorer may hold (`mlops export`).
+
+    Every table the explorer's pages name goes, with every study and figure, unless a
+    source's terms keep it home: a table here is never exported, and a page that reads it
+    says it is not in the showcase. A table can also go only in part.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    withheld: dict[str, str] = {}  # layer.table -> why it stays home
+    rows: dict[str, str] = {}  # layer.table -> the condition its exported rows meet
+    credits: str = ""  # Markdown: whom the showcase's data comes from, as their terms ask
+
+    @field_validator("withheld", "rows", mode="after")
+    @classmethod
+    def _tables_are_named_with_their_layer(cls, tables: dict[str, str]) -> dict[str, str]:
+        unqualified = sorted(t for t in tables if not re.fullmatch(r"[a-z_]+\.\w+", t))
+        if unqualified:
+            raise ValueError(f"Name tables as layer.table: {unqualified}")
+        return tables
+
+
 class ExploreConfig(BaseModel):
     """The explorer app (`mlops explore`): its map and layers, the numbers over it, the
     tables a person can slice, the findings it opens with, and questions to start with."""
@@ -741,6 +767,20 @@ class ExploreConfig(BaseModel):
     datasets: list[ExploreDataset] = []
     findings: list[ExploreFinding] = []
     examples: list[str] = []
+    showcase: ShowcaseConfig = ShowcaseConfig()
+
+    @property
+    def queries(self) -> list[str]:
+        """Every query and table name the pages hold: what a snapshot has to answer."""
+        areas = [a.table for a in (self.areas, *(lay.areas for lay in self.layers)) if a]
+        return [
+            *areas,
+            *(layer.sql for layer in self.layers),
+            *(m.sql for m in self.metrics),
+            *(m.trend for m in self.metrics if m.trend),
+            *(f"{d.table} {d.where or ''}" for d in self.datasets),
+            *(f.sql for f in self.findings),
+        ]
 
     @model_validator(mode="after")
     def _an_areas_layer_has_areas(self) -> Self:

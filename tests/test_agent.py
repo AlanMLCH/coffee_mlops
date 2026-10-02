@@ -79,6 +79,17 @@ PREDICTED = {
 NOTHING_TO_ADD = {"predicts": False, "figures": False}
 
 
+# The prediction tools of the models added in v1.1.1, in the YAML's order.
+NEW_PREDICTIONS = [
+    "predict_zones",
+    "predict_green_range",
+    "predict_shelf_price",
+    "predict_shop_kind",
+    "predict_auction",
+    "predict_households",
+]
+
+
 def answering(reply: dict[str, Any], shape: str) -> dict[str, Any]:
     return {"answered": True} | reply if shape == "AnswerReply" else reply
 
@@ -920,6 +931,7 @@ def test_the_mcp_server_offers_the_agents_tools_all_read_only(
         "predict_review",
         "predict_offer",
         "predict_green_price",
+        *NEW_PREDICTIONS,
         "search_documents",
         "draw",
         "explore_segment",
@@ -1059,6 +1071,7 @@ def test_the_mcp_command_serves_on_stdio(
         "predict_review",
         "predict_offer",
         "predict_green_price",
+        *NEW_PREDICTIONS,
         "search_documents",
         "explore_segment",
         "map_layer",

@@ -1,7 +1,8 @@
 # Running it in the cloud: a plan
 
-**Status: a plan, not built.** Today the whole project runs on one laptop, and only when
-someone runs it (decided 2026-09-28): no process is left collecting history on its own.
+**Status: a plan; its first stage is built (v1.1.1), not deployed.** Today the whole
+project runs on one laptop, and only when someone runs it (decided 2026-09-28): no process
+is left collecting history on its own.
 This page is what it would take to run it automated and online, cheapest step first, so
 the decision can be made later with the costs in view.
 
@@ -21,21 +22,39 @@ long-running processes:
 | Data | Parquet on local disk, read through DuckDB | functions have no disk that survives the call |
 
 The local model is the biggest reason, but not the only one: without it, the explorer and
-the services still need somewhere that stays on. What does fit Vercel is a static
-showcase (stage 1 below).
+the services still need somewhere that stays on. What fits a free host is the explorer
+without its agent (stage 1 below).
 
 ## Three stages, cheapest first
 
-### 1. A static showcase - no server, no recurring cost
+### 1. A showcase - the explorer itself, without the agent (built in v1.1.1)
 
-Publish what the pipeline already produces, as files: the figures, the studies' tables,
-the explorer's layers exported as GeoJSON and JSON, the evaluation results. A static page
-draws the deck.gl map in the browser from those files. No agent and no live queries: it
-shows the last run, refreshed when someone runs the pipeline by hand and publishes.
-Fits Vercel or GitHub Pages.
+Not a separate static site: the same Streamlit app, in a showcase mode that reads a
+snapshot instead of the pipeline's data directory, and has no agent tab.
 
-What is new: an export command (`mlops export`) that writes the layers and studies as
-static files, and the static page itself.
+- `mlops export` writes the snapshot: every table the explorer's pages name, every study,
+  figure and monitor verdict, laid out as `data/<domain>/` is and zipped
+  (`dist/<domain>-showcase-<date>.zip`). The batch predictions the map and the findings
+  read go with it; the live ones (the API) and the agent do not.
+- What a source's terms keep home stays home, as the domain's `explore.showcase` says:
+  Cup of Excellence's lots ("All Rights Reserved"), the roasters' catalogues offer by
+  offer and their tasting notes coffee by coffee, and the CQI's 2023 scrape (its terms are
+  not verified; the 2018 one is MIT). The studies' aggregates of all of them go. Every
+  source is credited on the About page, OpenStreetMap's ODbL included.
+- `MLOPS_SHOWCASE=<the zip's URL or path> mlops explore` runs the showcase. It unpacks the
+  snapshot once and needs nothing else: no Ollama, no Qdrant, no MLflow, no API.
+
+To put it online (the owner's account, not done here):
+
+1. `make` the layers, then `uv run mlops export` and attach the zip to a GitHub release.
+2. On Streamlit Community Cloud, a new app from this repository: main file
+   `src/mlops_core/explore/app.py`, Python 3.12, and as secrets (environment variables)
+   `MLOPS_DOMAIN = "coffee"` and `MLOPS_SHOWCASE = "<the release asset's URL>"`.
+3. Its dependencies are the `explore` extra; if the host does not read `pyproject.toml`
+   extras, `uv export --extra explore --no-hashes --no-dev > requirements.txt` writes the
+   list it does read (generated at deploy time, never committed: it would drift).
+
+Refreshed by hand: run the pipeline, export, publish a new release, point the secret at it.
 
 ### 2. History without a server - a scheduled workflow
 

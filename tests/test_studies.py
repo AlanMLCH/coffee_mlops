@@ -99,6 +99,16 @@ def test_categorical_profile_exposes_a_changing_mix() -> None:
     assert taiwan["share_change"] == pytest.approx(0.5)
 
 
+def test_a_model_without_categorical_features_has_an_empty_profile() -> None:
+    numeric_only = SPEC.model_copy(update={"categorical": []})
+
+    profile = categorical_profile(features_frame(), numeric_only, "snapshot", "grading_date", 1)
+    numeric = numeric_profile(features_frame(), numeric_only, "snapshot", "grading_date")
+
+    assert profile.is_empty() and "share_change" in profile.columns
+    assert feature_recommendation(numeric, profile, None).height == len(numeric_only.numeric)
+
+
 def test_rare_levels_are_left_out_of_the_profile() -> None:
     frame = features_frame().with_columns(
         pl.when(pl.col("review_id") == "r0").then(pl.lit("Laos")).otherwise(pl.col("country"))
@@ -248,10 +258,12 @@ def test_market_history_follows_one_country_through_time() -> None:
 
 
 def test_studies_run_on_the_real_domain_config(coffee_config: DomainConfig) -> None:
-    """The configured columns must exist in the frames the pipeline passes."""
+    """The configured columns must exist in the frames the pipeline passes: a feature, or
+    a key such as a group split's column."""
     for model in coffee_config.models:
-        assert model.training.stratify_by in model.spec.categorical
-        assert model.training.baseline_group in model.spec.categorical
+        columns = {*model.keys, *model.spec.features}
+        assert model.training.stratify_by in columns
+        assert model.training.baseline_group in columns
     assert coffee_config.model_named("review").items.period == "snapshot"
 
 

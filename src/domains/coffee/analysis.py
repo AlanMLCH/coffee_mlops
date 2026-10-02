@@ -32,9 +32,12 @@ from domains.coffee.config import (
 from domains.coffee.excellence import coe_by_year, coe_score_price
 from domains.coffee.households import NATIONAL as COUNTRY
 from domains.coffee.households import household_coffee_by_decile, household_coffee_by_state
+from domains.coffee.outlook import price_outlook
 from domains.coffee.prices import CENTS_PER_LB_PER_USD_PER_KG
 from domains.coffee.roaster_sheets import fold
 from domains.coffee.schemas import METRO, METROBUS
+from domains.coffee.segments import chain_strategies, municipality_types, price_transmission
+from domains.coffee.zone_profile import zone_profile
 from mlops_core.analysis.figures import (
     BASELINE,
     INK,
@@ -116,7 +119,7 @@ def studies(
             clean["transit_stations"], clean["transit_ridership"], shops, clean["boroughs"]
         ),
         "transit_by_year": transit_by_year(clean["transit_ridership"]),
-        **zone_studies(clean["census_zones"], shops, clean["transit_stations"]),
+        **zone_studies(clean["census_zones"], shops, clean["transit_stations"], clean["boroughs"]),
         "register_editions": register_editions(shops),
         "shop_turnover": shop_turnover(clean["coffee_shop_history"], redraw_m),
         "kind_agreement": agreement,
@@ -151,6 +154,16 @@ def studies(
         ),
         "coe_score_price": coe_score_price(clean["cup_of_excellence"]),
         "real_prices": real_prices(production, green, prices, clean["consumer_price_index"]),
+        "price_transmission": price_transmission(green, prices, production),
+        **dict(
+            zip(
+                ("municipality_types", "municipality_type_profiles"),
+                municipality_types(production),
+                strict=True,
+            )
+        ),
+        "chain_strategies": chain_strategies(prices),
+        "price_outlook": price_outlook(clean["price_indicators"]),
     }
 
 
@@ -444,49 +457,39 @@ def transit_figure(by_year: pl.DataFrame) -> Figure:
 
 
 def zone_coffee_shops(
-    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame
+    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame, boroughs: pl.DataFrame
 ) -> pl.DataFrame:
     """Every urban AGEB with what the census counted in it, its DENUE coffee shops and its
-    stations: the city's finest common grain, a row per zone. Shares are of the zone's
-    lived-in dwellings or people; a figure INEGI withheld stays null."""
-    coffee = (
-        shops.filter(pl.col("source") == "denue", pl.col("kind") == COFFEE)
-        .group_by("zone_id")
-        .agg(pl.len().cast(pl.Int64).alias("coffee_shops"))
-    )
-    boarding = stations.group_by("zone_id").agg(
-        (pl.col("system") == METRO).sum().cast(pl.Int64).alias("metro_stations"),
-        (pl.col("system") == METROBUS).sum().cast(pl.Int64).alias("metrobus_stations"),
-    )
-    per_dwelling = {"internet_pct": "dwellings_with_internet", "car_pct": "dwellings_with_car",
-                    "computer_pct": "dwellings_with_computer"}  # fmt: skip
+    stations: the city's finest common grain, a row per zone - the same zones the `zones`
+    model reads (`domains.coffee.zone_profile`). Shares are of the zone's lived-in
+    dwellings or people; a figure INEGI withheld stays null."""
     return (
-        zones.select(
+        zone_profile(zones, shops, stations, boroughs)
+        .select(
             "zone_id",
             "borough",
             "population",
             "area_km2",
-            (pl.col("population") / pl.col("area_km2")).alias("people_per_km2"),
+            "people_per_km2",
             "schooling_years",
-            *[
-                (100 * pl.col(count) / pl.col("dwellings")).alias(name)
-                for name, count in per_dwelling.items()
-            ],
-            (100 * pl.col("people_65_plus") / pl.col("population")).alias("aged_65_plus_pct"),
+            "internet_pct",
+            "car_pct",
+            "computer_pct",
+            "aged_65_plus_pct",
+            "coffee_shops",
+            "metro_stations",
+            "metrobus_stations",
         )
-        .join(coffee, on="zone_id", how="left")
-        .join(boarding, on="zone_id", how="left")
-        .with_columns(pl.col("coffee_shops", "metro_stations", "metrobus_stations").fill_null(0))
         .with_columns((pl.col("coffee_shops") / pl.col("area_km2")).alias("coffee_shops_per_km2"))
         .sort("coffee_shops", "zone_id", descending=[True, False])
     )
 
 
 def zone_studies(
-    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame
+    zones: pl.DataFrame, shops: pl.DataFrame, stations: pl.DataFrame, boroughs: pl.DataFrame
 ) -> dict[str, pl.DataFrame]:
     """The urban AGEBs, and what they say set side by side."""
-    table = zone_coffee_shops(zones, shops, stations)
+    table = zone_coffee_shops(zones, shops, stations, boroughs)
     return {
         "zone_coffee_shops": table,
         "zone_coffee_correlations": zone_coffee_correlations(table),

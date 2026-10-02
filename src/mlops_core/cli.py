@@ -303,6 +303,29 @@ def explore(domain: Domain = None, port: int = 8502) -> None:
     streamlit_cli.main()
 
 
+@app.command()
+def export(
+    domain: Domain = None,
+    to: Annotated[Path, typer.Option(help="Where the snapshot's zip is written")] = Path("dist"),
+) -> None:
+    """Write a snapshot of what the explorer shows - the tables its pages read, every study
+    and figure - for its showcase: the same app, published without the agent
+    (`MLOPS_SHOWCASE=<the zip's URL or path> mlops explore`). Tables a source's terms keep
+    home are left out, as the domain's `explore.showcase` says."""
+    with _needs_extra("explore"):
+        from mlops_core.explore.export import export_snapshot
+    config = _adapter(domain).config
+    to.mkdir(parents=True, exist_ok=True)
+    snapshot = export_snapshot(config, _data_dir(config), to)
+    typer.echo(
+        f"{snapshot.archive}: {len(snapshot.tables)} tables, {len(snapshot.filtered)} of them "
+        "in part"
+    )
+    withheld = config.explore.showcase.withheld if config.explore else {}
+    for name in snapshot.withheld:
+        typer.echo(f"  withheld {name}: {withheld[name]}")
+
+
 @rag_app.command()
 def draft(
     domain: Domain = None,

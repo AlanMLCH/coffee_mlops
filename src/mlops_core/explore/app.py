@@ -87,6 +87,11 @@ settings = Settings()
 adapter = load_adapter(settings.domain)
 config = adapter.config
 data_dir = settings.data_dir / config.name
+# A showcase is the same app over a snapshot `mlops export` wrote: no agent to ask.
+SHOWCASE = settings.showcase is not None
+if SHOWCASE:
+    TABS = [tab for tab in TABS if tab != ASK]
+    VIEWS = {view: tab for view, tab in VIEWS.items() if tab != ASK}
 st.set_page_config(
     page_title=config.explore.title if config.explore else config.name,
     page_icon=":material/explore:",
@@ -102,10 +107,21 @@ explore = config.explore
 # --- The data: one locked session, and every query's rows cached ----------------------------
 
 
+@st.cache_resource(show_spinner="Unpacking the snapshot")
+def snapshot() -> dict[str, Any]:
+    """What a showcase's snapshot says about itself, unpacked as the data directory once."""
+    from mlops_core.explore.export import unpack_snapshot
+
+    assert settings.showcase is not None
+    return unpack_snapshot(settings.showcase, data_dir)
+
+
 @st.cache_resource
 def session() -> duckdb.DuckDBPyConnection:
     """One locked, read-only session for the page. Every browser tab shares it, and each
     query runs on a cursor of its own (`sql.run_select`), so they do not wait in line."""
+    if SHOWCASE:
+        snapshot()
     return read_only(data_dir)
 
 
@@ -196,6 +212,13 @@ def header() -> None:
     st.html(CSS)
     intro = f"<p>{html.escape(explore.intro)}</p>" if explore.intro else ""
     st.html(f'<div class="explore-hero"><h1>{html.escape(explore.title)}</h1>{intro}</div>')
+    if SHOWCASE:
+        taken = str(snapshot().get("exported_at", ""))[:10]
+        st.caption(
+            f"A snapshot of {taken}: the tables, studies and models' batch predictions as "
+            "they were then. The agent, which needs a model running beside it, is not part "
+            "of it; the source code, which runs all of it locally, is."
+        )
     if not explore.metrics:
         return
     for column, metric in zip(st.columns(len(explore.metrics)), explore.metrics, strict=True):
@@ -754,6 +777,9 @@ def show_residuals(model: str, period: str) -> None:
 def about_tab() -> None:
     if explore.about:
         st.markdown(explore.about)
+    if explore.showcase.credits:
+        st.subheader("Whose data this is")
+        st.markdown(explore.showcase.credits)
     st.subheader("The models")
     for model in config.models:
         st.markdown(f"- **{model.name}** - {model.description}")
@@ -799,7 +825,7 @@ def opened_from_link() -> None:
     elif layer is not None:
         st.session_state["map_places"] = [layer.name]
     question = asked.get("q", "").strip()
-    if question:
+    if question and not SHOWCASE:  # a showcase has no agent to ask
         st.session_state["pending"] = question
         st.session_state["view"] = ASK
 
@@ -809,9 +835,9 @@ def opened_from_link() -> None:
 opened_from_link()
 header()
 views = st.tabs(TABS, key="view", on_change="rerun")
-for tab, render in zip(
-    views, (map_tab, ask_tab, segments_tab, findings_tab, models_tab, about_tab), strict=True
-):
+pages = {MAP: map_tab, ASK: ask_tab, SEGMENTS: segments_tab, FINDINGS: findings_tab,
+         MODELS: models_tab, ABOUT: about_tab}  # fmt: skip
+for tab, render in zip(views, (pages[name] for name in TABS), strict=True):
     if tab.open:
         with tab:
             render()

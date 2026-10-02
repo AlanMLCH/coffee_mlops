@@ -27,8 +27,11 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 - **Keeps every download untouched and forever** in a content-addressed raw layer:
   running again only adds what is new, never overwrites. Every source and every clean
   table is held to a Pandera contract that stops the pipeline when broken.
-- **Trains three models**, each promoted only if a paired bootstrap is 95% sure it beats
-  both the baselines and the current champion; every run and model is in MLflow.
+- **Trains nine models of four kinds** - quantities, counts, probabilities and ranges,
+  each judged by its own loss (absolute error, Poisson deviance, Brier score, interval
+  score) - each promoted only if a paired bootstrap is 95% sure it beats both the
+  baselines and the current champion; every run and model is in MLflow. Three were
+  refused, and say so.
 - **Monitors drift** between periods with Evidently, and retrains once per new version
   of the data - letting the gate decide whether the new model ships.
 - **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`) over three tools:
@@ -51,6 +54,12 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Cup score (CQI, trained on 2010-2018, tested on 2022-2023) | MAE **1.648** points | 1.894, the best baseline; certain |
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
 | Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
+| Coffee shops per city block group (2,431 AGEBs, out of fold by borough) | Poisson deviance **1.82** | 3.25, the city's mean; certain |
+| Is a place DENUE could not classify by name a coffee shop? (out of fold by zone) | Brier **0.150**, AUC 0.86 | 0.235, each borough's share; certain |
+| A jar's fair price on a shelf (PROFECO, tested on 2026) | MAE **18.4** pesos | 19.7, each product's mean; certain - mostly a level shift: coffee rose faster than everything else |
+| Does a household buy coffee? (ENIGH, out of fold by sampling unit) | Brier **0.1166**, AUC 0.59 | 0.1170, each state's share: certain, and barely better |
+| Green coffee's range 3, 6, 12 months ahead | **not promoted** | its own history's range covers better (the model's held 71% of 2021-2026, not 80%) |
+| A Cup of Excellence lot's premium over its auction | **not promoted** | each score band's past premium does better (MAE 54 against 71 points) |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
 | The agent, 54 questions end to end | **78%** correct, 96% verified | seven peripheral tables are kept from the local 4B model; the two questions that read them are left out (75% counting them as wrong) |
 | The agent, 25 held-out questions written before the fixes of 29 September | **84%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic |
@@ -59,7 +68,8 @@ The numbers come with their limits, stated where they are measured: the cup-scor
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
 mostly from one shop, and the evaluation sets were written by models - the retrieval
 questions by the local one, the SQL and routing cases by an assistant - and not reviewed
-by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs/model-card-price.md).
+by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs/model-card-price.md);
+the newer models' evidence is in the explorer's Models tab and MLflow.
 
 ## What the data says
 
@@ -98,6 +108,17 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 - Mexico's best lots at auction (Cup of Excellence, 2012-2026): the median winning lot
   fetches four to eight times the market price of its year, and each point of score adds
   about 41% to the price (95% interval 37% to 44%).
+- Where coffee shops are missing: 430 of the 2,431 block groups have at least one fewer
+  than a model that never saw their borough expects for their residents, homes, stations
+  and food places - 819 in all, Miguel Hidalgo short the most. The centre has 684 where
+  its profile predicts 406: it serves far more people than live in it.
+- Green coffee a year from now: four times in five since 1960, other milds moved between
+  -31% and +51% in twelve months - from 362 US cents a pound in August 2026, between 251
+  and 546 in August 2027. No model read off the months before did better.
+- A 1% move in the international price is 0.63% of the cherry's price by the next year
+  (0.21 to 0.79); on the shelf, 24 months show no pass-through that can be told from zero.
+  For the same jar the same month, Soriana's stores ask 2-3% more than the market and
+  Superissste 8% less.
 - In today's pesos (INEGI's consumer price index): a kilogram of coffee cherry paid 4.90
   pesos of August 2026 in 2003, 11.91 at its 2012 peak and 8.45 in 2025 - 4.5 times more in
   nominal pesos, 1.7 in real ones. Plain ground coffee on the shelf rose 28% in real terms
@@ -111,6 +132,13 @@ by a person. Model cards: [cup score](docs/model-card.md), [price per kilo](docs
 `make explore` opens it at http://localhost:8502: the map, questions to the agent, a table
 sliced by hand, the findings and every study, and each model's evidence and monitor
 verdict. Everything it draws is a read-only query; every answer shows the query behind it.
+The map draws the models too: the block groups short of coffee shops, the places that are
+probably coffee shops though their names do not say, and the shelves under their fair price.
+
+`mlops export` writes a snapshot of what it shows, and `MLOPS_SHOWCASE=<the snapshot>` runs
+the same app over it alone, without the agent - a showcase that needs no local model and no
+services. What a source's terms keep home (Cup of Excellence's lots, the roasters'
+catalogues) is never in it; [the cloud plan](docs/cloud-plan.md) says how to publish it.
 
 ![The explorer: the price ladder, the map, the boroughs ranked](docs/figures/explorer_map.png)
 
@@ -243,9 +271,9 @@ current month; run it before a month ends). `make help` lists every target.
 | 3 | Scraping | Semi-structured parsing, RAG, the agent, MCP | done |
 | 4 | Time series | Accumulating sources, forecasting, drift, retraining, the explorer | done: v1.0 |
 
-The coffee domain closes at **v1.1**: 25 sources, the household survey, Cup of Excellence,
-prices in real pesos, the map block by block. Next, v1.2 measures larger hosted models for
-the agent. A second domain (video games) is the test of whether the framework is reusable,
+The coffee domain closes at **v1.1.1**: 25 sources, the household survey, Cup of
+Excellence, prices in real pesos, the map block by block, nine models of four kinds and
+the explorer's showcase. Next, v1.2 measures larger hosted models for the agent. A second domain (video games) is the test of whether the framework is reusable,
 and its cost in new lines will be published here.
 
 > **The CQI data is not current.** Both public snapshots of the Coffee Quality

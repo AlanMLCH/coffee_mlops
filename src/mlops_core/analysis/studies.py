@@ -85,12 +85,28 @@ def numeric_profile(
     )
 
 
+CATEGORICAL_PROFILE = {
+    "feature": pl.String,
+    "level": pl.String,
+    "n_first": pl.UInt32,
+    "n_last": pl.UInt32,
+    "share_first": pl.Float64,
+    "share_last": pl.Float64,
+    "mean_target_first": pl.Float64,
+    "mean_target_last": pl.Float64,
+    "share_change": pl.Float64,
+}
+
+
 def categorical_profile(
     features: pl.DataFrame, spec: ModelSpec, period: str, time: str, min_rows: int
 ) -> pl.DataFrame:
     """Per level of each categorical feature: its weight in each period and its mean
     target. A level that grows from 6% to 30% is a composition change, not drift. With a
-    single period, first and last are the same one, and its rows are counted once."""
+    single period, first and last are the same one, and its rows are counted once. A model
+    with no categorical feature has an empty profile."""
+    if not spec.categorical:
+        return pl.DataFrame(schema=CATEGORICAL_PROFILE)
     periods = periods_in_order(features, period, time)
     first, last = periods[0], periods[-1]
     rows = pl.col("n_first") if first == last else pl.col("n_first") + pl.col("n_last")

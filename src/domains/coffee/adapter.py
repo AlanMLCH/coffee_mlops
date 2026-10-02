@@ -20,6 +20,8 @@ import pandera.polars as pa
 import polars as pl
 from pydantic import BaseModel, SecretStr
 
+from domains.coffee.auction import AUCTION_CONTEXT, add_lot_market
+from domains.coffee.buyers import add_household_traits
 from domains.coffee.config import CoffeeConfig, CoffeeCredentials
 from domains.coffee.features import (
     CONTEXT_TABLE,
@@ -28,7 +30,18 @@ from domains.coffee.features import (
     add_market_context,
 )
 from domains.coffee.forecast import PRICES_TABLE, add_price_history
-from domains.coffee.request import Lot, Offer, PriceMonth
+from domains.coffee.outlook import add_price_outlook
+from domains.coffee.request import (
+    AuctionLot,
+    Household,
+    Lot,
+    Offer,
+    Place,
+    PriceMonth,
+    PriceOutlook,
+    ShelfItem,
+    Zone,
+)
 from domains.coffee.schemas import (
     ENIGH_HOUSEHOLDS_RAW,
     ENIGH_SPENDING_RAW,
@@ -38,6 +51,9 @@ from domains.coffee.schemas import (
     household_coffee_schema,
     intercensal_schema,
 )
+from domains.coffee.shelf import SHELF_CONTEXT, add_shelf_context
+from domains.coffee.shop_kind import add_place_traits
+from domains.coffee.zone_profile import ZONE_CONTEXT, add_zone_profile
 from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
 
 if TYPE_CHECKING:
@@ -73,6 +89,43 @@ MODELS = {
         context_tables=(PRICES_TABLE,),
         enrich=lambda items, context: add_price_history(items, context[PRICES_TABLE]),
         request=PriceMonth,
+    ),
+    # How many coffee shops a zone of the city has, for what it is: its context is the
+    # census, the registers and the stations it is looked up in.
+    "zones": ModelHooks(
+        context_tables=ZONE_CONTEXT,
+        enrich=add_zone_profile,
+        request=Zone,
+    ),
+    # Where green coffee could be in 3, 6 or 12 months: the history is its context.
+    "green_range": ModelHooks(
+        context_tables=(PRICES_TABLE,),
+        enrich=add_price_outlook,
+        request=PriceOutlook,
+    ),
+    # What a jar should cost on a shelf, in today's pesos: the index is its context.
+    "shelf_price": ModelHooks(
+        context_tables=SHELF_CONTEXT,
+        enrich=add_shelf_context,
+        request=ShelfItem,
+    ),
+    # Whether a place is a coffee shop: its zone is its context.
+    "shop_kind": ModelHooks(
+        context_tables=ZONE_CONTEXT,
+        enrich=add_place_traits,
+        request=Place,
+    ),
+    # What a lot fetches at auction: the other lots of its year, and its market.
+    "auction": ModelHooks(
+        context_tables=AUCTION_CONTEXT,
+        enrich=add_lot_market,
+        request=AuctionLot,
+    ),
+    # Whether a household buys coffee: it needs nothing beyond itself.
+    "households": ModelHooks(
+        context_tables=(),
+        enrich=lambda items, context: add_household_traits(items),
+        request=Household,
     ),
 }
 

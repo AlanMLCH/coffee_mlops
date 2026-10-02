@@ -1169,6 +1169,320 @@ models:
       edges: [-5, 0, 5]
       labels: ["fell over 5%", "fell up to 5%", "rose up to 5%", "rose over 5%"]
 
+  # Where a coffee shop is missing (v1.1.1): how many an urban AGEB has, from what it is.
+  # Set against the ones it has, by a model that never saw its borough, it is the map of
+  # underserved zones. What a zone knows is domains/coffee/zone_profile.py.
+  - name: zones # -> zones_features, zones_predictions
+    description: >-
+      How many coffee shops an urban AGEB of Mexico City (a block group of the 2020
+      Census) has for what it is: its residents and how dense, their schooling and work,
+      its homes, its Metro and Metrobús stations, the food and drink places around and
+      its borough's jobs. Set against the coffee shops it has, it says where they are missing.
+    example: {zone_id: "0901500010010"}
+    items:
+      table: census_zones
+      id: zone_id
+      time: census_day # the census' reference date
+      period: census
+    spec:
+      target: coffee_shops
+      task: count
+      categorical: []
+      numeric:
+        - population
+        - people_per_km2
+        - schooling_years
+        - active_pct
+        - aged_65_plus_pct
+        - internet_pct
+        - car_pct
+        - computer_pct
+        - metro_stations
+        - metrobus_stations
+        - other_places # juice bars, ice cream, soda fountains, tea: a street that sells food
+        - borough_jobs_per_resident # the daytime population the census does not count
+      leakage: []
+    training:
+      # Whole boroughs held out: a zone is judged by a model that never saw its neighbours.
+      split:
+        kind: group
+        column: borough_id
+        test_share: 0.25
+      cv_folds: 4
+      trials: 40
+      seed: 42
+      baseline_group: borough_id # unseen in every fold: the overall mean, said plainly
+      # The rate per resident, times the zone's residents: what a count has to beat.
+      baseline_exposure: population
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      stratify_by: borough_id
+      min_group_size: 5
+      registered_model: coffee-zone-shops
+    target_bands:
+      edges: [1, 5]
+      labels: ["none", "1 to 4", "5 or more"]
+
+  # Where green coffee could be in 3, 6 or 12 months (v1.1.1): a range, not a point. What
+  # an item knows is domains/coffee/outlook.py: green_price's history, at a horizon.
+  - name: green_range # -> green_range_features, green_range_predictions
+    description: >-
+      The range, four times in five, of an international green coffee price - other
+      mild Arabicas or Robustas, the World Bank's monthly average - 3, 6 or 12 months
+      after the last published month, as a change in percent and in US cents a pound.
+    example: {indicator: other_milds, months_ahead: 12}
+    items:
+      table: price_indicators
+      id: outlook_id # other_milds-2027-08-12m
+      time: month # the month the price is for
+      period: year
+    spec:
+      target: change_pct
+      interval: 0.8
+      relative_to: price_last # US cents a pound, the last published month
+      # The months ahead have no price yet: scored, never learned from.
+      unlabelled: true
+      categorical: [indicator, calendar_month]
+      numeric:
+        - horizon_months
+        - price_last
+        - change_last
+        - change_2_back
+        - change_3_back
+        - change_12m
+        - gap_to_mean_12m
+        - volatility_6m
+        - arabica_robusta_ratio
+      leakage: [usd_cents_per_lb]
+    training:
+      split:
+        kind: temporal
+        test_from: 2021-01-01 # the month priced, so no training item's change reaches into it
+        recalibration_window: 12
+      cv_folds: 5
+      trials: 40
+      seed: 42
+      # The historical range of each horizon's changes: what a range has to beat.
+      baseline_group: horizon_months
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      # Changes twelve months long a month apart share eleven months: the gate resamples
+      # whole years.
+      resample_by: year
+      stratify_by: horizon_months
+      min_group_size: 20
+      registered_model: coffee-green-range
+    target_bands:
+      edges: [-10, 0, 10]
+      labels: ["fell over 10%", "fell up to 10%", "rose up to 10%", "rose over 10%"]
+
+  # What a jar or bag of coffee should cost on a shelf (v1.1.1), in today's pesos; set
+  # against what the shelf asked, a deal or a markup. domains/coffee/shelf.py.
+  - name: shelf_price # -> shelf_price_features, shelf_price_predictions
+    description: >-
+      The fair price, in pesos of the latest month INEGI's INPC has published, of a jar
+      or bag of instant or ground coffee on a Mexican shelf (PROFECO's survey), from its
+      brand, size, whether sweetened or decaffeinated, the chain, its kind of store and
+      the state.
+    example:
+      {brand: Nescafé Clásico, grams: 200, product: instant, chain: Wal-mart,
+       state: Ciudad de México}
+    items:
+      table: consumer_prices
+      id: reading_id # store|product|day
+      time: date
+      period: month
+    spec:
+      target: price_today_mxn
+      categorical: [product_name, brand, product, chain, store_type, state]
+      numeric: [grams, sweetened, decaf]
+      leakage: [price_mxn, price_mxn_per_kg]
+    training:
+      split:
+        kind: temporal
+        test_from: 2026-01-01
+        recalibration_window: 2000
+      cv_folds: 5
+      trials: 30
+      seed: 42
+      # Each product at its own average price: what a fair price has to beat.
+      baseline_group: product_name
+      bootstrap_resamples: 2000
+      min_probability_better: 0.95
+      stratify_by: chain
+      min_group_size: 50
+      registered_model: coffee-shelf-price
+    target_bands:
+      edges: [80, 160]
+      labels: ["under $80", "$80-160", "over $160"]
+
+  # Whether a place whose name says nothing is a coffee shop (v1.1.1): learned from the
+  # places a name rule classified, scored on the ones none did. domains/coffee/shop_kind.py.
+  - name: shop_kind # -> shop_kind_features, shop_kind_predictions
+    description: >-
+      The probability that a place DENUE lists among coffee shops, ice cream parlours,
+      juice bars and soda fountains in Mexico City is a coffee shop, from the words of
+      its name, its staff and its zone - for the places whose name no rule classified.
+    example: {name: La Esquina, employees_band: 0 a 5 personas}
+    items:
+      table: coffee_shops
+      id: shop_id
+      time: listed_since
+      period: listed_year
+    spec:
+      target: is_coffee
+      task: probability
+      # The places no rule classified: what the model is for.
+      unlabelled: true
+      categorical: [employees_band, borough_id]
+      numeric:
+        - listed_since_year
+        - name_word_count
+        - name_puesto
+        - name_venta
+        - name_desayunos
+        - name_crepas
+        - name_snacks
+        - name_tortas
+        - name_restaurante
+        - name_kreme
+        - name_krispy
+        - name_turno
+        - name_postres
+        - name_ensaladas
+        - name_casa
+        - name_barra
+        - name_antojitos
+        - name_pasteleria
+        - name_cocteles
+        - name_cocina
+        - name_dulce
+        - name_matutino
+        - name_creperia
+        - name_gourmet
+        - name_pan
+        - name_comida
+        - name_tierra
+        - name_plaza
+        - name_neverias
+        - name_refresquerias
+        - name_similares
+        - name_oasis
+        - people_per_km2
+        - schooling_years
+        - internet_pct
+        - aged_65_plus_pct
+        - metro_stations
+        - metrobus_stations
+      leakage: [kind, name]
+    training:
+      # Places of one zone share a street: a zone is on one side only.
+      split:
+        kind: group
+        column: block
+        test_share: 0.25
+      cv_folds: 5
+      trials: 40
+      seed: 42
+      baseline_group: borough_id
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      stratify_by: employees_band
+      min_group_size: 20
+      registered_model: coffee-shop-kind
+    target_bands:
+      edges: [0.5]
+      labels: ["another kind", "a coffee shop"]
+
+  # What a lot fetches at Mexico's Cup of Excellence auction (v1.1.1), against the other
+  # lots of its auction. domains/coffee/auction.py says why not against the green market:
+  # that first version was refused by the gate.
+  - name: auction # -> auction_features, auction_predictions
+    description: >-
+      The premium, in percent over the median price of the other lots of its auction,
+      that a lot ranked at Mexico's Cup of Excellence fetches - and its price in US
+      dollars a pound at that median - from its score, varieties (Gesha above all),
+      process, state, weight and whether it was a national winner.
+    example: {score: 89.5, state: Veracruz, processing_method: washed, varieties: [gesha]}
+    items:
+      table: cup_of_excellence
+      id: lot_id
+      time: auction_year # the year: the catalogue gives no day
+      period: auction
+    spec:
+      target: premium_pct
+      relative_to: auction_median_usd_per_lb
+      unlabelled: true # an unsold lot: what it might have fetched
+      categorical: [state, processing_method, score_band]
+      numeric:
+        [score, national_winner, weight_kg, gesha, varieties_n, market_usd_per_lb,
+         auction_median_usd_per_lb]
+      leakage: [price_usd_per_lb, total_usd, rank, buyers]
+    training:
+      # Trained on 2012-2023, judged on the 2024-2026 auctions.
+      split:
+        kind: temporal
+        test_from: 2024-01-01
+        recalibration_window: 20
+      cv_folds: 5
+      trials: 40
+      seed: 42
+      search_space:
+        n_estimators: [50, 400]
+        num_leaves: [4, 16]
+        min_child_samples: [5, 30]
+        min_frequency: [2, 10]
+      # The premium a lot of its score fetched before: a buyer's guess from the score alone.
+      baseline_group: score_band
+      # Every lot at its auction's median: the proposal's baseline.
+      baseline_constant: 0
+      bootstrap_resamples: 5000
+      min_probability_better: 0.95
+      stratify_by: score_band
+      min_group_size: 5
+      registered_model: coffee-auction-premium
+    target_bands:
+      edges: [-25, 25]
+      labels: ["a quarter under the median or less", "near the median", "a quarter over or more"]
+
+  # Whether a household buys coffee to drink at home (v1.1.1): ENIGH 2024, household by
+  # household. domains/coffee/buyers.py.
+  - name: households # -> households_features, households_predictions
+    description: >-
+      The probability that a Mexican household bought coffee to drink at home - instant,
+      ground or preparations - in the week INEGI's ENIGH 2024 recorded its food, from its
+      state, its size, its income and whether it grows coffee.
+    example: {state: Ciudad de México, members: 3, income_month_mxn: 25000}
+    items:
+      table: household_coffee
+      id: household_id
+      time: survey_year
+      period: survey
+    spec:
+      target: buys_coffee
+      task: probability
+      categorical: [state]
+      numeric: [members, income_quarter_mxn, income_per_member_mxn, grows_coffee]
+      leakage: [instant_quarter_mxn, ground_quarter_mxn, prepared_quarter_mxn]
+    training:
+      # Households of one sampling unit are neighbours: a unit is on one side only.
+      split:
+        kind: group
+        column: psu
+        test_share: 0.25
+      cv_folds: 5
+      trials: 30
+      seed: 42
+      baseline_group: state
+      bootstrap_resamples: 2000
+      min_probability_better: 0.95
+      stratify_by: state
+      min_group_size: 200
+      registered_model: coffee-household-buyers
+    target_bands:
+      edges: [0.5]
+      labels: ["did not buy", "bought"]
+
 # Mexico's own coffee, from SIAP: which crop to read and in what unit. A different
 # name or unit for the same id stops the run - it would change what the numbers mean.
 production:
@@ -1366,7 +1680,10 @@ agent:
   # the rest. No evaluation question reads the first four; the history tables repeat the
   # current ones read by read (the agent filtered a snapshot for a register edition); the
   # city's census zones, transit and the borough survey are the map's and the studies',
-  # and the price index is a tool of the studies, not a question's answer.
+  # and the price index is a tool of the studies, not a question's answer. The models of
+  # v1.1.1 reach the agent through its prediction tool, one item at a time; their batch
+  # tables are the map's and the findings' (2026-10-02): twelve more tables would cost the
+  # 4B's queries more than they give it.
   hidden_tables:
     - clean.census_zones
     - clean.transit_stations
@@ -1375,6 +1692,18 @@ agent:
     - clean.transit_ridership
     - clean.borough_profile
     - clean.consumer_price_index
+    - features.zones_features
+    - predictions.zones_predictions
+    - features.green_range_features
+    - predictions.green_range_predictions
+    - features.shelf_price_features
+    - predictions.shelf_price_predictions
+    - features.shop_kind_features
+    - predictions.shop_kind_predictions
+    - features.auction_features
+    - predictions.auction_predictions
+    - features.households_features
+    - predictions.households_predictions
   sql_guards:
     - table: clean.coffee_shops
       requires: kind
@@ -1518,6 +1847,56 @@ explore:
         SELECT store, chain, borough, latitude, longitude, count(*) AS prices
         FROM clean.consumer_prices WHERE borough_id IS NOT NULL
         GROUP BY store, chain, borough, latitude, longitude
+    - name: Where coffee shops are missing, block by block
+      kind: areas
+      unit: coffee shops missing
+      description: >-
+        The coffee shops a zone like it has - as the zones model predicts them without
+        ever seeing its borough - minus the ones DENUE lists in it, where that is one or
+        more. Jobs are known by borough only, so a residential block of a borough full of
+        offices is expected more than it would draw
+      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      sql: >-
+        SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
+               round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed, z.borough
+        FROM predictions.zones_predictions p
+        JOIN features.zones_features f USING (zone_id)
+        JOIN clean.census_zones z USING (zone_id)
+        WHERE p.held_out_prediction - f.coffee_shops >= 1
+    - name: Probably coffee shops, though their names do not say
+      kind: points
+      description: >-
+        DENUE's places no name rule could classify, where the shop_kind model puts the
+        chance of a coffee shop at one in two or more. It cannot tell an ice cream parlour
+        from a coffee shop by a name that names neither
+      sql: >-
+        SELECT s.name, round(100 * p.prediction) AS chance_pct, s.employees_band, s.borough,
+               s.latitude, s.longitude
+        FROM predictions.shop_kind_predictions p JOIN clean.coffee_shops s USING (shop_id)
+        WHERE s.kind = 'unclassified' AND p.prediction >= 0.5
+    - name: Shelves under their fair price, 2026
+      kind: points
+      description: >-
+        The city's stores PROFECO priced in 2026, by how far their coffee sat under (-) or
+        over (+) the shelf_price model's fair price, median of their readings - months the
+        model never learned from. Each month's own level is taken out first: trained on
+        2024-2025, the model prices all of 2026 some 15% too low, as coffee rose faster
+        than everything else
+      sql: >-
+        SELECT s.store, s.chain, s.borough, s.latitude, s.longitude,
+               round(100 * median(r.ratio / r.month_ratio - 1), 1) AS vs_fair_pct,
+               count(*) AS readings
+        FROM (SELECT split_part(f.reading_id, '|', 1) AS store, f.date,
+                     f.price_today_mxn / p.prediction AS ratio,
+                     median(f.price_today_mxn / p.prediction) OVER (PARTITION BY f.month) AS month_ratio
+              FROM predictions.shelf_price_predictions p
+              JOIN features.shelf_price_features f USING (reading_id)) r
+        JOIN (SELECT store, any_value(chain) AS chain, any_value(borough) AS borough,
+                     any_value(latitude) AS latitude, any_value(longitude) AS longitude
+              FROM clean.consumer_prices WHERE borough_id IS NOT NULL GROUP BY store) s
+          USING (store)
+        WHERE r.date >= DATE '2026-01-01'
+        GROUP BY s.store, s.chain, s.borough, s.latitude, s.longitude
   # Tables to slice by hand: every name here is a column of the table.
   datasets:
     - name: Coffee shops and what else the register calls a cafeteria
@@ -1806,6 +2185,127 @@ explore:
       kind: bar
       x: state
       y: share_pct
+    - title: Where coffee shops are missing
+      text: >-
+        430 of the city's 2,431 urban AGEBs have at least one coffee shop fewer than a
+        model that never saw their borough expects for their residents, homes, stations
+        and the food places around them - 819 in all. Miguel Hidalgo's are short the most
+        (435 expected, 300 listed); the centre, Cuauhtémoc, has 684 where its profile
+        predicts 406: it serves far more people than live in it. Jobs are known by
+        borough only, so a quiet street of a borough full of offices is expected too many.
+      sql: >-
+        SELECT z.borough, round(sum(p.held_out_prediction) - sum(f.coffee_shops)) AS missing
+        FROM predictions.zones_predictions p
+        JOIN features.zones_features f USING (zone_id)
+        JOIN clean.census_zones z USING (zone_id)
+        GROUP BY z.borough ORDER BY missing DESC
+      kind: bar
+      x: borough
+      y: missing
+    - title: Green coffee a year from now, as far as its history can say
+      text: >-
+        Four times in five since 1960, other mild Arabicas moved between -31% and +51%
+        over twelve months: from 362 US cents a pound in August 2026, between 251 and 546
+        in August 2027. No model did better: the green_range model's ranges, read off the
+        months before, were narrower and held the 2021-2026 changes 71% of the time, not
+        80%, and its gate kept this historical range instead.
+      sql: >-
+        SELECT indicator, horizon_months, to_month, round(price_low) AS low,
+               round(price_median) AS median, round(price_high) AS high
+        FROM analysis.price_outlook ORDER BY indicator, horizon_months
+      kind: table
+    - title: How much of a move in green coffee reaches the farm and the shelf
+      text: >-
+        At the farm gate, a 1% move in the international price is 0.21% of the cherry's
+        price the same year and 0.63% (0.21 to 0.79) by the next (SIAP, 2003-2025). On
+        the shelf, 24 months of PROFECO's prices show no pass-through that can be told
+        from zero in the six months after: the shelf price moved with other things.
+      sql: >-
+        SELECT step, lag, pass_through, ci_low, ci_high FROM analysis.price_transmission
+      kind: line
+      x: lag
+      y: pass_through
+      color: step
+    - title: Who prices the same jar above the rest
+      text: >-
+        Against every chain's price for the same product the same month, Soriana's stores
+        ask 2-3% more and Superissste 8% less; Walmart a hair under, Bodega Aurrera and
+        Chedraui 2-3% under. A chain is called premium or discount only when its interval,
+        from resampling its stores, leaves the market's price out.
+      sql: >-
+        SELECT chain, round(price_index, 3) AS price_index, strategy, stores
+        FROM analysis.chain_strategies
+      kind: bar
+      x: chain
+      y: price_index
+      color: strategy
+    - title: Deals on the shelf in 2026
+      text: >-
+        Against the shelf_price model's fair price, with each month's level taken out
+        (coffee rose faster than everything else, and a model trained on 2024-2025 prices
+        all of 2026 about 15% too low), 12% of 2026's readings were a tenth or more under
+        and 14% a tenth or more over. Superissste sold 12% under its fair price; Sumesa 7%
+        over.
+      sql: >-
+        SELECT f.chain, round(100 * median(r.ratio / r.month_ratio - 1), 1) AS vs_fair_pct,
+               count(*) AS readings
+        FROM (SELECT reading_id, f.month, f.price_today_mxn / p.prediction AS ratio,
+                     median(f.price_today_mxn / p.prediction) OVER (PARTITION BY f.month) AS month_ratio
+              FROM predictions.shelf_price_predictions p
+              JOIN features.shelf_price_features f USING (reading_id)) r
+        JOIN features.shelf_price_features f USING (reading_id)
+        WHERE f.date >= DATE '2026-01-01'
+        GROUP BY f.chain HAVING count(*) >= 300 ORDER BY vs_fair_pct
+      kind: bar
+      x: chain
+      y: vs_fair_pct
+    - title: The places whose names say nothing
+      text: >-
+        2,802 of DENUE's 9,860 places in the city carry no word a rule reads. The
+        shop_kind model expects 1,838 of them to be coffee shops (2,034 above one chance in
+        two), which would take the city's 3,717 to some 5,500. Its only outside check is
+        37 of them that OpenStreetMap maps too: 34 of its 35 coffee shops scored above one
+        in two - and so did both ice cream parlours. It cannot tell the two apart by a name
+        that names neither.
+      sql: >-
+        SELECT CASE WHEN p.prediction >= 0.8 THEN '4. 80% or more'
+                    WHEN p.prediction >= 0.5 THEN '3. 50-80%'
+                    WHEN p.prediction >= 0.2 THEN '2. 20-50%' ELSE '1. under 20%' END AS chance,
+               count(*) AS places
+        FROM predictions.shop_kind_predictions p JOIN clean.coffee_shops s USING (shop_id)
+        WHERE s.kind = 'unclassified' GROUP BY chance ORDER BY chance
+      kind: bar
+      x: chance
+      y: places
+    - title: Kinds of coffee municipalities
+      text: >-
+        486 municipalities with ten years of harvest or more, grouped by their yield, what
+        their cherry fetches against their state's, their size, whether they are growing
+        or leaving coffee, and their losses. The grouping is weak (silhouette 0.26): types
+        of convenience to ask questions with, not natural kinds.
+      sql: >-
+        SELECT type, municipalities, round(yield_t_per_ha, 2) AS yield_t_per_ha,
+               round(price_index, 3) AS price_vs_state, round(harvested_ha) AS harvested_ha,
+               round(area_trend_pct, 1) AS area_trend_pct
+        FROM analysis.municipality_type_profiles
+      kind: table
+    - title: Who buys coffee to drink at home
+      text: >-
+        In ENIGH's week, 13.7% of Mexico's households bought coffee to make at home. A
+        model of their state, size and income beats each state's own share, but barely
+        (Brier score 0.1166 against 0.1170, ranking AUC 0.59): who buys is not in those
+        figures. It puts every borough of the city near 17%; the survey's 54 to 350
+        households per borough range from 3% to 31%, as much sampling noise as anything.
+      sql: >-
+        SELECT b.borough, round(100 * sum(p.held_out_prediction * h.weight) / sum(h.weight), 1) AS model_pct,
+               round(100 * sum(f.buys_coffee * h.weight) / sum(h.weight), 1) AS survey_pct,
+               count(*) AS households
+        FROM predictions.households_predictions p
+        JOIN clean.household_coffee h USING (household_id)
+        JOIN features.households_features f USING (household_id)
+        JOIN clean.boroughs b ON b.borough_id = h.municipality_id
+        WHERE h.state_id = '09' GROUP BY b.borough ORDER BY survey_pct DESC
+      kind: table
   about: |
     **The sources.** Every number comes from a public source, downloaded untouched and
     kept for good, then cleaned against a contract:
@@ -1834,6 +2334,34 @@ explore:
     cupper's. The price model learns mostly from one shop. The agent's model is small
     and local: its query is always shown, because a query can run and answer a slightly
     different question.
+  # What `mlops export` may publish for the explorer's showcase (docs/cloud-plan.md):
+  # every table its pages read, every study and figure, but what a source's terms keep home.
+  showcase:
+    withheld:
+      clean.cup_of_excellence: >-
+        "© Alliance for Coffee Excellence. All Rights Reserved." on every page: its lots stay
+        in the local raw layer; the studies' yearly figures go
+      features.offer_features: >-
+        the roasters' catalogues, read with their robots' leave for this study, are not
+        republished offer by offer; the studies of them go
+      clean.roaster_flavors: >-
+        the tasting notes come from the roasters' own descriptions: the studies' shares go,
+        the notes coffee by coffee do not
+    rows:
+      # The 2018 scrape is MIT-licensed; the 2023 one's terms are not verified.
+      clean.coffee_reviews: snapshot = 'cqi_2018'
+    credits: |
+      - **INEGI** (DENUE, the 2020 Census, the 2025 Intercensal Survey, ENIGH 2024, the INPC
+        and the geostatistical framework): free use, citing INEGI.
+      - **OpenStreetMap** contributors: places © OpenStreetMap contributors, under the
+        Open Database License (ODbL); the places derived from them are under the same
+        licence.
+      - **PROFECO**, Quién es Quién en los Precios: Mexico's open data.
+      - **SIAP** (Mexico's harvest), **Mexico City's** open data (Metro, Metrobús, GTFS).
+      - **The World Bank** (Pink Sheet, CC BY 4.0), **FAO** (FAOSTAT, CC BY 4.0), the
+        **USDA** (PSD, public domain), the **Federal Reserve** (H.10, via FRED), the
+        **ICO** (its indicator prices, studied, not republished day by day).
+      - **The Coffee Quality Institute**'s scores as scraped in 2018 (`jldbc/coffee-quality-database`, MIT).
   examples:
     - Which boroughs have the most coffee shops per square kilometre, according to DENUE?
     - What is the median price per kilogram of ground coffee, neither sweetened nor decaf, on the shelves of each borough?

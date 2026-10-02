@@ -262,6 +262,9 @@ def test_a_grouped_model_writes_what_each_item_looks_like_to_a_model_that_never_
     assert not scored[HELD_OUT].equals(scored["prediction"])
     with pytest.raises(TypeError, match="not split by group"):
         held_out_predictions(features, served, toy(PROBABILITY, YEARLY))
+    one_block = features.with_columns(pl.lit("b0").alias("block"))
+    alone = held_out_predictions(one_block, served, model)
+    assert alone.tolist() == scored["prediction"].to_list()  # nothing to hold it out from
 
 
 def test_a_grouped_range_is_judged_out_of_fold_with_its_edges() -> None:

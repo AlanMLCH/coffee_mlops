@@ -572,6 +572,166 @@ date. A month whose month before is missing is left out.
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
 
+## `features.zones_features` — coffee shops per urban AGEB, model input
+
+One urban AGEB of `clean.census_zones` with what the census says of it, the stations and
+the food places in it, and its borough's jobs per resident (`domains/coffee/zone_profile.py`,
+the same table the zone studies read).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `zone_id` | String | The AGEB's 13-character key |
+| `census`, `census_day` | | `2020` and the census' reference date, 2020-03-15 |
+| `borough_id` | String | The group of the split: a borough is on one side only |
+| `population` | Float | Residents |
+| `people_per_km2` | Float? | Residents per km² of the AGEB |
+| `schooling_years` | Float? | Mean years of schooling of people 15 and over; null where INEGI withheld it |
+| `active_pct`, `aged_65_plus_pct` | Float? | Economically active people, people 65 and over, % of residents |
+| `internet_pct`, `car_pct`, `computer_pct` | Float? | Lived-in dwellings with each, % |
+| `metro_stations`, `metrobus_stations` | Float | Stations inside the AGEB |
+| `other_places` | Float | DENUE's juice bars, ice cream parlours, soda fountains and tea houses inside it (by name; unclassified places are not counted) |
+| `borough_jobs_per_resident` | Float? | The borough's estimated jobs (DENUE) over its residents: the daytime population |
+| `coffee_shops` | Float | Target: DENUE's places in the AGEB whose name says coffee shop |
+
+## `predictions.zones_predictions` — expected coffee shops per AGEB
+
+| Column | Type | Meaning |
+|---|---|---|
+| `zone_id`, `census`, `census_day`, `borough_id` | | Keys back to `clean.census_zones` |
+| `prediction` | Float | Expected `coffee_shops` for a zone like it |
+| `held_out_prediction` | Float | The same, from a model fitted without the zone's borough: **the one to set against the zone's own count**. Expected minus listed is how many coffee shops a zone is missing |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.green_range_features` — green coffee price outlook input
+
+One indicator, one month and one horizon (3, 6 or 12 months) from `clean.price_indicators`'
+monthly rows: the change from the price `horizon_months` before, knowing only what was
+published then. The months 3, 6 and 12 after the last published one are rows too, with
+no price and no target: the outlook.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `outlook_id` | String | `<indicator>-<YYYY-MM>-<h>m`, unique |
+| `month` | Date | The month priced (its first day) |
+| `year` | String | Its year: the block the gate resamples whole |
+| `indicator`, `calendar_month` | String | `other_milds` or `robustas`; `01` to `12` |
+| `horizon_months` | Float | 3, 6 or 12: how long before the month the forecast is made |
+| `price_last` | Float? | US cents/lb, the month the forecast is made in |
+| `change_last`, `change_2_back`, `change_3_back`, `change_12m`, `gap_to_mean_12m`, `volatility_6m`, `arabica_robusta_ratio` | Float? | As in `features.green_price_features`, known in that month |
+| `change_pct` | Float? | Target: the change over the horizon, %; null for the months ahead |
+
+## `predictions.green_range_predictions` — green coffee price ranges
+
+| Column | Type | Meaning |
+|---|---|---|
+| `outlook_id`, `year`, `month` | | Keys back to the feature table; join it for `price_last` and `horizon_months` |
+| `prediction` | Float | Predicted `change_pct` |
+| `lower`, `upper` | Float | The range meant to hold the change four times in five, % |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.shelf_price_features` — fair shelf price input
+
+One product in one store on one day of `clean.consumer_prices` (two readings of it the
+same day, at their mean price), its price in pesos of the latest month of
+`clean.consumer_price_index`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `reading_id` | String | `<store>|<product_name>|<YYYY-MM-DD>` |
+| `date`, `month` | | The day read, and its month `YYYY-MM` |
+| `product_name` | String | Brand, size and kind as one name: `nescafe clasico 200 g sweetened` |
+| `brand`, `chain`, `store_type`, `state` | String? | As PROFECO writes them, lower case and without accents or punctuation |
+| `product` | String | `instant` or `ground` |
+| `grams` | Float | The size |
+| `sweetened`, `decaf` | Float | 1 or 0 |
+| `price_today_mxn` | Float | Target: the price in pesos of the index's latest month (nominal without the index) |
+
+## `predictions.shelf_price_predictions` — fair shelf prices
+
+| Column | Type | Meaning |
+|---|---|---|
+| `reading_id`, `month`, `date` | | Keys back to the feature table; join it for the price asked |
+| `prediction` | Float | The fair `price_today_mxn`: under it is a deal, over it a markup. Readings from 2026 on were never learned from |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.shop_kind_features` — is a DENUE place a coffee shop, input
+
+One DENUE place of `clean.coffee_shops`: the words of its name besides the ones the kind
+rules read, its staff, when it was registered, and its zone.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop_id`, `listed_since`, `listed_year` | | Keys: the place, its registration date and year |
+| `block` | String | The group of the split: its AGEB (`none-<shop_id>` outside one) |
+| `employees_band`, `borough_id` | String? | Categorical features |
+| `listed_since_year` | Float | Year it entered the register |
+| `name_word_count` | Float | Words in its name |
+| `name_puesto`, `name_venta`, `name_desayunos`, `name_crepas`, `name_snacks`, `name_tortas`, `name_restaurante`, `name_kreme`, `name_krispy`, `name_turno`, `name_postres`, `name_ensaladas`, `name_casa`, `name_barra`, `name_antojitos`, `name_pasteleria`, `name_cocteles`, `name_cocina`, `name_dulce`, `name_matutino`, `name_creperia`, `name_gourmet`, `name_pan`, `name_comida`, `name_tierra`, `name_plaza`, `name_neverias`, `name_refresquerias`, `name_similares`, `name_oasis` | Float | 1 when the name has the word: the thirty most frequent words no kind rule reads, chosen by count |
+| `people_per_km2`, `schooling_years`, `internet_pct`, `aged_65_plus_pct`, `metro_stations`, `metrobus_stations` | Float? | Its AGEB's, as in `features.zones_features` |
+| `is_coffee` | Float? | Target: 1 a coffee shop by name, 0 another kind; **null where no rule classified it** - those are scored |
+
+## `predictions.shop_kind_predictions` — how likely each place is a coffee shop
+
+| Column | Type | Meaning |
+|---|---|---|
+| `shop_id`, `listed_year`, `listed_since`, `block` | | Keys back to `clean.coffee_shops` |
+| `prediction` | Float | Probability the place is a coffee shop. Summed over the unclassified places, how many coffee shops they hold |
+| `held_out_prediction` | Float | The same from a model that never saw the place's zone; equal to `prediction` for unclassified places |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.auction_features` — Cup of Excellence auction input
+
+One lot of `clean.cup_of_excellence`, with the median price of the other lots of its
+auction and the year's mean price of other mild Arabicas.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `lot_id`, `auction`, `auction_year` | | Keys: the lot, its year as text and as January 1 |
+| `state`, `processing_method` | String? | Categorical features |
+| `score_band` | String | `under 87`, `87-88`, `88-89`, `89-90`, `90 and over`: the baseline's groups |
+| `score` | Float | The jury's score |
+| `national_winner`, `gesha` | Float | 1 or 0 |
+| `weight_kg`, `varieties_n` | Float? | The lot's weight; how many varieties it lists |
+| `market_usd_per_lb` | Float? | Other mild Arabicas, the year's mean monthly price, US dollars a pound |
+| `auction_median_usd_per_lb` | Float | The median price of the other lots sold at its auction (the latest auction's for a year not held yet), US dollars a pound |
+| `premium_pct` | Float? | Target: the lot's price over that median, %; null for an unsold lot |
+
+## `predictions.auction_predictions` — expected auction premiums
+
+| Column | Type | Meaning |
+|---|---|---|
+| `lot_id`, `auction`, `auction_year` | | Keys back to `clean.cup_of_excellence` |
+| `prediction` | Float | Predicted `premium_pct`; the price is `auction_median_usd_per_lb` × (1 + it / 100) |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
+## `features.households_features` — who buys coffee, input
+
+One household of `clean.household_coffee`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `household_id`, `survey`, `survey_year` | | Keys: the household, the survey's year as text and as January 1 |
+| `psu` | String | The group of the split: the survey's primary sampling unit, neighbours on one side |
+| `state` | String | Categorical feature |
+| `members`, `income_quarter_mxn`, `income_per_member_mxn` | Float | Its size and income in the quarter, in total and per member |
+| `grows_coffee` | Float | 1 when it took coffee from its own harvest |
+| `buys_coffee` | Float | Target: 1 when it paid for any coffee in the week recorded |
+
+## `predictions.households_predictions` — how likely each household buys coffee
+
+| Column | Type | Meaning |
+|---|---|---|
+| `household_id`, `survey`, `survey_year`, `psu` | | Keys back to `clean.household_coffee`: join for its `weight` and `municipality_id` |
+| `prediction` | Float | Probability it bought coffee in the week |
+| `held_out_prediction` | Float | The same from a model that never saw its sampling unit: the one to average by area |
+| `model_version` | String | Registry version that produced the row |
+| `predicted_at` | Datetime (UTC) | When the batch job ran |
+
 ## Raw layer
 
 `raw/<source>/ingested_at=<timestamp>/` holds each download **exactly as served**, next

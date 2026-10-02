@@ -37,8 +37,12 @@ def predictions_schema(model: ModelConfig) -> pa.DataFrameSchema:
     items, split = model.items, model.training.split
     group = {split.column: pa.Column(pl.String)} if isinstance(split, GroupSplit) else {}
     entity = {items.entity: pa.Column(pl.String)} if items.entity else {}
+    # Empty only for a champion logged before the model had a range.
     band = (
-        {"lower": pa.Column(pl.Float64), "upper": pa.Column(pl.Float64)}
+        {
+            "lower": pa.Column(pl.Float64, nullable=True),
+            "upper": pa.Column(pl.Float64, nullable=True),
+        }
         if model.spec.interval is not None
         else {}
     )
@@ -67,14 +71,15 @@ def score(
     features: pl.DataFrame, served: ServedModel, model: ModelConfig, at: datetime
 ) -> pl.DataFrame:
     scored = predicted(served.model, features.select(model.spec.features).to_pandas())
-    band = (
-        [
+    band: list[pl.Series | pl.Expr] = []
+    if scored.lower is not None and scored.upper is not None:
+        band = [
             pl.Series("lower", scored.lower, dtype=pl.Float64),
             pl.Series("upper", scored.upper, dtype=pl.Float64),
         ]
-        if scored.lower is not None and scored.upper is not None
-        else []
-    )
+    elif model.spec.interval is not None:
+        logger.warning("%s's champion predicts no range: its edges are left empty", model.name)
+        band = [pl.lit(None, pl.Float64).alias("lower"), pl.lit(None, pl.Float64).alias("upper")]
     held_out = (
         [pl.Series(HELD_OUT, held_out_predictions(features, served, model), dtype=pl.Float64)]
         if isinstance(model.training.split, GroupSplit)
@@ -102,7 +107,11 @@ def held_out_predictions(
     held_out: np.ndarray = np.asarray(served.model.predict(x), dtype=float)
     known = np.flatnonzero(features[spec.target].is_not_null().to_numpy())
     y, groups = features[spec.target].to_numpy(), features[split.column].to_numpy()
-    for fit_rows, held_rows in GroupKFold(n_splits=cfg.cv_folds).split(known, groups=groups[known]):
+    folds = min(cfg.cv_folds, len(set(groups[known].tolist())))
+    if folds < 2:  # one group: there is no model that never saw it to ask
+        logger.warning("%s: one group only, nothing held out", model.name)
+        return held_out
+    for fit_rows, held_rows in GroupKFold(n_splits=folds).split(known, groups=groups[known]):
         refitted = clone(served.model).fit(
             x.iloc[known[fit_rows]], y[known[fit_rows]], **fit_params(spec)
         )

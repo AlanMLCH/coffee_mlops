@@ -31,6 +31,10 @@ def two_domains(coffee_adapter: CoffeeAdapter) -> list[CoffeeAdapter]:
     return [coffee_adapter, tea]
 
 
+# The models of v1.1.1, each with the same four assets.
+NEW_MODELS = ["zones", "green_range", "shelf_price", "shop_kind", "auction", "households"]
+
+
 def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_path: Path) -> None:
     defs = build_definitions(two_domains, Settings(data_dir=tmp_path))
 
@@ -54,6 +58,11 @@ def test_each_domain_adds_its_own_graph(two_domains: list[CoffeeAdapter], tmp_pa
         "tea/green_price_model",
         "tea/green_price_predictions",
         "tea/green_price_drift",
+        *[
+            f"tea/{model}_{step}"
+            for model in NEW_MODELS
+            for step in ("features", "model", "predictions", "drift")
+        ],
     ]
     assert [j.name for j in defs.jobs] == [
         "coffee_data",

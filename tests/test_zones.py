@@ -103,6 +103,10 @@ def test_a_point_is_placed_in_its_zone_or_none(raw: Frames) -> None:
     assert placed["zone_id"].to_list() == [BALDERAS_ZONE, None]
 
 
+# The zones' borough, for its jobs per resident.
+BOROUGH = pl.DataFrame({"borough_id": ["09015"], "population": [100], "jobs_estimate": [50.0]})
+
+
 def zone_rows(n: int) -> pl.DataFrame:
     """`n` zones of one km² each, the k-th with k people, k + 8 years of schooling and a
     k-th of its dwellings online."""
@@ -138,7 +142,7 @@ def test_the_zones_set_coffee_shops_beside_what_the_census_counted() -> None:
         {"zone_id": ["z7", "z6", "z6"], "system": ["metro", "metro", "metrobus"]}
     )
 
-    table = zone_coffee_shops(zones, shops, stations)
+    table = zone_coffee_shops(zones, shops, stations, BOROUGH)
 
     top = table.row(0, named=True)
     assert (top["zone_id"], top["coffee_shops"], top["metro_stations"]) == ("z7", 7, 1)
@@ -161,6 +165,7 @@ def test_a_system_with_no_station_in_any_zone_is_not_compared() -> None:
         zone_rows(6),
         pl.DataFrame(schema={"zone_id": pl.String, "source": pl.String, "kind": pl.String}),
         pl.DataFrame({"zone_id": ["z1"], "system": ["metrobus"]}),
+        BOROUGH,
     )
 
     assert zone_station_coffee(table)["system"].to_list() == ["metrobus"]

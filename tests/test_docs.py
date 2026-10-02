@@ -128,6 +128,12 @@ def test_every_column_of_every_table_is_documented(coffee_config: DomainConfig) 
         "review_features",
         "offer_features",
         "green_price_features",
+        "zones_features",
+        "green_range_features",
+        "shelf_price_features",
+        "shop_kind_features",
+        "auction_features",
+        "households_features",
     ],
 )
 def test_each_table_has_its_own_section(table: str) -> None:

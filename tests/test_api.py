@@ -80,6 +80,62 @@ def price_history(tmp_path: Path) -> None:
     write_table(prices, tmp_path / "coffee" / "clean" / "price_indicators", inputs={})
 
 
+# The models of v1.1.1, each loaded beside the first three when its context is there.
+NEW_MODELS = ["zones", "green_range", "shelf_price", "shop_kind", "auction", "households"]
+
+
+@pytest.fixture
+def new_contexts(tmp_path: Path) -> None:
+    """What the newer models look items up in: a zone, its registers and stations, its
+    borough; and the consumer price index. Rows enough to answer each model's example."""
+    clean = tmp_path / "coffee" / "clean"
+    zone = "0901500010010"
+    tables = {
+        "census_zones": pl.DataFrame(
+            {
+                "zone_id": [zone],
+                "borough_id": ["09015"],
+                "borough": ["Cuauhtémoc"],
+                "area_km2": [1.0],
+                "population": [4000],
+                "dwellings": [1600],
+                "schooling_years": [14.0],
+                "economically_active": [2400],
+                "people_65_plus": [400],
+                "dwellings_with_internet": [1200],
+                "dwellings_with_car": [800],
+                "dwellings_with_computer": [1000],
+            }
+        ),
+        "coffee_shops": pl.DataFrame(
+            {
+                "shop_id": ["a"],
+                "source": ["denue"],
+                "name": ["CAFE UNO"],
+                "kind": ["coffee"],
+                "zone_id": [zone],
+                "borough_id": ["09015"],
+                "employees_band": ["0 a 5 personas"],
+                "listed_since": [date(2010, 7, 1)],
+            }
+        ),
+        "transit_stations": pl.DataFrame({"zone_id": [zone], "system": ["metro"]}),
+        "boroughs": pl.DataFrame(
+            {"borough_id": ["09015"], "population": [500_000], "jobs_estimate": [900_000.0]}
+        ),
+        "consumer_price_index": pl.DataFrame({"month": [date(2026, 8, 1)], "index": [142.0]}),
+        "cup_of_excellence": pl.DataFrame(
+            {
+                "year": [2025, 2025],
+                "lot_id": ["2025-001", "2025-002"],
+                "price_usd_per_lb": [12.0, 18.0],
+            }
+        ),
+    }
+    for name, table in tables.items():
+        write_table(table, clean / name, inputs={})
+
+
 @pytest.fixture
 def model() -> RecordingModel:
     return RecordingModel()
@@ -92,6 +148,7 @@ def client(
     market_context: pl.DataFrame,
     roaster_origins: None,
     price_history: None,
+    new_contexts: None,
     model: RecordingModel,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
@@ -107,7 +164,8 @@ def client(
 def test_health_and_model_report_what_is_loaded(client: TestClient) -> None:
     assert client.get("/health").json() == {
         "status": "ok",
-        "models": {"review": "7", "offer": "7", "green_price": "7"},
+        "models": {"review": "7", "offer": "7", "green_price": "7"}
+        | dict.fromkeys(NEW_MODELS, "7"),
     }
     assert client.get("/models/review").json()["model_source"] == "registry"
 
@@ -167,7 +225,7 @@ def test_reload_picks_up_a_newly_promoted_champion(
         "review": "8",
         "offer": "8",
         "green_price": "8",
-    }
+    } | dict.fromkeys(NEW_MODELS, "8")
 
 
 def test_without_a_model_the_service_says_so_instead_of_crashing(
@@ -201,7 +259,10 @@ def test_a_model_without_its_context_is_not_reported_healthy(
     monkeypatch.setenv("MLOPS_DATA_DIR", str(tmp_path))  # no clean tables at all
 
     with TestClient(api.create_app(coffee_adapter, Settings())) as client:
-        assert client.get("/health").json()["status"] == "no model"
+        health = client.get("/health").json()
+        # Only the household model looks nothing up: the others are not served.
+        assert health["status"] == "partial"
+        assert [name for name, version in health["models"].items() if version] == ["households"]
         assert client.post(PREDICT, json=LOT).status_code == 503
 
 
@@ -211,6 +272,7 @@ def test_a_model_that_cannot_predict_its_example_is_not_served(
     market_context: pl.DataFrame,
     roaster_origins: None,
     price_history: None,
+    new_contexts: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Champion and context both load, and the model still cannot answer - an image
@@ -229,7 +291,8 @@ def test_a_model_that_cannot_predict_its_example_is_not_served(
     with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         assert client.get("/health").json() == {
             "status": "partial",
-            "models": {"review": "7", "offer": None, "green_price": "7"},
+            "models": {"review": "7", "offer": None, "green_price": "7"}
+            | dict.fromkeys(NEW_MODELS, "7"),
         }
         failed = client.post("/reload").json()["failed"]
         assert failed == {"offer": "cannot predict its example: 'variety_gesha'"}
@@ -263,10 +326,9 @@ def test_a_reload_that_fails_says_which_model_and_why(
     body = client.post("/reload").json()
 
     down = "registry down"
-    assert body == {"loaded": {}, "failed": dict.fromkeys(["review", "offer", "green_price"], down)}
-    assert client.get("/health").json()["models"] == dict.fromkeys(
-        ["review", "offer", "green_price"], "7"
-    )
+    every = ["review", "offer", "green_price", *NEW_MODELS]
+    assert body == {"loaded": {}, "failed": dict.fromkeys(every, down)}
+    assert client.get("/health").json()["models"] == dict.fromkeys(every, "7")
 
 
 BAG = {
@@ -306,6 +368,7 @@ def test_one_model_missing_leaves_the_other_serving(
     market_context: pl.DataFrame,
     roaster_origins: None,
     price_history: None,
+    new_contexts: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A price model the gate never promoted must not take the cup-score model down."""
@@ -321,7 +384,8 @@ def test_one_model_missing_leaves_the_other_serving(
     with TestClient(api.create_app(coffee_adapter, Settings())) as client:
         assert client.get("/health").json() == {
             "status": "partial",
-            "models": {"review": "7", "offer": None, "green_price": "7"},
+            "models": {"review": "7", "offer": None, "green_price": "7"}
+            | dict.fromkeys(NEW_MODELS, "7"),
         }
         assert client.post(PREDICT, json=LOT).status_code == 200
         assert client.post("/models/offer/predict", json=BAG).status_code == 503

@@ -116,6 +116,8 @@ def build_analysis(
             logger.warning("%s has no feature table yet: skipping its studies", model.name)
             continue
         studied = model_studies(config, model, clean, data_dir, tracking_uri)
+        if not studied:
+            continue
         figures = render_all(
             studied,
             period=model.items.period,
@@ -158,6 +160,9 @@ def model_studies(
     on the items whose target is known."""
     analysis, spec, items = config.analysis, model.spec, model.items
     features = labelled(read_table(data_dir / "features" / model.features_table), spec)
+    if features.is_empty():  # every item still waits for its target: nothing to study
+        logger.warning("%s has no item with a known target yet: skipping its studies", model.name)
+        return {}
     numeric = numeric_profile(features, spec, items.period, items.time)
     categorical = categorical_profile(features, spec, items.period, items.time, analysis.min_rows)
     importance = champion_importance(config, model, data_dir, tracking_uri)
