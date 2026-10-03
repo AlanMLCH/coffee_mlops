@@ -233,6 +233,22 @@ def test_the_committed_cases_are_one_select_each_and_route_somewhere_known() -> 
     assert len({case.id for case in route_cases}) == len(route_cases)
 
 
+def test_the_newer_models_questions_name_a_model_and_fields_it_reads() -> None:
+    """The set of the models added in v1.1.1, kept apart: each item is a request its
+    model would accept, field by field, so a typo cannot fail the agent for it."""
+    home = domain_dir("coffee")
+    adapter = domains.coffee.adapter()
+    cases = load_cases(case_file(home, ROUTE_CASES_FILE, "models"), RouteCase)
+
+    assert len(cases) >= 12
+    assert load_cases(case_file(home, SQL_CASES_FILE, "models"), SqlCase) == []
+    for case in cases:
+        assert case.model in {model.name for model in adapter.config.models}, case.id
+        body = adapter.request_model(case.model)
+        assert set(case.item) <= set(body.model_fields), case.id
+        body.model_validate(case.item)  # the stated fields alone make a request
+
+
 def test_the_command_runs_each_generator_and_reports_the_bar(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

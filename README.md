@@ -64,6 +64,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
 | The agent, 54 questions end to end | **74%** correct, 98% verified, routing 100% | peripheral tables and the six newer models are kept from the local 4B model (offered all nine, it sent prediction questions to the tables: 70%, routing 96%); runs of the same agent ranged 73-78% at v1.1 |
 | The agent, 25 held-out questions written before the fixes of 29 September | **84%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic; 72% with all nine models offered |
+| The agent, 14 questions about the newer models | **0%**; 7% when offered them | the local 4B sends a zone, a place, a jar or a household to the tables, not to the model: these are served by the API, MCP and the explorer, and the set waits for larger models |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
