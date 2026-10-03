@@ -283,6 +283,9 @@ def test_the_command_runs_each_generator_and_reports_the_bar(
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/tags":
             return httpx.Response(200, json=tags)
+        if request.url.path == "/api/embed":  # the models' cards, and each question
+            texts = json.loads(request.content)["input"]
+            return httpx.Response(200, json={"embeddings": [[0.5] * 4 for _ in texts]})
         shape = json.loads(request.content)["format"]["properties"]
         reply = SqlReply(sql=READS) if "sql" in shape else RouteReply(route="data")
         return httpx.Response(200, json={"message": {"content": reply.model_dump_json()}})

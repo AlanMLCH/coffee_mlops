@@ -30,6 +30,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
 from mlops_core.adapter import DomainAdapter
+from mlops_core.agent.model_cards import ModelFinder
 from mlops_core.agent.prompts import (
     ANSWER,
     FIX,
@@ -66,6 +67,7 @@ class State(TypedDict, total=False):
     question: str
     route: Route
     plan: dict[str, str | None]  # tool -> the part of the question it answers
+    models: list[str] | None  # the models it was shown (`ModelFinder`); None, every one
     sql: SqlAnswer | None
     prediction: PredictionAnswer | None
     passages: list[dict[str, Any]]  # what the search returned
@@ -136,6 +138,9 @@ class Agent:
     # More SQL writers, each with its own sampling, whose queries vote on the answer
     # (`text_to_sql.voted`); none, the generator's query is the answer.
     voters: list[Generator] = field(default_factory=list)
+    # The served models closest to a question, each with its inputs; unset, every model
+    # the domain offers, as `routing` lists them.
+    models: ModelFinder | None = None
 
     def __post_init__(self) -> None:
         self.generator = TracedGenerator(self.generator)
@@ -181,22 +186,28 @@ class Agent:
     # --- The steps -----------------------------------------------------------------------
 
     def _route(self, state: State) -> State:
+        question = state["question"]
         with _span("route"):
-            chosen = route(self.generator, self.routing, state["question"])
-            needs = self._needs(state["question"])
-        taken, plan = self._planned(state["question"], chosen, needs)
-        return {"route": taken, "plan": plan}
+            cards = self.models.closest(question) if self.models is not None else None
+            models = (
+                "\n".join(card.listing() for card in cards)
+                if cards is not None
+                else self.routing["models"]
+            )
+            chosen = route(self.generator, self.routing | {"models": models}, question)
+            needs = self._needs(question, models)
+        taken, plan = self._planned(question, chosen, needs, models)
+        shown = [card.name for card in cards] if cards is not None else None
+        return {"route": taken, "plan": plan, "models": shown}
 
-    def _needs(self, question: str) -> NeedsReply:
+    def _needs(self, question: str, models: str) -> NeedsReply:
         """A second opinion, as two yes-or-no questions: one route of four is the call the
         small model got wrong most (a bag it describes sent to the tables)."""
-        prompt = NEEDS.format(
-            subject=self.routing["subject"], models=self.routing["models"], question=question
-        )
+        prompt = NEEDS.format(subject=self.routing["subject"], models=models, question=question)
         return self.generator.ask(prompt, NeedsReply)
 
     def _planned(
-        self, question: str, chosen: Route, needs: NeedsReply
+        self, question: str, chosen: Route, needs: NeedsReply, models: str
     ) -> tuple[Route, dict[str, str | None]]:
         """The route's tools, with what the second opinion adds: a prediction for an item
         the question describes, the tables for a figure computed from their records. One
@@ -210,9 +221,7 @@ class Agent:
         else:
             with _span("plan"):
                 prompt = PLAN.format(
-                    subject=self.routing["subject"],
-                    models=self.routing["models"],
-                    question=question,
+                    subject=self.routing["subject"], models=models, question=question
                 )
                 reply = self.generator.ask(prompt, PlanReply)
                 if reply.repeats():  # handed whole to two tools: asked once more
@@ -248,7 +257,14 @@ class Agent:
         if not part:
             return {"prediction": None}
         with _span("prediction"):
-            answer = predict(self.generator, self.adapter, self.api, part, state["question"])
+            answer = predict(
+                self.generator,
+                self.adapter,
+                self.api,
+                part,
+                state["question"],
+                state.get("models"),
+            )
             return {"prediction": answer}
 
     def _knowledge(self, state: State) -> State:
@@ -362,7 +378,11 @@ class Agent:
             state["prediction"],
             state["usable"],
             state["best_problems"],
-            answered=answer.answered,
+            # The answer prompt's own rule: "answered" is false only for an answer that
+            # cites nothing. Handed a prediction, the small model cited it, gave it, and
+            # still called it unanswered - the evidence "does not confirm this as a fact".
+            # An estimate is what a question to a model asks for.
+            answered=answer.answered or bool(sources),
         )
 
 

@@ -195,10 +195,30 @@ def test_a_prediction_is_the_model_chosen_and_the_item_it_describes() -> None:
     assert answer.model == "offer" and answer.error is None
     # The closed vocabularies are lower case, whatever the model wrote.
     assert sent == [{"shop": "almanegra", "bag_grams": 250.0, "variety": "gesha"}]
-    assert "- offer (predicts price_mxn_per_kg): The price" in generator.asked("ModelChoice")[0]
+    choice = generator.asked("ModelChoice")[0]
+    assert "- offer (predicts price_mxn_per_kg): The price" in choice
+    assert "Asked with: shop, bag_grams, country" in choice  # the request's inputs
     assert "A model predicts The price per kilogram" in generator.asked("Offer")[0]
-    # The models the domain keeps from the local agent are not offered to it.
-    assert "- zones (predicts" not in generator.asked("ModelChoice")[0]
+
+
+def test_the_choice_is_among_the_models_the_router_was_shown() -> None:
+    generator = Scripted(
+        ModelChoice=lambda prompt: {"model": "offer"},
+        Offer=lambda prompt: {"shop": "almanegra", "bag_grams": 250, "altitude_m": 1600},
+        Household=lambda prompt: {"state": "Veracruz", "members": 3, "income_month_mxn": 9000},
+    )
+    respond = api(lambda request: httpx.Response(200, json=PREDICTED))
+    adapter = domains.coffee.adapter()
+
+    two = predict(generator, adapter, respond, "A bag?", shown=["review", "offer"])
+    one = predict(generator, adapter, respond, "A household?", shown=["households"])
+    none = predict(generator, adapter, respond, "Anything?", shown=[])
+
+    assert two.model == "offer" and "- zones" not in generator.asked("ModelChoice")[0]
+    assert two.request == {"shop": "almanegra", "bag_grams": 250.0}  # 1,600 m never stated
+    assert one.model == "households" and len(generator.asked("ModelChoice")) == 1
+    assert one.request["income_month_mxn"] == 9000.0  # required: kept, stated or not
+    assert none.error == "No model the API serves answers it" and none.response is None
 
 
 def test_a_prediction_service_that_fails_is_said_rather_than_raised() -> None:
@@ -436,8 +456,9 @@ def stood_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[[Scrip
         def handler(request: httpx.Request) -> httpx.Response:
             if request.url.path == "/api/tags":
                 return httpx.Response(200, json=tags)
-            if request.url.path == "/api/embed":
-                return httpx.Response(200, json={"embeddings": [[0.5, 0.5, 0.5, 0.5]]})
+            if request.url.path == "/api/embed":  # one vector per text, all alike
+                texts = json.loads(request.content)["input"]
+                return httpx.Response(200, json={"embeddings": [[0.5] * 4 for _ in texts]})
             shape = json.loads(request.content)["format"]["properties"]
             reply = script(shape)
             if "predicts" in shape and "predicts" not in reply:
@@ -1079,3 +1100,23 @@ def test_the_mcp_command_serves_on_stdio(
         "map_layer",
     ]
     assert served == [("stdio", tools), ("streamable-http", tools)]
+
+
+@pytest.mark.parametrize(
+    ("citations", "answered"), [(["prediction"], True), ([], False)], ids=["cited", "uncited"]
+)
+def test_an_answer_that_cites_its_evidence_has_answered(
+    session: duckdb.DuckDBPyConnection, citations: list[str], answered: bool
+) -> None:
+    """The answer prompt's rule: "answered" is false only for an answer that cites nothing."""
+    text = "Its chance is 0.58 [prediction]." if citations else "Nothing says."
+    generator = Scripted(
+        RouteReply=lambda p: {"route": "prediction"},
+        ModelChoice=lambda p: {"model": "offer"},
+        Offer=lambda p: {"shop": "almanegra", "bag_grams": 250},
+        AnswerReply=lambda p: {"text": text, "citations": citations, "answered": False},
+    )
+
+    reply = agent(generator, session).ask("Is it likely?")
+
+    assert reply.answered is answered

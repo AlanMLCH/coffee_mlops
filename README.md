@@ -34,9 +34,12 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   refused, and say so.
 - **Monitors drift** between periods with Evidently, and retrains once per new version
   of the data - letting the gate decide whether the new model ships.
-- **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`, offered the three
-  models it routes reliably; the newer ones are served by the API, MCP and the explorer) over three tools:
-  locked-down text-to-SQL, the prediction API, and dense retrieval in Qdrant. Every
+- **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`) over three tools:
+  locked-down text-to-SQL, the prediction API, and dense retrieval in Qdrant. It finds
+  the model a question needs the way it finds a passage - by retrieval over a card per
+  served model, its description and the inputs its request takes - and is shown the two
+  closest, not every model; a key the request's schema gives the form of is read off the
+  question. Every
   figure in an answer is checked against its evidence before it is shown, and when the
   tools find nothing it says so instead of writing an answer. Free tiers of hosted models
   (Gemini, Groq, Mistral, OpenRouter) can answer first, each set aside when its quota runs
@@ -62,9 +65,9 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | Green coffee's range 3, 6, 12 months ahead | **not promoted** | its own history's range covers better (the model's held 71% of 2021-2026, not 80%) |
 | A Cup of Excellence lot's premium over its auction | **not promoted** | each score band's past premium does better (MAE 54 against 71 points) |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
-| The agent, 54 questions end to end | **74%** correct, 98% verified, routing 100% | peripheral tables and the six newer models are kept from the local 4B model (offered all nine, it sent prediction questions to the tables: 70%, routing 96%); runs of the same agent ranged 73-78% at v1.1 |
-| The agent, 25 held-out questions written before the fixes of 29 September | **84%** correct, 96% verified | 52% before them; +12 measured blind, the rest optimistic; 72% with all nine models offered |
-| The agent, 14 questions about the newer models | **0%**; 7% when offered them | the local 4B sends a zone, a place, a jar or a household to the tables, not to the model: these are served by the API, MCP and the explorer, and the set waits for larger models |
+| The agent, 54 questions end to end | **74%** correct, 98% verified, routing 94% | peripheral tables are kept from the local 4B model; runs of the same agent ranged 73-78% at v1.1 |
+| The agent, 25 held-out questions written before the fixes of 29 September | **80%** correct, 92% verified | 52% before them; 84% when shown three models, one mixed question now sent to a model alone |
+| The agent, 14 questions about the newer models | **86%** correct, routing 93% | 0% when listed every model or none of them; optimistic - written and fixed against |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns

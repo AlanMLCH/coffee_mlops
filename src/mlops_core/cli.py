@@ -564,13 +564,15 @@ def benchmark(
             schema_context,
             shown,
         )
+        from mlops_core.agent.model_cards import ModelFinder, model_cards, served_models
         from mlops_core.agent.routing import routing_context
         from mlops_core.agent.sql import read_only, views
         from mlops_core.rag.llm import LocalModel, ollama_client
         from mlops_core.rag.providers import load_providers
         from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
 
-    config = _adapter(domain).config
+    adapter = _adapter(domain)
+    config = adapter.config
     home = domain_dir(config.name)
     data_dir = _data_dir(config)
     con = read_only(data_dir)
@@ -601,8 +603,19 @@ def benchmark(
             )
             embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
             linker = _linker(config, dictionary, names, embedder)
+            with _api_client(settings.api_url) as api:
+                served = served_models(adapter, api)
+            finder = ModelFinder(model_cards(adapter, served), embedder.embed)
             sql, routes = run_benchmark(
-                model, con, schema, context, sql_cases, route_cases, config.agent.sql_guards, linker
+                model,
+                con,
+                schema,
+                context,
+                sql_cases,
+                route_cases,
+                config.agent.sql_guards,
+                linker,
+                finder.listing,
             )
         summary, run_id = log_benchmark(
             config,
@@ -962,6 +975,7 @@ def agent_session(
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
     from mlops_core.agent.dictionary import dictionary_path, schema_context, shown
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
+    from mlops_core.agent.model_cards import ModelFinder, model_cards, served_models
     from mlops_core.agent.registry import register_prompts
     from mlops_core.agent.routing import routing_context
     from mlops_core.agent.sql import read_only, views
@@ -995,6 +1009,8 @@ def agent_session(
         )
         names = shown(views(con), config.agent.hidden_tables)
         linker = _linker(config, dictionary, names, embedder)
+        # The models the API serves, each a card: a question is shown the closest.
+        finder = ModelFinder(model_cards(adapter, served_models(adapter, api)), embedder.embed)
         # The votes are the local model's, sampled: whichever model answers first.
         voters: list[Generator] = [
             LocalModel(http, AGENT_GENERATOR,
@@ -1016,6 +1032,7 @@ def agent_session(
                 list(config.agent.sql_guards),
                 linker,
                 voters,
+                finder,
             ),
             identity,
         )

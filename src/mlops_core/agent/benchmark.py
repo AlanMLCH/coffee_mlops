@@ -149,8 +149,11 @@ def run_benchmark(
     route_cases: Sequence[RouteCase],
     guards: Sequence[SqlGuard] = (),
     linker: Callable[[str], str] | None = None,
+    models: Callable[[str], str] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """One row per SQL question and one per routing question, with the verdicts."""
+    """One row per SQL question and one per routing question, with the verdicts. With
+    `models`, the router is shown the models it gives for each question, as the agent's
+    is (`ModelFinder.listing`); else the context's list."""
     sql_rows = []
     for case in sql_cases:
         expected = run_select(con, case.sql, COMPARED_ROWS)
@@ -172,7 +175,8 @@ def run_benchmark(
     route_rows = []
     for route_case in route_cases:
         start = time.perf_counter()
-        chosen = route(generator, context, route_case.question)
+        told = context | {"models": models(route_case.question)} if models else context
+        chosen = route(generator, told, route_case.question)
         route_rows.append(
             {
                 "case_id": route_case.id,

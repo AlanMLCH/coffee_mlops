@@ -156,15 +156,21 @@ ROUTER = """You route questions about {subject} to the tool that can answer them
 
 - data: figures, counts, rankings and comparisons read from the domain's tables (listed
   below).
-- prediction: what a model would predict for an item the question describes rather
-  than one the tables list - what such an item would be, not what one was. The models:
+- prediction: what one of these models estimates for an item the question describes by
+  its attributes - what such an item would score, cost or count, how likely it is to be
+  something: what it would be, not what one was. The item may be like the ones the tables
+  list: a question is a prediction when it asks for a model's estimate, data when it asks
+  what the records say. The models closest to the question, each with what it is asked
+  with:
 {models}
 - knowledge: how and why - explanations from a library of documents on:
 {topics}
 - mixed: the question needs two of the above, such as a figure and an explanation, or a
   prediction and a figure to compare it with.
 
-A question about what a model predicted for items already in the tables is data.
+A question about what the records say - a count, an average, a ranking of what was
+observed, or what a model already predicted for items in the tables - is data, even when
+it is about the kind of item a model estimates.
 
 The tables `data` reads:
 {tables}
@@ -175,10 +181,10 @@ Question: {question}
 
 NEEDS = """Two yes-or-no questions about a question on {subject}.
 
-- predicts: does the question describe an item by its attributes - one that may not be in
-  the tables, such as a lot, a bag or a month - and ask what one of these models would
-  predict for it? A question about what a model already predicted for items in the
-  tables is not this.
+- predicts: does the question describe an item by its attributes - one that may be like
+  the items the tables list - and ask what one of these models estimates for it, rather
+  than what the records say? A question about what a model already predicted for items
+  in the tables is not this. The models, each with what it is asked with:
 {models}
 - figures: does the question ask for a figure computed from the records in the tables -
   a count, an average, a total, a maximum, a share - or a ranking of them?
@@ -195,9 +201,10 @@ the one tool that answers it:
 
 - data: figures, counts and rankings read from the records in the tables - a median, an
   average, a maximum of what they list.
-- prediction: what one of these models would predict for one item the question describes
-  by its attributes, an item that may not be in the tables. Keep every detail the question
-  gives about the item. A question that describes no such item has no prediction part.
+- prediction: what one of these models estimates for one item the question describes by
+  its attributes, an item that may be like the ones the tables list. Keep every detail the
+  question gives about the item. A question that describes no such item has no prediction
+  part. The models, each with what it is asked with:
 {models}
 - knowledge: how and why, explained by documents.
 

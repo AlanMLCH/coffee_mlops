@@ -103,8 +103,10 @@ class Zone(BaseModel):
 
     zone_id: str = Field(
         pattern=r"^09\d{7}[0-9A-Z]{4}$",
-        description="The urban AGEB's 13-character key from the 2020 Census, as the map's "
-        "tooltip shows it, e.g. 0901500010010",
+        # What the key is and its form, nothing more. Shown an example key, or told it
+        # comes "from the 2020 Census", the 4B wrote "null": the question names no census
+        # (2026-10-03).
+        description="The urban AGEB key, 13 characters",
     )
 
     def to_item(self) -> dict[str, Any]:
@@ -183,7 +185,7 @@ class Place(BaseModel):
     zone_id: str | None = Field(
         None,
         pattern=r"^09\d{7}[0-9A-Z]{4}$",
-        description="The urban AGEB it stands in, if known (13 characters, e.g. 0901500010010)",
+        description="The urban AGEB key of where it stands, 13 characters",
     )
 
     def to_item(self) -> dict[str, Any]:

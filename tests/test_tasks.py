@@ -14,7 +14,7 @@ from mlflow.entities import Run
 from mlflow.models import infer_signature
 from pydantic import BaseModel, Field, ValidationError
 
-from mlops_core.agent.tools import described, unstated_dates
+from mlops_core.agent.tools import described, stated_numbers, unstated_values
 from mlops_core.config import (
     AnalysisConfig,
     DomainConfig,
@@ -375,17 +375,26 @@ class Bag(BaseModel):
     shop: str
     observed_on: date | None = Field(None, description="Defaults to today (UTC).")
     month: date
+    grams: float  # required: kept whatever the question says
+    altitude_m: float | None = None
+    members: int | None = None
+    organic: bool | None = None
 
 
-def test_a_date_the_question_never_gave_is_the_models_invention() -> None:
-    request = {"shop": "a", "observed_on": "2023-10-07", "month": "2023-10-01"}
+def test_a_date_or_a_number_the_question_never_gave_is_the_models_invention() -> None:
+    request = {"shop": "a", "observed_on": "2023-10-07", "month": "2023-10-01", "grams": 250,
+               "altitude_m": 1500, "members": 3, "organic": True}  # fmt: skip
 
-    kept = unstated_dates(Bag, request, "What would a bag at shop a cost?")
+    kept = unstated_values(Bag, request, "What would a bag at shop a cost?")
 
-    # Optional and never stated: dropped, and the API applies its default. Required: kept.
-    assert kept == {"shop": "a", "month": "2023-10-01"}
-    stated = unstated_dates(Bag, request, "And in October 2023?")
+    # Optional and never stated: dropped, and the API applies its default. Required: kept,
+    # and text and flags are the question read into the fields' vocabulary: kept too.
+    assert kept == {"shop": "a", "month": "2023-10-01", "grams": 250, "organic": True}
+    stated = unstated_values(
+        Bag, request, "And a family of three in October 2023, grown at 1,500 metres?"
+    )
     assert stated == request
+    assert stated_numbers("15,000 pesos for two, 0.5 kg") == {15000.0, 2.0, 0.5}
 
 
 def test_a_prediction_is_described_with_its_range_and_level() -> None:

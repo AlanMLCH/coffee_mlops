@@ -121,10 +121,13 @@ def test_the_agent_is_not_shown_what_the_domain_keeps_from_it(
 def test_the_agent_is_offered_only_the_models_the_domain_shows_it(
     coffee_config: CoffeeConfig,
 ) -> None:
-    offered = [model.name for model in coffee_config.agent.shown_models(coffee_config.models)]
-    context = routing_context(coffee_config, "", set())
+    agent = coffee_config.agent.model_dump() | {"hidden_models": ["zones", "auction"]}
+    config = coffee_config.model_validate(coffee_config.model_dump() | {"agent": agent})
+    offered = [model.name for model in config.agent.shown_models(config.models)]
+    context = routing_context(config, "", set())
 
-    assert offered == ["review", "offer", "green_price"]
+    assert coffee_config.agent.hidden_models == []  # coffee's agent finds them by retrieval
+    assert "zones" not in offered and len(offered) == len(config.models) - 2
     assert "  - offer: " in context["models"] and "zones" not in context["models"]
     with pytest.raises(ValidationError, match="names no model of the domain"):
         coffee_config.model_validate(
