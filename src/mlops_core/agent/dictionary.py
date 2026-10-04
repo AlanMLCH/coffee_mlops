@@ -14,6 +14,9 @@ from pathlib import Path
 
 import numpy as np
 
+from mlops_core.adapter import domain_dir
+from mlops_core.config import DomainConfig
+
 DICTIONARY_FILE = "data_dictionary.md"
 # The models' inputs are not offered. Everything in them comes from the clean layer, some
 # of it shifted on purpose - an item's context is the period before its own - and a
@@ -23,11 +26,25 @@ DICTIONARY_FILE = "data_dictionary.md"
 MODEL_INPUTS = "features."
 
 _SECTION = re.compile(r"^## ", re.MULTILINE)
-_VIEW = re.compile(r"^## `(\w+\.\w+)`")
+_VIEW = re.compile(r"^## `(\w+(?:\.\w+){1,2})`")
 
 
 def dictionary_path(domain_dir: Path) -> Path:
     return domain_dir / DICTIONARY_FILE
+
+
+def domain_dictionary(config: DomainConfig) -> str:
+    """The domain's dictionary, and the section of every table another domain lends it,
+    renamed as this domain queries it (`<domain>.<layer>.<table>`): the agent reads a
+    lent table's units and traps from the domain that knows them."""
+    text = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    for use in config.uses:
+        theirs = table_sections(dictionary_path(domain_dir(use.domain)).read_text(encoding="utf-8"))
+        for table in use.tables:
+            if table in theirs:
+                lent = theirs[table].replace(f"`{table}`", f"`{use.domain}.{table}`")
+                text += "\n\n" + lent
+    return text
 
 
 def table_sections(text: str) -> dict[str, str]:

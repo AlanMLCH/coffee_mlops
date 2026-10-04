@@ -559,7 +559,7 @@ def benchmark(
             run_benchmark,
         )
         from mlops_core.agent.dictionary import (
-            dictionary_path,
+            domain_dictionary,
             reads_any,
             schema_context,
             shown,
@@ -575,8 +575,8 @@ def benchmark(
     config = adapter.config
     home = domain_dir(config.name)
     data_dir = _data_dir(config)
-    con = read_only(data_dir)
-    dictionary = dictionary_path(home).read_text(encoding="utf-8")
+    con = read_only(data_dir, config.uses)
+    dictionary = domain_dictionary(config)
     hidden = config.agent.hidden_tables
     names = shown(views(con), hidden)
     schema = schema_context(dictionary, names)
@@ -917,7 +917,7 @@ def mcp_server(
     the protocol, so everything else goes to stderr.
     """
     with _needs_extra("mcp"):
-        from mlops_core.agent.dictionary import dictionary_path, schema_context
+        from mlops_core.agent.dictionary import domain_dictionary, schema_context
         from mlops_core.agent.mcp_server import build_server
         from mlops_core.agent.sql import read_only, views
         from mlops_core.agent.tools import cite
@@ -929,9 +929,9 @@ def mcp_server(
     config = adapter.config
     _corpus(config)
     settings = Settings()
-    con = read_only(_data_dir(config))
+    con = read_only(_data_dir(config), config.uses)
     areas = areas_if_built(con, config.explore)
-    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    dictionary = domain_dictionary(config)
     chunks, documents = _corpus_tables(config)
     titles = {row["document_id"]: row for row in documents.iter_rows(named=True)}
     client, _ = _current_index(config, settings, chunks)
@@ -973,7 +973,7 @@ def agent_session(
     already point at MLflow: the prompts are registered there. Public: the explorer app
     asks this same agent."""
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
-    from mlops_core.agent.dictionary import dictionary_path, schema_context, shown
+    from mlops_core.agent.dictionary import domain_dictionary, schema_context, shown
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
     from mlops_core.agent.model_cards import ModelFinder, model_cards, served_models
     from mlops_core.agent.registry import register_prompts
@@ -985,8 +985,8 @@ def agent_session(
 
     config = adapter.config
     _corpus(config)
-    con = read_only(_data_dir(config))
-    dictionary = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
+    con = read_only(_data_dir(config), config.uses)
+    dictionary = domain_dictionary(config)
     chunks, documents = _corpus_tables(config)
     client, _ = _current_index(config, settings, chunks)
     prompts = register_prompts(settings.mlflow_tracking_uri)
@@ -1281,7 +1281,7 @@ def sql(
 
     adapter = _adapter(domain)
     config = adapter.config
-    typer.echo(connect(_data_dir(config)).sql(query))
+    typer.echo(connect(_data_dir(config), config.uses).sql(query))
 
 
 @app.command()

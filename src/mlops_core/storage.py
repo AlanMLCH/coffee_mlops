@@ -80,7 +80,7 @@ def data_version(data_dir: Path, clean: Mapping[str, str]) -> str:
     """
     raw: dict[str, str] = {}
     for table, partition in sorted(clean.items()):
-        manifest = data_dir / "clean" / table / partition / MANIFEST_NAME
+        manifest = table_path(data_dir, table) / partition / MANIFEST_NAME
         if not manifest.is_file():
             raw[table] = partition
             continue
@@ -94,9 +94,20 @@ def data_version(data_dir: Path, clean: Mapping[str, str]) -> str:
     return digest[:12]
 
 
+def table_path(data_dir: Path, name: str) -> Path:
+    """Where a table lives: a bare name is one of the domain's clean tables; a qualified
+    one (`<domain>.<layer>.<table>`) is another domain's, beside this one under the same
+    data root. Whether the domain may read it is its config's to say (`DomainConfig.uses`)."""
+    parts = name.split(".")
+    if len(parts) == 3:
+        domain, layer, table = parts
+        return data_dir.parent / domain / layer / table
+    return data_dir / "clean" / name
+
+
 def latest_data_version(data_dir: Path, tables: Sequence[str]) -> str | None:
     """The data version of the newest partitions of `tables`; None until all exist."""
-    partitions = {table: latest_partition(data_dir / "clean" / table) for table in tables}
+    partitions = {table: latest_partition(table_path(data_dir, table)) for table in tables}
     if any(partition is None for partition in partitions.values()):
         return None
     return data_version(data_dir, {t: p.name for t, p in partitions.items() if p is not None})

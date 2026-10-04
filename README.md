@@ -184,6 +184,13 @@ flowchart LR
 
 Parquet is the source of truth for every layer and DuckDB the query engine over it.
 
+Domains are tenants. Each keeps its own data, models, API, agent and explorer, and reads
+another domain's tables only as its YAML declares them (`uses`), one by one and read-only:
+they appear in its catalog as `<domain>.<layer>.<table>`, and its agent reads their
+dictionary sections from the domain that owns them. A domain that declares nothing sees
+nothing of any other, whatever a query tries; and no domain imports another's code - the
+contract between them is the data.
+
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make

@@ -32,7 +32,9 @@ FIGURES = "figures"
 # Read by the pages without being named in the YAML: every model's studies and figures,
 # and the monitor's verdicts in the Models tab.
 WHOLE_LAYERS = ("analysis", "monitoring")
-_TABLE = re.compile(rf"\b({'|'.join(LAYERS)})\.([A-Za-z_]\w*)\b")
+# A layer's table, not another domain's (`<domain>.<layer>.<table>`): a snapshot holds
+# the domain's own tables, and a lent one is published by the domain that owns it.
+_TABLE = re.compile(rf"(?<![\w.])({'|'.join(LAYERS)})\.([A-Za-z_]\w*)\b")
 
 
 @dataclass(frozen=True)

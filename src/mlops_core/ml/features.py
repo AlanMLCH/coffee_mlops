@@ -15,7 +15,7 @@ import polars as pl
 from mlops_core.adapter import DomainAdapter
 from mlops_core.config import GroupSplit, ModelConfig
 from mlops_core.contracts import check_contract
-from mlops_core.storage import latest_partition, read_table, write_table
+from mlops_core.storage import latest_partition, read_table, table_path, write_table
 
 
 def features_schema(model: ModelConfig) -> pa.DataFrameSchema:
@@ -59,15 +59,17 @@ def build_features(
     adapter: DomainAdapter, model_name: str, data_dir: Path, at: datetime | None = None
 ) -> Path:
     """Read the model's latest items and context, enrich, check the contract, write Parquet."""
-    model = adapter.config.model_named(model_name)
-    clean_dir = data_dir / "clean"
-    context_tables = adapter.context_tables(model.name)
+    config = adapter.config
+    model = config.model_named(model_name)
+    # A context table may be another domain's, if this one declares it (`uses`).
+    context_tables = [config.readable(table) for table in adapter.context_tables(model.name)]
     lineage = {}
     for table in (model.items.table, *context_tables):
-        partition = latest_partition(clean_dir / table)
+        partition = latest_partition(table_path(data_dir, table))
         lineage[table] = partition.name if partition else ""
-    context = {table: read_table(clean_dir / table) for table in context_tables}
-    enriched = adapter.enrich(model.name, read_table(clean_dir / model.items.table), context)
+    context = {table: read_table(table_path(data_dir, table)) for table in context_tables}
+    items = read_table(table_path(data_dir, model.items.table))
+    enriched = adapter.enrich(model.name, items, context)
     features = check_contract(features_schema(model), select_features(enriched, model))
     return write_table(
         features, data_dir / "features" / model.features_table, lineage, at or datetime.now(UTC)

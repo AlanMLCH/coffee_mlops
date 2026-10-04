@@ -3,19 +3,25 @@
 The connection is in-memory and read-only by construction: it holds views, never
 data, so any number of readers (CLI, API, agent, UI) can open one while the
 pipeline writes new partitions.
+
+The tables another domain lends (`DomainConfig.uses`) are a catalog of their own, named
+after it - `SELECT * FROM <domain>.clean.<table>` - holding only the tables declared.
 """
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import duckdb
 
-from mlops_core.storage import latest_partition
+from mlops_core.config import DATA_LAYERS, DomainUse
+from mlops_core.storage import latest_partition, table_path
 
-LAYERS = ("clean", "features", "predictions", "analysis", "evaluations", "monitoring")
+LAYERS = DATA_LAYERS
 
 
-def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:
-    """One schema per layer, one view per table: `SELECT * FROM clean.<table>`."""
+def connect(data_dir: Path, uses: Sequence[DomainUse] = ()) -> duckdb.DuckDBPyConnection:
+    """One schema per layer, one view per table: `SELECT * FROM clean.<table>`; and each
+    used domain's declared tables as `<domain>.<layer>.<table>`."""
     con = duckdb.connect()
     for layer in LAYERS:
         layer_dir = data_dir / layer
@@ -31,6 +37,19 @@ def connect(data_dir: Path) -> duckdb.DuckDBPyConnection:
             # hive_partitioning off: the `built_at=` folder is lineage, not a data column.
             con.execute(
                 f"CREATE VIEW {layer}.{table_dir.name} AS "
+                f"SELECT * FROM read_parquet('{parquet}', hive_partitioning = false)"
+            )
+    for use in uses:
+        con.execute(f"ATTACH ':memory:' AS {use.domain}")
+        for name in use.qualified():
+            domain, layer, table = name.split(".")
+            partition = latest_partition(table_path(data_dir, name))
+            if partition is None:
+                continue  # the other domain has not built it yet: not offered
+            parquet = (partition / f"{table}.parquet").as_posix()
+            con.execute(f"CREATE SCHEMA IF NOT EXISTS {domain}.{layer}")
+            con.execute(
+                f"CREATE VIEW {name} AS "
                 f"SELECT * FROM read_parquet('{parquet}', hive_partitioning = false)"
             )
     return con

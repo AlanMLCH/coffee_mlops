@@ -122,7 +122,7 @@ def session() -> duckdb.DuckDBPyConnection:
     query runs on a cursor of its own (`sql.run_select`), so they do not wait in line."""
     if SHOWCASE:
         snapshot()
-    return read_only(data_dir)
+    return read_only(data_dir, config.uses)
 
 
 def query(sql: str) -> tuple[pl.DataFrame, bool]:

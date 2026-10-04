@@ -25,7 +25,7 @@ from mlops_core.adapter import DomainAdapter, ItemRequest, load_adapter
 from mlops_core.config import Settings
 from mlops_core.ml.band import predicted
 from mlops_core.ml.registry import ServedModel, load_champion
-from mlops_core.storage import read_table
+from mlops_core.storage import read_table, table_path
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class Service:
         model = self.config.model_named(name)
         served = load_champion(model.training.registered_model, self.tracking_uri, self.cache_dir)
         context = {
-            table: read_table(self.data_dir / "clean" / table)
+            table: read_table(table_path(self.data_dir, self.config.readable(table)))
             for table in self.adapter.context_tables(name)
         }
         try:

@@ -39,6 +39,7 @@ from mlops_core.storage import (
     latest_partition,
     new_partition,
     read_table,
+    table_path,
     write_table,
 )
 
@@ -108,6 +109,12 @@ def build_analysis(
         name: read_table(data_dir / "clean" / name)
         for name in adapter.clean_contracts()
         if latest_partition(data_dir / "clean" / name)
+    }
+    # And what other domains lend it, by the names it uses them by.
+    clean |= {
+        name: read_table(table_path(data_dir, name))
+        for name in sorted(config.used_tables)
+        if latest_partition(table_path(data_dir, name))
     }
     tables: dict[str, pl.DataFrame] = {}
     drawn: dict[str, Figure] = {}

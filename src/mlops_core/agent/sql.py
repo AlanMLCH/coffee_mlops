@@ -21,7 +21,7 @@ can carry instructions of its own. Verified on DuckDB 1.5.5 (2026-09-25):
 
 import re
 import threading
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,8 @@ from typing import Any
 import duckdb
 
 from mlops_core.catalog import LAYERS, connect
+from mlops_core.config import DomainUse
+from mlops_core.storage import table_path
 
 MAX_ROWS = 50  # what an answer can use; more is a sign the query should aggregate
 TIMEOUT_SECONDS = 10.0
@@ -57,12 +59,15 @@ class QueryResult:
         return "\n".join(lines)
 
 
-def read_only(data_dir: Path) -> duckdb.DuckDBPyConnection:
-    """A session over the catalog's views that can read the published layers and
-    nothing else, and cannot be talked into changing that."""
+def read_only(data_dir: Path, uses: Sequence[DomainUse] = ()) -> duckdb.DuckDBPyConnection:
+    """A session over the catalog's views that can read the published layers - and of
+    another domain, only the tables declared in `uses` - and nothing else, and cannot be
+    talked into changing that."""
     root = data_dir.resolve()
-    con = connect(root)
+    con = connect(root, uses)
     allowed = [f"{(root / layer).as_posix()}/" for layer in LAYERS if (root / layer).is_dir()]
+    lent = [table_path(root, name) for use in uses for name in use.qualified()]
+    allowed += [f"{path.as_posix()}/" for path in lent if path.is_dir()]
     listing = ", ".join("'" + path.replace("'", "''") + "'" for path in allowed)
     con.execute(f"SET memory_limit = '{MEMORY_LIMIT}'")
     con.execute(f"SET allowed_directories = [{listing}]")
@@ -113,9 +118,12 @@ def unquoted_views(sql: str, names: Collection[str]) -> str:
 
 
 def views(con: duckdb.DuckDBPyConnection) -> set[str]:
-    """Every `layer.table` the session can query."""
+    """Every `layer.table` the session can query, and every `<domain>.<layer>.<table>`
+    another domain lends it."""
     with con.cursor() as cursor:
         found = cursor.execute(
-            "SELECT table_schema || '.' || table_name FROM information_schema.tables"
+            "SELECT CASE WHEN table_catalog = current_database() THEN '' "
+            "ELSE table_catalog || '.' END || table_schema || '.' || table_name "
+            "FROM information_schema.tables"
         ).fetchall()
     return {str(name) for (name,) in found}
