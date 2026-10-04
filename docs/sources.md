@@ -1,6 +1,6 @@
 # Data sources: what was verified about each
 
-The reference for every source the coffee domain reads: where it lives, how it is
+The reference for every source the domains read: where it lives, how it is
 reached, what the file really looks like and the traps found in it. Each fact was
 checked with a real request on the date given. An address, a code, a column or a
 parameter not written here (or in the YAML's comments) was not verified, and is checked
@@ -548,6 +548,53 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 - Known gap: a practical roasting guide (curves, first crack, Agtron). Not added ahead of
   need: it comes in if retrieval shows roasting questions failing.
 
+## The coffee shop (`coffee_shop`)
+
+The second tenant: one neighbourhood specialty coffee shop that does not exist, so its
+point-of-sale export is simulated - and anchored to the real data below. Its columns are
+in [its data dictionary](../src/domains/coffee_shop/data_dictionary.md).
+
+### A real coffee machine's sales: `vending_sales`
+
+`https://huggingface.co/datasets/tablegpt/CoffeeSales/resolve/<commit>/index.csv`, pinned
+to commit `ac770258c76b502de47a6a314aa95ff1dc05ef0a`. Verified 2026-10-04 with the
+project's client: the dataset's card says CC0 1.0; robots.txt allows everything to `*`.
+2,623 sales of one coffee vending machine from 1 March 2024, a row each: `date`,
+`datetime` (to the millisecond), `cash_type`, `card` (an anonymised id, `ANON-...`, never
+read), `money` (the price paid) and `coffee_name`.
+
+What the shop borrows from it, and what it is not:
+
+- **When people buy**: each hour's share of the sales, and each weekday's against the mean
+  day, over 298 days.
+- **How they answer a price**: the machine moved every price several times; a product's
+  price is set against its first week's, and the elasticity of daily units to that level
+  (log-log, with weekday effects) is **-1.22, 95% interval -2.08 to -0.44** (1,000
+  resampled days). A vending machine's, confounded with the season - prices moved in step
+  with the months - and said wherever it is used. Specialty shops are usually thought less
+  sensitive; nothing here measures that.
+- **Never the shop's sales.** Its volumes, prices and drinks are not the shop's.
+
+### The simulated point-of-sale export: `pos_sales`, `pos_orders`, `pos_menu`, `pos_purchases`, `pos_shifts`, `pos_recipes`
+
+Written by `domains/coffee_shop/simulate.py` at extract time, one raw source per table, as
+JSON: its rows as any export would give them (text), and the anchors they were simulated
+from. Seeded: the same anchors and config make the same bytes, and the raw layer stores
+nothing new. It needs the coffee domain's `analysis.green_coffee_in_pesos` and
+`clean.consumer_price_index`, read as declared in `uses`; without them, or without
+`vending_sales`, the export is skipped out loud.
+
+- **Assumed**, in `config.yaml`: the menu, its prices and recipes, opening hours, shifts,
+  the hourly cost of staff, tickets on an ordinary day, items per ticket, the price
+  changes, each ingredient's waste, and that half of what roasted beans cost moves with
+  green coffee.
+- **Simulated**: every ticket, at a random minute of its hour; its items; a queue in
+  which each order goes to the first free hand and a customer who would wait longer than
+  their patience (exponential, 15 minutes on average) leaves without buying - and is in no
+  table, as a real export would not see them; weekly purchases on Mondays; the shifts.
+- **Anchored**: hours, weekdays and the price response to `vending_sales`; ingredient
+  costs and wages to green coffee in pesos and the INPC, month by month.
+
 ## Candidates: verified, rejected or waiting
 
 | Source | State | Why |
@@ -559,4 +606,5 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 | IMSS jobs by employer (`asg-<date>.csv`, datos abiertos) | verified, not read | monthly, one CSV per month; but Mexico City's rows carry no municipality (`cve_municipio` "NA"), so it says nothing per alcaldia that DENUE's staff bands do not |
 | SCA Specialty Coffee Transaction Guide | not pursued | a form asking for personal data; left out by the owner's decision (2026-10-01) |
 | Open-Meteo | not used | its robots.txt forbids this project's agent |
+| Censos Económicos 2024 (INEGI) | waiting | would anchor a shop's revenue, costs and staff to its class in Mexico City; the open-data URLs tried (`.../ce2024_09_csv.zip`, `.../ce2024_cdmx_csv.zip`) answer an HTML page with status 200, not the file - the real link was not found yet |
 | Censo Agropecuario 2022 (INEGI) | verified, not read | its open data (`ca_2022_upaf_csv.zip`, 3 KB) is the national summary, 11 rows; coffee by municipality (358,301 production units in 2022) is only in the interactive tables, with no file to download |

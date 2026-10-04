@@ -1,0 +1,153 @@
+# Domain config for the coffee shop: one neighbourhood specialty coffee shop in Mexico City.
+# A tenant of its own - its data, models, API and agent are the shop's - that reads the
+# coffee market from the coffee domain's tables declared in `uses`, and nothing else of it.
+#
+# The shop does not exist. Its point-of-sale export is simulated (domains/coffee_shop/
+# simulate.py) and anchored to real data: when people buy and how they answer a price come
+# from a real coffee machine's sales (`vending_sales`); what the shop pays follows green
+# coffee in pesos and the consumer price index (lent by coffee). Every other number in
+# `shop` is an assumption, said beside it, for an owner to replace with their own.
+name: coffee_shop
+
+sources:
+  # A real coffee machine's sales (one sale a row: day, minute, price paid, drink), from
+  # March 2024. CC0, on Hugging Face; pinned to a commit so the anchors are reproducible.
+  # Read for its hours, its weekdays and its price changes - never as the shop's sales.
+  vending_sales:
+    url: https://huggingface.co/datasets/tablegpt/CoffeeSales/resolve/ac770258c76b502de47a6a314aa95ff1dc05ef0a/index.csv
+    filename: coffee_sales.csv
+    refresh_hours: 8760 # a pinned commit: it will not have changed
+
+# What the shop reads of the coffee domain, table by table: the green coffee price in
+# pesos its beans follow, and the consumer price index its milk, pastries and wages follow.
+uses:
+  - domain: coffee
+    tables:
+      - analysis.green_coffee_in_pesos
+      - clean.consumer_price_index
+
+simulation:
+  sales_pattern: vending_sales
+  green_coffee: coffee.analysis.green_coffee_in_pesos
+  inflation: coffee.clean.consumer_price_index
+  green_indicator: other_milds # Mexico's washed Arabicas are priced among the other milds
+
+shop:
+  name: Café de Barrio (demo)
+  concept: >-
+    A neighbourhood specialty coffee shop: espresso and filter drinks of Mexican coffee,
+    milk drinks, a little pastry; a counter and a few tables.
+  # The urban AGEB it opens in: the one the coffee domain's `zones` model finds most short
+  # of coffee shops (its held-out expectation minus the coffee shops DENUE lists there),
+  # among AGEBs of 3,000 residents or more outside the boroughs with 0.9 jobs or more per
+  # resident - where a shop lives off its neighbours, not off offices. In Benito Juárez.
+  zone_id: "0901400010685"
+  first_day: 2025-01-01
+  last_day: 2026-08-31 # the last month the lent tables publish
+  # Assumed. Weekdays open early for the way to work; Sunday later and shorter.
+  opens: {1: "07:30", 2: "07:30", 3: "07:30", 4: "07:30", 5: "07:30", 6: "08:00", 7: "08:30"}
+  closes: {1: "21:00", 2: "21:00", 3: "21:00", 4: "21:00", 5: "21:00", 6: "21:00", 7: "20:00"}
+  # Assumed: an ordinary day at opening prices, before the weekday's factor (anchored).
+  tickets_per_day: 150
+  items_per_ticket: [0.62, 0.28, 0.10] # one item, two, three: assumed
+  # Assumed: prices of a specialty shop in Benito Juárez, 2025, in pesos; the share of
+  # the items sold; a barista's minutes on one, without a queue; the recipe of one.
+  menu:
+    - {product: espresso, category: espresso, price_mxn: 40, share: 0.06, prep_minutes: 1.5,
+       recipe: {coffee_beans: 18, cup: 1}}
+    - {product: americano, category: espresso, price_mxn: 50, share: 0.18, prep_minutes: 2.0,
+       recipe: {coffee_beans: 18, cup: 1}}
+    - {product: cortado, category: milk, price_mxn: 55, share: 0.08, prep_minutes: 2.5,
+       recipe: {coffee_beans: 18, milk: 60, cup: 1}}
+    - {product: cappuccino, category: milk, price_mxn: 65, share: 0.14, prep_minutes: 3.0,
+       recipe: {coffee_beans: 18, milk: 150, cup: 1}}
+    - {product: latte, category: milk, price_mxn: 70, share: 0.18, prep_minutes: 3.0,
+       recipe: {coffee_beans: 18, milk: 220, cup: 1}}
+    - {product: filter_v60, category: filter, price_mxn: 75, share: 0.07, prep_minutes: 4.5,
+       recipe: {coffee_beans: 20, cup: 1, filter_paper: 1}}
+    - {product: cold_brew, category: filter, price_mxn: 70, share: 0.05, prep_minutes: 1.0,
+       recipe: {coffee_beans: 25, cup: 1}}
+    - {product: hot_chocolate, category: chocolate, price_mxn: 65, share: 0.06, prep_minutes: 2.5,
+       recipe: {chocolate: 30, milk: 220, cup: 1}}
+    - {product: croissant, category: pastry, price_mxn: 45, share: 0.10, prep_minutes: 0.5,
+       recipe: {croissant: 1}}
+    - {product: pan_dulce, category: pastry, price_mxn: 35, share: 0.08, prep_minutes: 0.5,
+       recipe: {pan_dulce: 1}}
+  # Assumed costs in January 2025, per unit; from then on each follows what it says.
+  ingredients:
+    # Roasted, bought from a roaster: half its price is the green coffee in it (assumed;
+    # the rest is the roaster's work, packing and margin, which green coffee does not move).
+    coffee_beans: {unit: g, cost_mxn: 0.45, follows: green_coffee, pass_through: 0.5, waste_pct: 3}
+    milk: {unit: ml, cost_mxn: 0.028, follows: inflation, waste_pct: 4}
+    chocolate: {unit: g, cost_mxn: 0.30, follows: inflation}
+    cup: {unit: piece, cost_mxn: 3.5, follows: inflation}
+    filter_paper: {unit: piece, cost_mxn: 1.5, follows: inflation}
+    croissant: {unit: piece, cost_mxn: 18, follows: inflation, waste_pct: 12} # unsold at closing
+    pan_dulce: {unit: piece, cost_mxn: 10, follows: inflation, waste_pct: 15}
+  # Assumed: what the demo owner did with the menu - the history its pricing models learn from.
+  price_changes:
+    - {starts: 2025-03-01, change_pct: 6}
+    - {starts: 2025-08-01, until: 2025-08-31, change_pct: -10} # a summer promotion
+    - {starts: 2026-02-01, change_pct: 8} # after green coffee's 2025 run-up
+  # Assumed: two baristas in turns, a helper at the weekday morning rush.
+  shifts:
+    - {role: barista, starts: "07:00", ends: "15:00", days: [1, 2, 3, 4, 5, 6]}
+    - {role: barista, starts: "13:30", ends: "21:00", days: [1, 2, 3, 4, 5, 6]}
+    - {role: barista, starts: "08:00", ends: "16:00", days: [7]}
+    - {role: barista, starts: "12:30", ends: "20:00", days: [7]}
+    - {role: helper, starts: "08:00", ends: "12:00", days: [1, 2, 3, 4, 5]}
+  # Assumed, January 2025: what an hour of staff costs the shop - a barista's wage in Mexico
+  # City and the employer's share (social security, Christmas bonus, holidays). Follows the
+  # consumer price index.
+  hourly_wage_mxn: 75
+  seed: 7
+
+models:
+  # How many tickets an hour brings, at the menu's prices or at prices the owner weighs.
+  # What an item knows is domains/coffee_shop/features.py: its day, its hour and the menu.
+  - name: hourly_demand # -> hourly_demand_features, hourly_demand_predictions
+    description: >-
+      How many tickets the coffee shop sells in an hour of a given day, at the menu's
+      prices that day or with every price moved by a percent: the demand to staff and
+      stock for. A price beyond any the menu has had is answered as the nearest one it
+      had: trees do not extrapolate, so it does not say what a larger rise would do.
+    example: {day: "2026-09-07", hour: 8}
+    items:
+      table: shop_hours
+      id: hour_id # 2026-03-02T08
+      time: date
+      period: month
+    spec:
+      target: tickets
+      task: count
+      categorical: [weekday_hour]
+      numeric: [hour, weekday, price_level]
+      leakage: [items, revenue_mxn, mean_minutes]
+    training:
+      # Fourteen months to learn from - the March 2025 rise and the August promotion in
+      # them - and the six after to be judged on, at the February 2026 prices.
+      split:
+        kind: temporal
+        test_from: 2026-03-01
+        recalibration_window: 200 # hours: two weeks open
+      cv_folds: 5
+      trials: 30
+      seed: 42
+      baseline_group: weekday_hour # each slot's mean: what staffing by habit would expect
+      bootstrap_resamples: 2000
+      min_probability_better: 0.95
+      resample_by: date # an hour shares its day's crowd with the day's other hours
+      stratify_by: weekday_hour
+      min_group_size: 20
+      registered_model: coffee-shop-hourly-demand
+    target_bands:
+      edges: [5, 15]
+      labels: ["under 5", "5 to 14", "15 or more"]
+
+monitoring:
+  drift_share: 0.5
+
+analysis:
+  min_rows: 5
+  permutation_repeats: 10
+  published_figures: []

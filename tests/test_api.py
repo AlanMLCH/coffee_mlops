@@ -412,3 +412,17 @@ def test_a_month_is_forecast_from_the_months_before_it(
         "/models/green_price/predict", json={"indicator": "i_cip", "month": "2026-09-01"}
     )
     assert unknown.status_code == 422  # the World Bank averages two indicators, not the composite
+
+
+def test_each_tenant_serves_the_domain_its_environment_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One container per domain: the app is built for the one MLOPS_DOMAIN names, and with
+    several installed and none named it refuses to guess."""
+    monkeypatch.setenv("MLOPS_DOMAIN", "coffee_shop")
+
+    assert api.default_app().title == "coffee_shop predictions"
+
+    monkeypatch.delenv("MLOPS_DOMAIN")
+    with pytest.raises(ValueError, match="Name a domain"):
+        api.default_app()

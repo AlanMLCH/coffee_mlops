@@ -191,6 +191,15 @@ dictionary sections from the domain that owns them. A domain that declares nothi
 nothing of any other, whatever a query tries; and no domain imports another's code - the
 contract between them is the data.
 
+The second tenant is **`coffee_shop`**: one neighbourhood specialty coffee shop in Mexico
+City, for owners rather than for the market. It does not exist - its point-of-sale export
+is simulated, anchored to real data: when people buy and how they answer a price come from
+a real coffee machine's sales (CC0), and what it pays follows the coffee domain's green
+coffee in pesos and consumer price index, the two tables it declares. Its first model
+predicts the tickets an hour brings at the menu's prices or at prices moved by a percent.
+Learning a simulator's rules proves the pipeline, not a market, and the shop says so. It
+cost a package of its own and no change to the core's contract.
+
 ## Quickstart
 
 Requirements: [uv](https://docs.astral.sh/uv/), GNU make

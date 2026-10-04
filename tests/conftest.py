@@ -10,6 +10,7 @@ import csv
 import functools
 import importlib.util
 import io
+import os
 import tempfile
 import zipfile
 from collections.abc import Iterator
@@ -26,6 +27,11 @@ from domains.coffee.config import CoffeeConfig, CoffeeCredentials
 from mlops_core.config import Settings
 from tests.fakes import RecordedServer, fas_recording, without_rate_limits
 from tests.files import pdf, xlsx
+
+# The suite's domain is coffee unless a test names another, never the machine's. Set at
+# import, before collection: the explorer is a Streamlit script that loads its domain when
+# a test module imports it.
+os.environ["MLOPS_DOMAIN"] = "coffee"
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -624,8 +630,9 @@ def isolate_from_the_developers_machine(monkeypatch: pytest.MonkeyPatch, tmp_pat
     )
     for settings in (Settings, CoffeeCredentials):
         monkeypatch.setitem(settings.model_config, "env_file", None)
-    # Which domain runs must come from the test, never from the machine it runs on.
-    monkeypatch.delenv("MLOPS_DOMAIN", raising=False)
+    # Which domain runs must come from the test, never from the machine it runs on: coffee,
+    # unless a test names another. With two installed, a command must be told which.
+    monkeypatch.setenv("MLOPS_DOMAIN", "coffee")
 
 
 @pytest.fixture

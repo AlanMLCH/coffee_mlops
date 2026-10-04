@@ -148,5 +148,10 @@ def test_no_domain_imports_another_domains_code() -> None:
                 if isinstance(node, ast.Import)
                 for alias in node.names
             }
-            reached = {name for name in imported if any(name.startswith(o) for o in others)}
+            # Whole package names: `domains.coffee` is a prefix of `domains.coffee_shop`.
+            reached = {
+                name
+                for name in imported
+                if any(name == other or name.startswith(f"{other}.") for other in others)
+            }
             assert not reached, f"{path} imports {reached}"

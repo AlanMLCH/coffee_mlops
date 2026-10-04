@@ -60,8 +60,10 @@ def test_each_model_names_its_own_tables() -> None:
     assert review.keys == ["review_id", "snapshot", "grading_date"]
 
 
-def test_a_lone_domain_is_used_when_none_is_named() -> None:
-    assert available_domains() == ["coffee"]
+def test_a_lone_domain_is_used_when_none_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert available_domains() == ["coffee", "coffee_shop"]
+    monkeypatch.setattr("mlops_core.adapter.available_domains", lambda: ["coffee"])
+
     assert load_adapter().config.name == "coffee"
 
 

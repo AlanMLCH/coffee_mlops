@@ -88,6 +88,8 @@ def test_without_a_list_every_installed_domain_gets_a_graph(tmp_path: Path) -> N
     assert [j.name for j in defs.jobs] == [
         "coffee_data",
         "coffee_ml",
+        "coffee_shop_data",
+        "coffee_shop_ml",
         "coffee_ico_prices_reads",
         "coffee_roaster_catalogs_reads",
         "coffee_profeco_prices_reads",

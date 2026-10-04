@@ -265,5 +265,10 @@ def _model_routes(app: FastAPI, name: str, body: Any, get_service: Callable[[], 
         return service.predict(name, request)
 
 
-settings = Settings()
-app = create_app(load_adapter(settings.domain), settings)
+def default_app() -> FastAPI:
+    """The app uvicorn serves (`--factory`): the domain the environment names.
+
+    One API per tenant, each in its container with its own MLOPS_DOMAIN. Built when
+    called, never at import: importing the module must not have to pick a domain."""
+    settings = Settings()
+    return create_app(load_adapter(settings.domain), settings)

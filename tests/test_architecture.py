@@ -170,13 +170,17 @@ NOT_IN_THE_API_IMAGE = (
 
 
 def test_the_prediction_api_imports_without_the_other_pipelines_packages(tmp_path: Path) -> None:
-    """Import the API module - which loads every installed domain's adapter, contracts and
-    request bodies - in a fresh interpreter where those packages cannot be imported."""
+    """Build the API of every installed domain - its adapter, contracts and request
+    bodies - in a fresh interpreter where those packages cannot be imported."""
     code = (
         "import sys\n"
         f"for name in {NOT_IN_THE_API_IMAGE!r}:\n"
         "    sys.modules[name] = None\n"
-        "import mlops_core.serving.api\n"
+        "from mlops_core.adapter import available_domains, load_adapter\n"
+        "from mlops_core.config import Settings\n"
+        "from mlops_core.serving.api import create_app\n"
+        "for domain in available_domains():\n"
+        "    create_app(load_adapter(domain), Settings())\n"
     )
     env = {**os.environ, "MLOPS_DATA_DIR": str(tmp_path)}
 
