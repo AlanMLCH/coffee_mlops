@@ -19,8 +19,13 @@ import polars as pl
 from pydantic import BaseModel, SecretStr
 
 from domains.coffee.shops.config import CoffeeShopConfig
-from domains.coffee.shops.features import HOURS_CONTEXT, add_hour_context
-from domains.coffee.shops.request import ShopHour
+from domains.coffee.shops.features import (
+    HOURS_CONTEXT,
+    ORDERS_CONTEXT,
+    add_hour_context,
+    add_order_context,
+)
+from domains.coffee.shops.request import ShopHour, ShopOrder
 from domains.coffee.shops.schemas import CLEAN_SCHEMAS, RAW_SCHEMAS
 from mlops_core.adapter import ApiExtraction, CleanTable, FileReader, JsonReader
 
@@ -45,6 +50,12 @@ MODELS = {
         context_tables=HOURS_CONTEXT,
         enrich=add_hour_context,
         request=ShopHour,
+    ),
+    # How long an order takes from order to ready: its hour's crowd is its context.
+    "order_minutes": ModelHooks(
+        context_tables=ORDERS_CONTEXT,
+        enrich=add_order_context,
+        request=ShopOrder,
     ),
 }
 
@@ -120,7 +131,9 @@ class CoffeeShopAdapter:
         return hooks(model).request
 
     def studies(self, clean: Mapping[str, pl.DataFrame]) -> Mapping[str, pl.DataFrame]:
-        return {}
+        from domains.coffee.shops.analysis import studies
+
+        return studies(clean, self.config)
 
     def figures(self, tables: Mapping[str, pl.DataFrame]) -> Mapping[str, Figure]:
         return {}

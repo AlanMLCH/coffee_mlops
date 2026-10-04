@@ -199,8 +199,20 @@ Benito Juárez) and `cafe_de_paso` (a takeaway counter in Gustavo A. Madero), ea
 in a block the `zones` model finds short of coffee shops. They do not exist: their
 point-of-sale exports are simulated, anchored to real data - when people buy and how they
 answer a price come from a real coffee machine's sales (CC0), and what they pay follows
-coffee's green coffee in pesos and consumer price index. Learning a simulator's rules
-proves the pipeline, not a market, and the shops say so.
+coffee's green coffee in pesos and consumer price index. Each shop gets studies for its
+owner:
+- what each product earns, month by month;
+- how its customers answer a price, with an interval, and what a change would do to a day;
+- when to raise: each product against the margin it should keep, now and if green coffee
+  reaches the top of its outlook;
+- what inflation did;
+- which products carry the menu;
+- where its hands fall short;
+- its corner of the city against the rest.
+
+It also gets a served model of how long an order takes for a given crowd and staffing.
+Learning a simulator's rules proves the pipeline, not a market, and the shops say so; what
+it does prove is that the estimators recover the answers the simulator was given.
 
 ## Quickstart
 

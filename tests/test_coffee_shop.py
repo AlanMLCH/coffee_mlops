@@ -86,10 +86,12 @@ def test_every_shop_is_a_file_and_shares_the_rest(shop_adapter: CoffeeShopAdapte
 
     assert domains.coffee.shops.businesses() == ["cafe_de_barrio", "cafe_de_paso"]
     assert (barrio.tenant, paso.tenant) == ("coffee/cafe_de_barrio", "coffee/cafe_de_paso")
-    assert barrio.models[0].name == paso.models[0].name == "hourly_demand"
+    assert [m.name for m in barrio.models] == [m.name for m in paso.models]
     assert [m.training.registered_model for m in (*barrio.models, *paso.models)] == [
         "cafe-de-barrio-hourly-demand",
+        "cafe-de-barrio-order-minutes",
         "cafe-de-paso-hourly-demand",
+        "cafe-de-paso-order-minutes",
     ]
     assert barrio.shop.zone_id != paso.shop.zone_id
     assert shop_adapter.config == barrio
@@ -111,11 +113,19 @@ def test_the_shop_reads_only_what_it_lists_of_coffee(shop_adapter: CoffeeShopAda
     assert config.parent_tables == {
         "coffee.analysis.green_coffee_in_pesos",
         "coffee.clean.consumer_price_index",
+        "coffee.analysis.price_outlook",
+        "coffee.clean.coffee_shops",
+        "coffee.features.zones_features",
+        "coffee.predictions.zones_predictions",
+        "coffee.clean.roaster_offers",
     }
     as_json = config.model_dump(mode="json")
     undeclared = {**as_json["simulation"], "inflation": "coffee.clean.consumer_prices"}
     with pytest.raises(ValidationError, match="does not list"):
         CoffeeShopConfig.model_validate({**as_json, "simulation": undeclared})
+    unlisted = {**as_json["studies"], "coffee_shops": "coffee.clean.coffee_shop_history"}
+    with pytest.raises(ValidationError, match="The studies read"):
+        CoffeeShopConfig.model_validate({**as_json, "studies": unlisted})
     unknown = {**as_json["simulation"], "sales_pattern": "pos_sales"}
     with pytest.raises(ValidationError, match="No source 'pos_sales'"):
         CoffeeShopConfig.model_validate({**as_json, "simulation": unknown})

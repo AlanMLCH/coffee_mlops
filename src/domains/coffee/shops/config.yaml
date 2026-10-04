@@ -19,12 +19,19 @@ sources:
     refresh_hours: 8760 # a pinned commit: it will not have changed
 
 # What a shop reads of the coffee domain, table by table: the green coffee price in pesos
-# its beans follow, and the consumer price index its milk, pastries and wages follow.
+# its beans follow and the consumer price index its milk, pastries and wages follow; where
+# green coffee may go; and the city around it - the coffee shops listed, the AGEBs and how
+# many coffee shops one like each would have, and what the roasters charge.
 parent:
   domain: coffee
   tables:
     - analysis.green_coffee_in_pesos
     - clean.consumer_price_index
+    - analysis.price_outlook
+    - clean.coffee_shops
+    - features.zones_features
+    - predictions.zones_predictions
+    - clean.roaster_offers
 
 simulation:
   sales_pattern: vending_sales
@@ -74,6 +81,62 @@ models:
     target_bands:
       edges: [5, 15]
       labels: ["under 5", "5 to 14", "15 or more"]
+
+  # How long an order takes from order to ready, four times in five within a range: the
+  # wait a staffing and a crowd make. What an order knows is features.py.
+  - name: order_minutes # -> order_minutes_features, order_minutes_predictions
+    description: >-
+      How many minutes an order at the coffee shop takes from ordering to ready, and the
+      range it falls in four times in five, given its day and hour, its items, the staff
+      on shift and the tickets the hour brings: what a staffing would mean for the wait.
+      A staffing or a crowd the shop never had in that hour is answered as the nearest it
+      had.
+    example: {day: "2026-09-05", hour: 10, items: 2, baristas: 1, tickets_in_hour: 14}
+    items:
+      table: orders
+      id: ticket_id # 20260302-0042
+      time: date
+      period: month
+    spec:
+      target: minutes
+      interval: 0.8
+      categorical: [weekday_hour]
+      numeric: [hour, weekday, items, baristas, tickets_in_hour]
+      leakage: [ready_at]
+    training:
+      split:
+        kind: temporal
+        test_from: 2026-03-01
+        recalibration_window: 2000 # orders: about two weeks
+      cv_folds: 5
+      trials: 30
+      seed: 42
+      baseline_group: weekday_hour # each slot's usual wait
+      bootstrap_resamples: 2000
+      min_probability_better: 0.95
+      resample_by: date # a day's orders share its queue
+      stratify_by: weekday_hour
+      min_group_size: 20
+      registered_model: order-minutes
+    target_bands:
+      edges: [5, 10]
+      labels: ["under 5", "5 to 9", "10 or more"]
+
+# Every shop's studies (analysis.py): its prices, costs, menu and hands, and its corner of
+# the city against the rest.
+studies:
+  scenarios: [-10, -5, 5, 10, 15, 20]
+  baseline_weeks: 8
+  outlook_months: 6 # one of the horizons the parent's price outlook gives: 3, 6 or 12
+  menu_months: 3
+  radii_m: [300, 500, 1000]
+  resamples: 1000
+  seed: 7
+  green_outlook: coffee.analysis.price_outlook
+  coffee_shops: coffee.clean.coffee_shops
+  zones: coffee.features.zones_features
+  zone_expectations: coffee.predictions.zones_predictions
+  roaster_offers: coffee.clean.roaster_offers
 
 monitoring:
   drift_share: 0.5

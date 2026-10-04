@@ -134,7 +134,9 @@ CLEAN_SCHEMAS = {
             "ordered_at": _MOMENT_COLUMN,
             "ready_at": _MOMENT_COLUMN,
             "date": pa.Column(pl.Date),
+            "month": pa.Column(pl.String),
             "hour": pa.Column(pl.Int64, pa.Check.in_range(0, 23)),
+            "weekday": pa.Column(pl.Int64, pa.Check.in_range(1, 7)),
             "minutes": pa.Column(pl.Float64, pa.Check.ge(0)),  # from order to ready
             "items": pa.Column(pl.Int64, pa.Check.ge(1)),
             "baristas": pa.Column(pl.Int64, pa.Check.ge(1)),

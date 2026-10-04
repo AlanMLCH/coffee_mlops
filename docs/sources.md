@@ -553,8 +553,10 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 Coffee's subdomains: one per business, each a coffee shop that does not exist, so its
 point-of-sale export is simulated - and anchored to the real data below. Two demo shops,
 `coffee/cafe_de_barrio` and `coffee/cafe_de_paso`; each reads its own copy of
-`vending_sales` and its own simulated export, and of coffee only the two tables every shop
-lists. Their columns are in [the shops' data dictionary](../src/domains/coffee/shops/data_dictionary.md).
+`vending_sales` and its own simulated export, and of coffee only the tables every shop
+lists in `parent`: green coffee in pesos and the INPC (the simulation), and green coffee's
+outlook, the coffee shops, the AGEBs and their expected coffee shops and the roasters'
+offers (the studies). Their columns are in [the shops' data dictionary](../src/domains/coffee/shops/data_dictionary.md).
 
 ### A real coffee machine's sales: `vending_sales`
 

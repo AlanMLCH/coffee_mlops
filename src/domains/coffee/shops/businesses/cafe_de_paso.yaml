@@ -11,11 +11,15 @@ shop:
   # outside the boroughs with 0.9 jobs or more per resident - the first outside Benito
   # Juárez, so the two shops face different neighbourhoods.
   zone_id: "0900500011735"
+  latitude: 19.469401 # the AGEB's centroid
+  longitude: -99.141265
   first_day: 2025-04-01
   last_day: 2026-08-31 # the last month the parent's tables publish
-  # Assumed. Opens early for the commute, closes in the early evening, rests on Sunday.
-  opens: {1: "06:30", 2: "06:30", 3: "06:30", 4: "06:30", 5: "06:30", 6: "07:30"}
-  closes: {1: "19:00", 2: "19:00", 3: "19:00", 4: "19:00", 5: "19:00", 6: "15:00"}
+  # Assumed. Opens for the commute, closes in the early evening, rests on Sunday. Not
+  # before seven: the real sales that give the hours their shares start at seven, and an
+  # hour they say nothing about would be an empty one.
+  opens: {1: "07:00", 2: "07:00", 3: "07:00", 4: "07:00", 5: "07:00", 6: "07:30"}
+  closes: {1: "19:00", 2: "19:00", 3: "19:00", 4: "19:00", 5: "19:00", 6: "14:30"}
   # Assumed: an ordinary day at opening prices, before the weekday's factor (anchored).
   tickets_per_day: 110
   items_per_ticket: [0.78, 0.18, 0.04] # mostly one coffee, to go: assumed
@@ -49,10 +53,14 @@ shop:
     - {starts: 2026-01-15, change_pct: 7} # after green coffee's 2025 run-up
   # Assumed: one barista all day, a second at the morning commute.
   shifts:
-    - {role: barista, starts: "06:30", ends: "14:30", days: [1, 2, 3, 4, 5, 6]}
+    - {role: barista, starts: "07:00", ends: "15:00", days: [1, 2, 3, 4, 5, 6]}
     - {role: barista, starts: "11:00", ends: "19:00", days: [1, 2, 3, 4, 5]}
     - {role: helper, starts: "07:00", ends: "10:00", days: [1, 2, 3, 4, 5]}
   # Assumed, April 2025: an hour of staff, wage and the employer's share. Follows the
   # consumer price index.
   hourly_wage_mxn: 68
+  # The owner's aims (assumed): thinner margins at lower prices; a counter's promise is
+  # speed - five minutes from order to cup.
+  target_margins: {espresso: 70, milk: 65, filter: 70, pastry: 45}
+  wait_target_minutes: 5
   seed: 11

@@ -10,6 +10,8 @@ shop:
   # among AGEBs of 3,000 residents or more outside the boroughs with 0.9 jobs or more per
   # resident - where a shop lives off its neighbours, not off offices. In Benito Juárez.
   zone_id: "0901400010685"
+  latitude: 19.374756 # the AGEB's centroid
+  longitude: -99.190435
   first_day: 2025-01-01
   last_day: 2026-08-31 # the last month the parent's tables publish
   # Assumed. Weekdays open early for the way to work; Sunday later and shorter.
@@ -70,4 +72,8 @@ shop:
   # City and the employer's share (social security, Christmas bonus, holidays). Follows the
   # consumer price index.
   hourly_wage_mxn: 75
+  # The owner's aims (assumed): a specialty drink keeps three quarters of its price, a
+  # pastry bought in a little over half; nobody waits more than eight minutes.
+  target_margins: {espresso: 78, milk: 72, filter: 75, chocolate: 70, pastry: 55}
+  wait_target_minutes: 8
   seed: 7
