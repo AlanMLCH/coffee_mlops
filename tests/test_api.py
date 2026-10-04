@@ -417,12 +417,13 @@ def test_a_month_is_forecast_from_the_months_before_it(
 def test_each_tenant_serves_the_domain_its_environment_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One container per domain: the app is built for the one MLOPS_DOMAIN names, and with
-    several installed and none named it refuses to guess."""
-    monkeypatch.setenv("MLOPS_DOMAIN", "coffee_shop")
+    """One container per tenant: the app is built for the domain or subdomain MLOPS_DOMAIN
+    names, and with several domains installed and none named it refuses to guess."""
+    monkeypatch.setenv("MLOPS_DOMAIN", "coffee/cafe_de_barrio")
 
-    assert api.default_app().title == "coffee_shop predictions"
+    assert api.default_app().title == "cafe_de_barrio predictions"
 
     monkeypatch.delenv("MLOPS_DOMAIN")
+    monkeypatch.setattr("mlops_core.adapter.available_domains", lambda: ["coffee", "games"])
     with pytest.raises(ValueError, match="Name a domain"):
         api.default_app()

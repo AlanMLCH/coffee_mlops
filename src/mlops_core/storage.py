@@ -18,6 +18,8 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel
 
+from mlops_core.config import SUBDOMAINS
+
 logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
@@ -96,13 +98,18 @@ def data_version(data_dir: Path, clean: Mapping[str, str]) -> str:
 
 def table_path(data_dir: Path, name: str) -> Path:
     """Where a table lives: a bare name is one of the domain's clean tables; a qualified
-    one (`<domain>.<layer>.<table>`) is another domain's, beside this one under the same
-    data root. Whether the domain may read it is its config's to say (`DomainConfig.uses`)."""
+    one (`<parent>.<layer>.<table>`) is the parent's of a subdomain, whose data directory
+    holds the subdomain's (`<parent>/subdomains/<name>/`). Nothing else resolves: a
+    qualified name never reaches a sibling or another domain. Which of its parent's tables
+    a subdomain may read is its config's to say (`DomainConfig.parent`)."""
     parts = name.split(".")
-    if len(parts) == 3:
-        domain, layer, table = parts
-        return data_dir.parent / domain / layer / table
-    return data_dir / "clean" / name
+    if len(parts) != 3:
+        return data_dir / "clean" / name
+    domain, layer, table = parts
+    parent = data_dir.parent.parent
+    if data_dir.parent.name != SUBDOMAINS or parent.name != domain:
+        raise ValueError(f"{name} is not a table of the domain {data_dir.name} belongs to")
+    return parent / layer / table
 
 
 def latest_data_version(data_dir: Path, tables: Sequence[str]) -> str | None:
@@ -187,7 +194,9 @@ def prune_layers(data_dir: Path, keep: int, now: datetime | None = None) -> dict
     always be made again - a page that shows only the current month, a catalogue that
     shows only today, a file its publisher has since replaced."""
     pruned = {}
-    for layer in sorted(p for p in data_dir.iterdir() if p.is_dir() and p.name != RAW):
+    # A subdomain's data is its own, pruned when it is (`<parent>/subdomains/<name>/`).
+    layers = (p for p in data_dir.iterdir() if p.is_dir() and p.name not in (RAW, SUBDOMAINS))
+    for layer in sorted(layers):
         for table_dir in sorted(p for p in layer.iterdir() if p.is_dir()):
             removed = prune_partitions(table_dir, keep, now)
             if removed:

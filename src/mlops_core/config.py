@@ -850,30 +850,36 @@ class AgentConfig(BaseModel):
 DATA_LAYERS = ("clean", "features", "predictions", "analysis", "evaluations", "monitoring")
 
 
-class DomainUse(BaseModel):
-    """Tables of another domain this one reads: a data contract, never code.
+# Where a domain keeps its subdomains' data: `<domain>/subdomains/<name>/`, beside its own
+# layers and never inside one, so no session of the domain's can read them.
+SUBDOMAINS = "subdomains"
 
-    Domains are tenants. Each keeps its data, its models and its agent to itself, and a
-    domain reads another's tables only as it declares here - named one by one, read-only,
-    in the newest partition the other domain built. One that declares nothing sees nothing
-    of any other: asked about another domain, its agent has no table to answer from.
+
+class ParentTables(BaseModel):
+    """The domain a subdomain belongs to, and the tables of it the subdomain reads.
+
+    Domains are tenants, isolated from each other: none reads another's data. A domain can
+    hold subdomains - one per business, say - that share its code and read its tables,
+    named one by one, read-only, in the newest partition it built. A subdomain reads
+    nothing of its siblings, or of any other domain: the only tables it can name besides
+    its own are its parent's.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     domain: str
-    tables: list[str] = Field(min_length=1)  # layer.table, as the other domain names them
+    tables: list[str] = Field(min_length=1)  # layer.table, as the parent names them
 
     @field_validator("tables")
     @classmethod
     def _tables_are_named_with_their_layer(cls, tables: list[str]) -> list[str]:
         bad = [t for t in tables if not re.fullmatch(rf"({'|'.join(DATA_LAYERS)})\.\w+", t)]
         if bad:
-            raise ValueError(f"Name another domain's tables as layer.table: {bad}")
+            raise ValueError(f"Name the parent's tables as layer.table: {bad}")
         return tables
 
     def qualified(self) -> list[str]:
-        """The tables as this domain names them: `<domain>.<layer>.<table>`."""
+        """The tables as the subdomain names them: `<parent>.<layer>.<table>`."""
         return [f"{self.domain}.{table}" for table in self.tables]
 
 
@@ -897,8 +903,9 @@ class DomainConfig(BaseModel):
     monitoring: MonitoringConfig
     schedule: ScheduleConfig | None = None  # unset, nothing runs until someone asks
     explore: ExploreConfig | None = None  # the explorer app's map; unset, it has none
-    # Tables of other domains this one reads (`DomainUse`); none, it sees only its own.
-    uses: list[DomainUse] = []
+    # Set, this is a subdomain of that domain, reading the tables of it listed
+    # (`ParentTables`); unset, a domain of its own, which reads no other's data.
+    parent: ParentTables | None = None
     agent: AgentConfig = AgentConfig()
 
     @model_validator(mode="after")
@@ -926,25 +933,37 @@ class DomainConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _uses_another_domain_once(self) -> Self:
-        named = [use.domain for use in self.uses]
-        if self.name in named:
-            raise ValueError(f"{self.name} lists itself in `uses`: its own tables need no use")
-        repeated = sorted({domain for domain in named if named.count(domain) > 1})
-        if repeated:
-            raise ValueError(f"List each domain once in `uses`; repeated: {repeated}")
+    def _a_subdomain_is_not_its_own_parent(self) -> Self:
+        if self.parent is not None and self.parent.domain == self.name:
+            raise ValueError(f"{self.name} names itself as its parent")
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", self.name):
+            raise ValueError(f"A domain's name is lower case, digits and _: '{self.name}'")
         return self
 
     @property
-    def used_tables(self) -> set[str]:
-        """Every table of another domain this one may read, qualified."""
-        return {table for use in self.uses for table in use.qualified()}
+    def tenant(self) -> str:
+        """How commands name it: `<domain>`, or `<parent>/<subdomain>`."""
+        return f"{self.parent.domain}/{self.name}" if self.parent else self.name
+
+    @property
+    def home(self) -> Path:
+        """Its data directory under the data root: `<domain>/`, or a subdomain's
+        `<parent>/subdomains/<name>/`."""
+        if self.parent is None:
+            return Path(self.name)
+        return Path(self.parent.domain, SUBDOMAINS, self.name)
+
+    @property
+    def parent_tables(self) -> set[str]:
+        """Every table of its parent this subdomain may read, qualified; none for a domain."""
+        return set(self.parent.qualified()) if self.parent else set()
 
     def readable(self, name: str) -> str:
-        """`name`, if this domain may read it: one of its own clean tables (a bare name)
-        or another domain's it declares in `uses`. Anything else is refused by name."""
-        if name.count(".") == 2 and name not in self.used_tables:
-            raise ValueError(f"{self.name} does not declare {name} in `uses`: it may not read it")
+        """`name`, if this domain may read it: one of its own clean tables (a bare name) or,
+        for a subdomain, one of its parent's that it lists. Anything else is refused."""
+        if name.count(".") == 2 and name not in self.parent_tables:
+            whose = "lists in `parent`" if self.parent else "may read: it reads no other domain"
+            raise ValueError(f"{name} is not a table {self.name} {whose}")
         return name
 
     @model_validator(mode="after")

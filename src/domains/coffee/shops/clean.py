@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 
 import polars as pl
 
-from domains.coffee_shop.config import ShopConfig
+from domains.coffee.shops.config import ShopConfig
 
 _MOMENT = "%Y-%m-%dT%H:%M:%S"
 

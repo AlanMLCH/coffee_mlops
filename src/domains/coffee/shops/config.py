@@ -1,10 +1,11 @@
-"""The coffee shop domain's own config: the shop it simulates, and how.
+"""A coffee shop's config: the shop, and how its export is simulated.
 
 Everything a coffee shop is - its menu and prices, recipes, opening hours, staff and
-wages, how many tickets a day, how long a drink takes - is data here, in `config.yaml`,
-so the demo shop is changed by editing a file and a real one would be described the same
-way. What each number rests on is said beside it: a real source it is anchored to, or an
-assumption to replace with the owner's own.
+wages, how many tickets a day, how long a drink takes - is data, in its file under
+`businesses/`, so a demo shop is changed by editing a file and a real one would be
+described the same way. What every shop shares - sources, simulation, models - is
+`config.yaml`. What each number rests on is said beside it: a real source it is anchored
+to, or an assumption to replace with the owner's own.
 """
 
 from datetime import date, time
@@ -79,6 +80,8 @@ class ShopConfig(BaseModel):
     closes: dict[int, time]
     tickets_per_day: float = Field(gt=0)  # an ordinary weekday at opening prices
     items_per_ticket: list[float] = Field(min_length=1)  # P(1 item), P(2 items), ...
+    dine_in_share: float = Field(ge=0, le=1)  # of the tickets; the rest are taken away
+    card_share: float = Field(ge=0, le=1)  # of the tickets; the rest are paid in cash
     menu: list[MenuItem] = Field(min_length=1)
     ingredients: dict[str, Ingredient]
     price_changes: list[PriceChange] = []
@@ -106,22 +109,24 @@ class SimulationConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sales_pattern: str  # the file source whose real sales give hours, days and elasticity
-    green_coffee: str  # lent: green coffee in pesos, monthly
-    inflation: str  # lent: the consumer price index, monthly
+    green_coffee: str  # the parent's: green coffee in pesos, monthly
+    inflation: str  # the parent's: the consumer price index, monthly
     green_indicator: str  # which green coffee price the beans follow
 
 
 class CoffeeShopConfig(DomainConfig):
+    """One shop: a subdomain of coffee, reading the coffee tables listed in `parent`."""
+
     shop: ShopConfig
     simulation: SimulationConfig
 
     @model_validator(mode="after")
-    def _simulation_reads_what_the_domain_declares(self) -> Self:
-        """Its real sales are a source of the shop's; the market is another domain's
-        tables, each declared in `uses` - the simulation reads nothing else."""
+    def _simulation_reads_what_the_shop_lists(self) -> Self:
+        """Its real sales are a source of the shop's; the market is its parent's tables,
+        each listed in `parent` - the simulation reads nothing else."""
         if self.simulation.sales_pattern not in self.sources:
             raise ValueError(f"No source '{self.simulation.sales_pattern}' to anchor the sales to")
         for name in (self.simulation.green_coffee, self.simulation.inflation):
-            if name not in self.used_tables:
-                raise ValueError(f"The simulation reads {name}, which `uses` does not declare")
+            if name not in self.parent_tables:
+                raise ValueError(f"The simulation reads {name}, which `parent` does not list")
         return self

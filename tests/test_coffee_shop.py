@@ -1,5 +1,6 @@
-"""The coffee shop: a tenant that simulates its point-of-sale export from real anchors,
-cleans it into canonical tables and asks its models about its own hours."""
+"""The coffee shops: subdomains of coffee, a business each, that simulate their
+point-of-sale exports from real anchors, clean them into canonical tables and ask their
+models about their own hours."""
 
 import io
 import json
@@ -12,14 +13,14 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-import domains.coffee_shop
-from domains.coffee_shop.adapter import CoffeeShopAdapter
-from domains.coffee_shop.clean import clean_menu, clean_shop, shop_hours
-from domains.coffee_shop.config import CoffeeShopConfig, Shift, ShopConfig
-from domains.coffee_shop.features import add_hour_context
-from domains.coffee_shop.request import ShopHour
-from domains.coffee_shop.schemas import CLEAN_SCHEMAS
-from domains.coffee_shop.simulate import (
+import domains.coffee.shops
+from domains.coffee.shops.adapter import CoffeeShopAdapter
+from domains.coffee.shops.clean import clean_menu, clean_shop, shop_hours
+from domains.coffee.shops.config import CoffeeShopConfig, Shift, ShopConfig
+from domains.coffee.shops.features import add_hour_context
+from domains.coffee.shops.request import ShopHour
+from domains.coffee.shops.schemas import CLEAN_SCHEMAS
+from domains.coffee.shops.simulate import (
     TABLES,
     Anchors,
     _menu_history,
@@ -50,7 +51,7 @@ FLAT = {"green_coffee": {date(2025, 1, 1): 1.0}, "inflation": {date(2025, 1, 1):
 
 @pytest.fixture
 def shop_adapter() -> CoffeeShopAdapter:
-    return domains.coffee_shop.adapter()
+    return domains.coffee.shops.adapter("cafe_de_barrio")
 
 
 def two_weeks(shop: ShopConfig, **update: Any) -> ShopConfig:
@@ -78,16 +79,42 @@ def vending_csv(days: int = 56) -> bytes:
     return "\n".join(lines).encode()
 
 
-def test_the_shop_reads_only_what_it_declares_of_coffee(shop_adapter: CoffeeShopAdapter) -> None:
+def test_every_shop_is_a_file_and_shares_the_rest(shop_adapter: CoffeeShopAdapter) -> None:
+    barrio, paso = (
+        domains.coffee.shops.shop_config(name) for name in ("cafe_de_barrio", "cafe_de_paso")
+    )
+
+    assert domains.coffee.shops.businesses() == ["cafe_de_barrio", "cafe_de_paso"]
+    assert (barrio.tenant, paso.tenant) == ("coffee/cafe_de_barrio", "coffee/cafe_de_paso")
+    assert barrio.models[0].name == paso.models[0].name == "hourly_demand"
+    assert [m.training.registered_model for m in (*barrio.models, *paso.models)] == [
+        "cafe-de-barrio-hourly-demand",
+        "cafe-de-paso-hourly-demand",
+    ]
+    assert barrio.shop.zone_id != paso.shop.zone_id
+    assert shop_adapter.config == barrio
+
+
+def test_a_shops_file_describes_its_shop_and_nothing_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "rogue.yaml").write_text("shop: {}\nparent: {domain: games}\n", encoding="utf-8")
+    monkeypatch.setattr(domains.coffee.shops, "BUSINESSES", tmp_path)
+
+    with pytest.raises(ValueError, match="describes its shop and nothing else"):
+        domains.coffee.shops.shop_config("rogue")
+
+
+def test_the_shop_reads_only_what_it_lists_of_coffee(shop_adapter: CoffeeShopAdapter) -> None:
     config = shop_adapter.config
 
-    assert config.used_tables == {
+    assert config.parent_tables == {
         "coffee.analysis.green_coffee_in_pesos",
         "coffee.clean.consumer_price_index",
     }
     as_json = config.model_dump(mode="json")
     undeclared = {**as_json["simulation"], "inflation": "coffee.clean.consumer_prices"}
-    with pytest.raises(ValidationError, match="does not declare"):
+    with pytest.raises(ValidationError, match="does not list"):
         CoffeeShopConfig.model_validate({**as_json, "simulation": undeclared})
     unknown = {**as_json["simulation"], "sales_pattern": "pos_sales"}
     with pytest.raises(ValidationError, match="No source 'pos_sales'"):
@@ -187,6 +214,9 @@ def test_the_simulation_is_the_same_every_time_and_keeps_the_shops_rules(
         weekday = sold.isoweekday()
         assert shop.opens[weekday] <= sold.time() < shop.closes[weekday]
         assert row["unit_price"] == prices[row["product"]]  # no change before March
+    # A ticket is eaten in or taken away, and paid, once for all its lines.
+    tickets = {(r["ticket"], r["channel"], r["payment"]) for r in export["pos_sales"]}
+    assert len(tickets) == len(export["pos_orders"])
     assert {date.fromisoformat(row["date"]).isoweekday() for row in export["pos_purchases"]} == {1}
     # Half of what beans cost moves with green coffee, so twice the green price is 1.5x.
     beans = shop.ingredients["coffee_beans"]
@@ -216,8 +246,9 @@ def test_a_shop_short_of_hands_sells_less_at_its_rush(shop_adapter: CoffeeShopAd
 def test_extract_skips_out_loud_without_its_anchors(
     shop_adapter: CoffeeShopAdapter, tmp_path: Path
 ) -> None:
+    home = tmp_path / "data" / shop_adapter.config.home
     with httpx.Client() as client:
-        extraction = shop_adapter.extract(tmp_path / "data" / "coffee_shop", client)
+        extraction = shop_adapter.extract(home, client)
 
     assert extraction.artifacts == {}
     assert set(extraction.skipped) == set(TABLES)
@@ -244,7 +275,7 @@ def test_the_export_is_simulated_from_what_coffee_lends_and_cleaned_by_the_core(
         data / "coffee" / "clean" / "consumer_price_index",
         {},
     )
-    shop_dir = data / "coffee_shop"
+    shop_dir = data / "coffee" / "subdomains" / "cafe_de_barrio"
     store_payload("vending_sales", "coffee_sales.csv", vending_csv(), shop_dir / "raw", "https://x")
     config = shop_adapter.config
     adapter = CoffeeShopAdapter(config.model_copy(update={"shop": two_weeks(config.shop)}))
@@ -351,7 +382,9 @@ def test_the_shops_model_is_answered_by_its_hooks(shop_adapter: CoffeeShopAdapte
 
 
 def test_the_data_dictionary_documents_every_table_and_column() -> None:
-    dictionary = (domain_dir("coffee_shop") / "data_dictionary.md").read_text(encoding="utf-8")
+    dictionary = (domain_dir("coffee/cafe_de_barrio") / "data_dictionary.md").read_text(
+        encoding="utf-8"
+    )
 
     for table, schema in CLEAN_SCHEMAS.items():
         assert f"## `clean.{table}`" in dictionary

@@ -1,6 +1,6 @@
-"""The demo shop's point-of-sale export, simulated: a neighbourhood specialty coffee shop
-in Mexico City that does not exist, so that every model of this domain has data to learn
-from - and anchored, number by number, to data that does exist.
+"""A demo shop's point-of-sale export, simulated: a coffee shop in Mexico City that does not
+exist, so that every model of the shops has data to learn from - and anchored, number by
+number, to data that does exist.
 
 What is real, and read at every simulation:
 - **When people buy**: the share of a day's tickets in each hour and how each weekday
@@ -9,9 +9,10 @@ What is real, and read at every simulation:
   (it moved every price several times in 2024), estimated with an interval. A vending
   machine's, and confounded with the season: said wherever it is used.
 - **What the shop pays**: beans follow the green coffee price in pesos, milk, pastries and
-  wages follow the consumer price index - both lent by the coffee domain.
+  wages follow the consumer price index - both read from the shop's parent, the coffee
+  domain.
 
-What is assumed, in `config.yaml` (`shop`): the menu and its prices, recipes, opening
+What is assumed, in the shop's file under `businesses/`: the menu and its prices, recipes, opening
 hours, shifts, wages, and how many tickets an ordinary day brings. What is simulated:
 every ticket, its items and minute, how long it waited, the weekly purchases and the
 shifts. One seed: the same anchors and config give the same export, byte for byte, and the
@@ -34,7 +35,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from domains.coffee_shop.config import ShopConfig, SimulationConfig
+from domains.coffee.shops.config import ShopConfig, SimulationConfig
 from mlops_core.adapter import ApiExtraction
 from mlops_core.data.extract import latest_ingestion, store_payload
 
@@ -47,8 +48,7 @@ PREP_SPREAD = 0.25  # an item's minutes vary log-normally by this much
 # A customer's patience for the queue, in minutes before a barista starts their order:
 # exponential, so one in four leaves facing four minutes and half facing ten. Assumed.
 PATIENCE_MINUTES = 15.0
-DINE_IN, CARD = 0.45, 0.8
-EXPORT_URL = "simulation://coffee_shop/pos-export"
+EXPORT_URL = "simulation://coffee/shops/pos-export"
 
 
 @dataclass(frozen=True)
@@ -203,6 +203,9 @@ def simulate(
                 ticket = f"{day:%Y%m%d}-{sold:04d}"
                 count = int(rng.choice(len(shop.items_per_ticket), p=shop.items_per_ticket)) + 1
                 chosen = rng.choice(len(products), size=count, p=shares)
+                # A ticket is eaten in or taken away, and paid, once for all its lines.
+                channel = "dine_in" if rng.random() < shop.dine_in_share else "takeaway"
+                payment = "card" if rng.random() < shop.card_share else "cash"
                 minutes = 0.0
                 for line, index in enumerate(chosen, start=1):
                     item = menu[products[int(index)]]
@@ -211,8 +214,7 @@ def simulate(
                         {"ticket": ticket, "line": line, "sold_at": ordered_at.isoformat(),
                          "product": item.product, "quantity": 1,
                          "unit_price": round(item.price_mxn * level, 2),
-                         "channel": "dine_in" if rng.random() < DINE_IN else "takeaway",
-                         "payment": "card" if rng.random() < CARD else "cash"}
+                         "channel": channel, "payment": payment}
                     )  # fmt: skip
                     for ingredient, quantity in item.recipe.items():
                         used[(day, ingredient)] = used.get((day, ingredient), 0.0) + quantity

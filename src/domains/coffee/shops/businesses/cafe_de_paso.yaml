@@ -1,0 +1,58 @@
+# A takeaway coffee counter in Gustavo A. Madero: coffee on the way to work, a short menu,
+# lower prices, one pair of hands most of the day. It does not exist: every number below
+# is an assumption, said beside it, for an owner to replace with their own.
+shop:
+  name: Café de Paso (demo)
+  concept: >-
+    A takeaway counter on the way to work: espresso drinks, café de olla and a sweet
+    bread, served fast; no tables.
+  # The urban AGEB it opens in: by the same rule as Café de Barrio's - the most short of
+  # coffee shops by the `zones` model's held-out expectation, 3,000 residents or more,
+  # outside the boroughs with 0.9 jobs or more per resident - the first outside Benito
+  # Juárez, so the two shops face different neighbourhoods.
+  zone_id: "0900500011735"
+  first_day: 2025-04-01
+  last_day: 2026-08-31 # the last month the parent's tables publish
+  # Assumed. Opens early for the commute, closes in the early evening, rests on Sunday.
+  opens: {1: "06:30", 2: "06:30", 3: "06:30", 4: "06:30", 5: "06:30", 6: "07:30"}
+  closes: {1: "19:00", 2: "19:00", 3: "19:00", 4: "19:00", 5: "19:00", 6: "15:00"}
+  # Assumed: an ordinary day at opening prices, before the weekday's factor (anchored).
+  tickets_per_day: 110
+  items_per_ticket: [0.78, 0.18, 0.04] # mostly one coffee, to go: assumed
+  dine_in_share: 0.0 # no tables
+  card_share: 0.55 # assumed: more cash than in Benito Juárez
+  # Assumed: prices of a takeaway counter in Gustavo A. Madero, 2025, in pesos.
+  menu:
+    - {product: espresso, category: espresso, price_mxn: 28, share: 0.08, prep_minutes: 1.2,
+       recipe: {coffee_beans: 16, cup: 1}}
+    - {product: americano, category: espresso, price_mxn: 32, share: 0.30, prep_minutes: 1.5,
+       recipe: {coffee_beans: 16, cup: 1}}
+    - {product: cappuccino, category: milk, price_mxn: 42, share: 0.16, prep_minutes: 2.5,
+       recipe: {coffee_beans: 16, milk: 150, cup: 1}}
+    - {product: latte, category: milk, price_mxn: 45, share: 0.18, prep_minutes: 2.5,
+       recipe: {coffee_beans: 16, milk: 220, cup: 1}}
+    - {product: cafe_de_olla, category: filter, price_mxn: 30, share: 0.16, prep_minutes: 1.0,
+       recipe: {coffee_beans: 14, piloncillo: 15, cup: 1}}
+    - {product: concha, category: pastry, price_mxn: 18, share: 0.12, prep_minutes: 0.3,
+       recipe: {concha: 1}}
+  # Assumed costs in April 2025, per unit; from then on each follows what it says.
+  ingredients:
+    # A commercial roast: a larger share of its price is the green coffee in it (assumed).
+    coffee_beans: {unit: g, cost_mxn: 0.30, follows: green_coffee, pass_through: 0.65, waste_pct: 2}
+    milk: {unit: ml, cost_mxn: 0.026, follows: inflation, waste_pct: 3}
+    piloncillo: {unit: g, cost_mxn: 0.05, follows: inflation}
+    cup: {unit: piece, cost_mxn: 2.8, follows: inflation}
+    concha: {unit: piece, cost_mxn: 8, follows: inflation, waste_pct: 10}
+  # Assumed: what the demo owner did with the menu.
+  price_changes:
+    - {starts: 2025-07-01, change_pct: 5}
+    - {starts: 2026-01-15, change_pct: 7} # after green coffee's 2025 run-up
+  # Assumed: one barista all day, a second at the morning commute.
+  shifts:
+    - {role: barista, starts: "06:30", ends: "14:30", days: [1, 2, 3, 4, 5, 6]}
+    - {role: barista, starts: "11:00", ends: "19:00", days: [1, 2, 3, 4, 5]}
+    - {role: helper, starts: "07:00", ends: "10:00", days: [1, 2, 3, 4, 5]}
+  # Assumed, April 2025: an hour of staff, wage and the employer's share. Follows the
+  # consumer price index.
+  hourly_wage_mxn: 68
+  seed: 11

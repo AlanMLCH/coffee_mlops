@@ -34,15 +34,17 @@ def dictionary_path(domain_dir: Path) -> Path:
 
 
 def domain_dictionary(config: DomainConfig) -> str:
-    """The domain's dictionary, and the section of every table another domain lends it,
-    renamed as this domain queries it (`<domain>.<layer>.<table>`): the agent reads a
-    lent table's units and traps from the domain that knows them."""
-    text = dictionary_path(domain_dir(config.name)).read_text(encoding="utf-8")
-    for use in config.uses:
-        theirs = table_sections(dictionary_path(domain_dir(use.domain)).read_text(encoding="utf-8"))
-        for table in use.tables:
+    """The domain's dictionary and, for a subdomain, the section of every parent table it
+    reads, renamed as it queries them (`<parent>.<layer>.<table>`): the agent reads those
+    tables' units and traps from the domain that knows them."""
+    text = dictionary_path(domain_dir(config.tenant)).read_text(encoding="utf-8")
+    if config.parent is not None:
+        parent = config.parent
+        owner = dictionary_path(domain_dir(parent.domain))
+        theirs = table_sections(owner.read_text(encoding="utf-8"))
+        for table in parent.tables:
             if table in theirs:
-                lent = theirs[table].replace(f"`{table}`", f"`{use.domain}.{table}`")
+                lent = theirs[table].replace(f"`{table}`", f"`{parent.domain}.{table}`")
                 text += "\n\n" + lent
     return text
 

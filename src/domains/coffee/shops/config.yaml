@@ -1,0 +1,84 @@
+# What every coffee shop of the coffee domain shares: a subdomain per business, each a tenant
+# of its own - its data, models, API and agent are the shop's - that reads the coffee tables
+# listed in `parent` and nothing of the other shops. A shop is its file in businesses/: its
+# menu, hours, staff, corner and history. Its name is the file's; this file gives it the
+# rest - sources, simulation, models - so the Nth shop costs a YAML, not code.
+#
+# The demo shops do not exist. Their point-of-sale exports are simulated (simulate.py) and
+# anchored to real data: when people buy and how they answer a price come from a real
+# coffee machine's sales (`vending_sales`); what a shop pays follows green coffee in pesos
+# and the consumer price index, read from the parent.
+
+sources:
+  # A real coffee machine's sales (one sale a row: day, minute, price paid, drink), from
+  # March 2024. CC0, on Hugging Face; pinned to a commit so the anchors are reproducible.
+  # Read for its hours, its weekdays and its price changes - never as a shop's sales.
+  vending_sales:
+    url: https://huggingface.co/datasets/tablegpt/CoffeeSales/resolve/ac770258c76b502de47a6a314aa95ff1dc05ef0a/index.csv
+    filename: coffee_sales.csv
+    refresh_hours: 8760 # a pinned commit: it will not have changed
+
+# What a shop reads of the coffee domain, table by table: the green coffee price in pesos
+# its beans follow, and the consumer price index its milk, pastries and wages follow.
+parent:
+  domain: coffee
+  tables:
+    - analysis.green_coffee_in_pesos
+    - clean.consumer_price_index
+
+simulation:
+  sales_pattern: vending_sales
+  green_coffee: coffee.analysis.green_coffee_in_pesos
+  inflation: coffee.clean.consumer_price_index
+  green_indicator: other_milds # Mexico's washed Arabicas are priced among the other milds
+
+models:
+  # How many tickets an hour brings, at the menu's prices or at prices the owner weighs.
+  # What an item knows is features.py: its day, its hour and the menu. Each shop registers
+  # its own (`<shop>-hourly-demand`).
+  - name: hourly_demand # -> hourly_demand_features, hourly_demand_predictions
+    description: >-
+      How many tickets the coffee shop sells in an hour of a given day, at the menu's
+      prices that day or with every price moved by a percent: the demand to staff and
+      stock for. A price beyond any the menu has had is answered as the nearest one it
+      had: trees do not extrapolate, so it does not say what a larger rise would do.
+    example: {day: "2026-09-07", hour: 8}
+    items:
+      table: shop_hours
+      id: hour_id # 2026-03-02T08
+      time: date
+      period: month
+    spec:
+      target: tickets
+      task: count
+      categorical: [weekday_hour]
+      numeric: [hour, weekday, price_level]
+      leakage: [items, revenue_mxn, mean_minutes]
+    training:
+      # The shops' histories end in August 2026; the six months before are the test, the
+      # rest to learn from.
+      split:
+        kind: temporal
+        test_from: 2026-03-01
+        recalibration_window: 200 # hours: two weeks open
+      cv_folds: 5
+      trials: 30
+      seed: 42
+      baseline_group: weekday_hour # each slot's mean: what staffing by habit would expect
+      bootstrap_resamples: 2000
+      min_probability_better: 0.95
+      resample_by: date # an hour shares its day's crowd with the day's other hours
+      stratify_by: weekday_hour
+      min_group_size: 20
+      registered_model: hourly-demand
+    target_bands:
+      edges: [5, 15]
+      labels: ["under 5", "5 to 14", "15 or more"]
+
+monitoring:
+  drift_share: 0.5
+
+analysis:
+  min_rows: 5
+  permutation_repeats: 10
+  published_figures: []

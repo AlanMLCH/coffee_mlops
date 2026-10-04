@@ -31,7 +31,7 @@ from domains.coffee.schemas import (
     roaster_flavors_schema,
     roaster_origins_schema,
 )
-from mlops_core.adapter import available_domains, domain_dir, load_adapter
+from mlops_core.adapter import available_tenants, domain_dir, load_adapter
 from mlops_core.config import DomainConfig
 from mlops_core.ml.features import features_schema
 from mlops_core.ml.predict import predictions_schema
@@ -160,7 +160,7 @@ def architecture_diagram() -> str:
     return "\n".join(re.findall(r"```mermaid\n(.*?)```", private_plan(), flags=re.DOTALL))
 
 
-@pytest.mark.parametrize("domain", available_domains())
+@pytest.mark.parametrize("domain", available_tenants())
 def test_the_architecture_diagram_shows_every_source_and_table(domain: str) -> None:
     """The diagram is how a reader learns the flow, and one that quietly forgot a source
     is wrong in a way nobody notices: it has to change in the feature that adds one."""

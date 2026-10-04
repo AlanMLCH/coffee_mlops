@@ -548,11 +548,13 @@ behind a refusal are fetched by hand into `data/coffee/inbox/documents/`.
 - Known gap: a practical roasting guide (curves, first crack, Agtron). Not added ahead of
   need: it comes in if retrieval shows roasting questions failing.
 
-## The coffee shop (`coffee_shop`)
+## The coffee shops (subdomains of `coffee`)
 
-The second tenant: one neighbourhood specialty coffee shop that does not exist, so its
-point-of-sale export is simulated - and anchored to the real data below. Its columns are
-in [its data dictionary](../src/domains/coffee_shop/data_dictionary.md).
+Coffee's subdomains: one per business, each a coffee shop that does not exist, so its
+point-of-sale export is simulated - and anchored to the real data below. Two demo shops,
+`coffee/cafe_de_barrio` and `coffee/cafe_de_paso`; each reads its own copy of
+`vending_sales` and its own simulated export, and of coffee only the two tables every shop
+lists. Their columns are in [the shops' data dictionary](../src/domains/coffee/shops/data_dictionary.md).
 
 ### A real coffee machine's sales: `vending_sales`
 
@@ -577,17 +579,17 @@ What the shop borrows from it, and what it is not:
 
 ### The simulated point-of-sale export: `pos_sales`, `pos_orders`, `pos_menu`, `pos_purchases`, `pos_shifts`, `pos_recipes`
 
-Written by `domains/coffee_shop/simulate.py` at extract time, one raw source per table, as
-JSON: its rows as any export would give them (text), and the anchors they were simulated
-from. Seeded: the same anchors and config make the same bytes, and the raw layer stores
-nothing new. It needs the coffee domain's `analysis.green_coffee_in_pesos` and
-`clean.consumer_price_index`, read as declared in `uses`; without them, or without
-`vending_sales`, the export is skipped out loud.
+Written by `domains/coffee/shops/simulate.py` at extract time, one raw source per table,
+as JSON: its rows as any export would give them (text), and the anchors they were
+simulated from. Seeded per shop: the same anchors and file make the same bytes, and the raw
+layer stores nothing new. It needs coffee's `analysis.green_coffee_in_pesos` and
+`clean.consumer_price_index`, read as the shops' `parent` lists them; without them, or
+without `vending_sales`, the export is skipped out loud.
 
-- **Assumed**, in `config.yaml`: the menu, its prices and recipes, opening hours, shifts,
-  the hourly cost of staff, tickets on an ordinary day, items per ticket, the price
-  changes, each ingredient's waste, and that half of what roasted beans cost moves with
-  green coffee.
+- **Assumed**, in each shop's file under `domains/coffee/shops/businesses/`: the menu, its
+  prices and recipes, opening hours, shifts, the hourly cost of staff, tickets on an
+  ordinary day, items per ticket, the shares eaten in and paid by card, the price changes,
+  each ingredient's waste, and how much of what roasted beans cost moves with green coffee.
 - **Simulated**: every ticket, at a random minute of its hour; its items; a queue in
   which each order goes to the first free hand and a customer who would wait longer than
   their patience (exponential, 15 minutes on average) leaves without buying - and is in no

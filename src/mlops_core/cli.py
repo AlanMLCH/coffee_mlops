@@ -79,7 +79,10 @@ app.add_typer(agent_app, name="agent")
 Domain = Annotated[
     str | None,
     typer.Option(
-        "--domain", "-d", help="A package under domains/; defaults to MLOPS_DOMAIN or the only one"
+        "--domain",
+        "-d",
+        help="A package under domains/, or <domain>/<subdomain>; defaults to MLOPS_DOMAIN or "
+        "the only domain",
     ),
 ]
 
@@ -106,7 +109,7 @@ def _adapter(domain: str | None) -> DomainAdapter:
 
 
 def _data_dir(config: DomainConfig) -> Path:
-    return Settings().data_dir / config.name
+    return Settings().data_dir / config.home
 
 
 @contextmanager
@@ -573,9 +576,9 @@ def benchmark(
 
     adapter = _adapter(domain)
     config = adapter.config
-    home = domain_dir(config.name)
+    home = domain_dir(config.tenant)
     data_dir = _data_dir(config)
-    con = read_only(data_dir, config.uses)
+    con = read_only(data_dir, config.parent)
     dictionary = domain_dictionary(config)
     hidden = config.agent.hidden_tables
     names = shown(views(con), hidden)
@@ -772,7 +775,7 @@ def evaluate_agent(
 
     adapter = _adapter(domain)
     config = adapter.config
-    home = domain_dir(config.name)
+    home = domain_dir(config.tenant)
     case_files = [
         case_file(home, file, cases) for file in (ROUTE_CASES_FILE, SQL_CASES_FILE, QUESTIONS_FILE)
     ]
@@ -929,7 +932,7 @@ def mcp_server(
     config = adapter.config
     _corpus(config)
     settings = Settings()
-    con = read_only(_data_dir(config), config.uses)
+    con = read_only(_data_dir(config), config.parent)
     areas = areas_if_built(con, config.explore)
     dictionary = domain_dictionary(config)
     chunks, documents = _corpus_tables(config)
@@ -985,7 +988,7 @@ def agent_session(
 
     config = adapter.config
     _corpus(config)
-    con = read_only(_data_dir(config), config.uses)
+    con = read_only(_data_dir(config), config.parent)
     dictionary = domain_dictionary(config)
     chunks, documents = _corpus_tables(config)
     client, _ = _current_index(config, settings, chunks)
@@ -1160,7 +1163,7 @@ def _question_set(
     stands."""
     config = _adapter(domain).config
     corpus = _corpus(config)
-    path = questions_path(domain_dir(config.name))
+    path = questions_path(domain_dir(config.tenant))
     return config, corpus, path, load_questions(path, corpus.topics)
 
 
@@ -1270,18 +1273,24 @@ def _champion_version(settings: Settings) -> Any:
     return champion
 
 
+SQL_ROWS = 1_000  # `mlops sql` is read by a person: more than the agent's, still bounded
+
+
 @app.command()
 def sql(
     query: Annotated[str, typer.Argument(help="e.g. 'SELECT count(*) FROM clean.<table>'")],
     domain: Domain = None,
 ) -> None:
-    """Run SQL over the latest partition of every layer."""
+    """Run a SELECT over the latest partition of every layer - in the session the domain's
+    agent gets: its own layers and, for a subdomain, the parent tables it lists, and no
+    other tenant's files, whoever asks."""
     with _needs_extra("data"):
-        from mlops_core.catalog import connect
+        from mlops_core.agent.sql import read_only, run_select
 
     adapter = _adapter(domain)
     config = adapter.config
-    typer.echo(connect(_data_dir(config), config.uses).sql(query))
+    result = run_select(read_only(_data_dir(config), config.parent), query, max_rows=SQL_ROWS)
+    typer.echo(result.as_text())
 
 
 @app.command()

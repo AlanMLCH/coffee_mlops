@@ -21,7 +21,7 @@ can carry instructions of its own. Verified on DuckDB 1.5.5 (2026-09-25):
 
 import re
 import threading
-from collections.abc import Collection, Sequence
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -29,7 +29,7 @@ from typing import Any
 import duckdb
 
 from mlops_core.catalog import LAYERS, connect
-from mlops_core.config import DomainUse
+from mlops_core.config import ParentTables
 from mlops_core.storage import table_path
 
 MAX_ROWS = 50  # what an answer can use; more is a sign the query should aggregate
@@ -59,14 +59,15 @@ class QueryResult:
         return "\n".join(lines)
 
 
-def read_only(data_dir: Path, uses: Sequence[DomainUse] = ()) -> duckdb.DuckDBPyConnection:
-    """A session over the catalog's views that can read the published layers - and of
-    another domain, only the tables declared in `uses` - and nothing else, and cannot be
-    talked into changing that."""
+def read_only(data_dir: Path, parent: ParentTables | None = None) -> duckdb.DuckDBPyConnection:
+    """A session over the catalog's views that can read the published layers - and, for a
+    subdomain, the parent's tables it lists - and nothing else, and cannot be talked into
+    changing that. A domain's own layers never hold its subdomains' data, so its session
+    reads none of theirs."""
     root = data_dir.resolve()
-    con = connect(root, uses)
+    con = connect(root, parent)
     allowed = [f"{(root / layer).as_posix()}/" for layer in LAYERS if (root / layer).is_dir()]
-    lent = [table_path(root, name) for use in uses for name in use.qualified()]
+    lent = [table_path(root, name) for name in (parent.qualified() if parent else [])]
     allowed += [f"{path.as_posix()}/" for path in lent if path.is_dir()]
     listing = ", ".join("'" + path.replace("'", "''") + "'" for path in allowed)
     con.execute(f"SET memory_limit = '{MEMORY_LIMIT}'")

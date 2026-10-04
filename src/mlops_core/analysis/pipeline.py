@@ -110,10 +110,10 @@ def build_analysis(
         for name in adapter.clean_contracts()
         if latest_partition(data_dir / "clean" / name)
     }
-    # And what other domains lend it, by the names it uses them by.
+    # And, for a subdomain, the parent's tables it reads, by the names it reads them by.
     clean |= {
         name: read_table(table_path(data_dir, name))
-        for name in sorted(config.used_tables)
+        for name in sorted(config.parent_tables)
         if latest_partition(table_path(data_dir, name))
     }
     tables: dict[str, pl.DataFrame] = {}

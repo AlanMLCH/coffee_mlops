@@ -86,7 +86,7 @@ ROUTES = {
 settings = Settings()
 adapter = load_adapter(settings.domain)
 config = adapter.config
-data_dir = settings.data_dir / config.name
+data_dir = settings.data_dir / config.home
 # A showcase is the same app over a snapshot `mlops export` wrote: no agent to ask.
 SHOWCASE = settings.showcase is not None
 if SHOWCASE:
@@ -122,7 +122,7 @@ def session() -> duckdb.DuckDBPyConnection:
     query runs on a cursor of its own (`sql.run_select`), so they do not wait in line."""
     if SHOWCASE:
         snapshot()
-    return read_only(data_dir, config.uses)
+    return read_only(data_dir, config.parent)
 
 
 def query(sql: str) -> tuple[pl.DataFrame, bool]:

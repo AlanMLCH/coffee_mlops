@@ -79,7 +79,7 @@ class Service:
     def __init__(self, adapter: DomainAdapter, settings: Settings) -> None:
         self.adapter = adapter
         self.config = adapter.config
-        self.data_dir = settings.data_dir / self.config.name
+        self.data_dir = settings.data_dir / self.config.home
         self.tracking_uri = settings.mlflow_tracking_uri
         self._cache_dir = settings.model_cache_dir
         self.served: dict[str, ServedModel] = {}

@@ -133,12 +133,13 @@ def test_every_domain_exposes_an_adapter() -> None:
 
 def test_every_domain_is_named_after_its_package() -> None:
     """The core finds a domain's files (its config, its question set) by the name in its
-    config; a config named otherwise would send it to another package's directory."""
-    from mlops_core.adapter import available_domains, domain_dir, load_adapter
+    config; a config named otherwise would send it to another package's directory. A
+    subdomain is named after itself, under its parent."""
+    from mlops_core.adapter import available_tenants, domain_dir, load_adapter
 
-    for domain in available_domains():
-        assert load_adapter(domain).config.name == domain
-        assert (domain_dir(domain) / "config.yaml").is_file()
+    for tenant in available_tenants():
+        assert load_adapter(tenant).config.tenant == tenant
+        assert (domain_dir(tenant) / "config.yaml").is_file()
 
 
 def test_every_source_file_is_actually_in_the_repository() -> None:
@@ -176,10 +177,10 @@ def test_the_prediction_api_imports_without_the_other_pipelines_packages(tmp_pat
         "import sys\n"
         f"for name in {NOT_IN_THE_API_IMAGE!r}:\n"
         "    sys.modules[name] = None\n"
-        "from mlops_core.adapter import available_domains, load_adapter\n"
+        "from mlops_core.adapter import available_tenants, load_adapter\n"
         "from mlops_core.config import Settings\n"
         "from mlops_core.serving.api import create_app\n"
-        "for domain in available_domains():\n"
+        "for domain in available_tenants():\n"
         "    create_app(load_adapter(domain), Settings())\n"
     )
     env = {**os.environ, "MLOPS_DATA_DIR": str(tmp_path)}

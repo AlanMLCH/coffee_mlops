@@ -1,18 +1,18 @@
 # Data dictionary
 
-The coffee shop's tables: one neighbourhood specialty coffee shop in Mexico City, from
-1 January 2025 to 31 August 2026. **The shop does not exist**: its point-of-sale export is
-simulated (`domains/coffee_shop/simulate.py`), anchored to real data - when people buy and
-how they answer a price come from a real coffee machine's sales, what the shop pays
-follows green coffee in pesos and Mexico's consumer price index. Menu, recipes, hours,
-staff and wages are assumptions in `config.yaml`. Money is in Mexican pesos of the day.
+A coffee shop's tables: every shop of the coffee domain has these, each its own and
+no other shop's. **The demo shops do not exist**: their point-of-sale exports are simulated
+(`domains/coffee/shops/simulate.py`), anchored to real data - when people buy and how they
+answer a price come from a real coffee machine's sales, what a shop pays follows green
+coffee in pesos and Mexico's consumer price index. Menu, recipes, hours, staff and wages
+are assumptions in the shop's file. Money is in Mexican pesos of the day.
 
 Every table below is an immutable Parquet partition and a DuckDB view
 (`SELECT * FROM clean.sales`). The Pandera contract in the code is the authority.
 
 ## `clean.sales` — one line of a ticket
 
-A product sold, at the price it was sold at. 114,297 rows.
+A product sold, at the price it was sold at.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -21,18 +21,18 @@ A product sold, at the price it was sold at. 114,297 rows.
 | `sold_at` | Datetime | When the ticket was rung up |
 | `date`, `hour` | Date, Int | Its day, and the hour it started in (0-23) |
 | `weekday` | Int | ISO weekday: 1 is Monday, 7 Sunday |
-| `product` | String | `espresso`, `americano`, `cortado`, `cappuccino`, `latte`, `filter_v60`, `cold_brew`, `hot_chocolate`, `croissant`, `pan_dulce` |
-| `category` | String | `espresso`, `milk`, `filter`, `chocolate`, `pastry` |
+| `product` | String | As the shop's menu names it, lower case with `_` (`americano`, `latte`, `cafe_de_olla`): `SELECT DISTINCT product FROM clean.menu_prices` lists them |
+| `category` | String | `espresso`, `milk`, `filter`, `chocolate` or `pastry` |
 | `quantity` | Int | Units on the line |
 | `unit_price_mxn` | Float | The menu price that day, pesos |
 | `line_total_mxn` | Float | `unit_price_mxn` × `quantity` |
-| `channel` | String | `dine_in` or `takeaway` |
-| `payment` | String | `card` or `cash` |
+| `channel` | String | `dine_in` or `takeaway`, the same on every line of a ticket |
+| `payment` | String | `card` or `cash`, the same on every line of a ticket |
 
 ## `clean.orders` — one ticket, from order to ready
 
-77,345 rows. A customer who would have waited longer than their patience left without
-buying and is in no table: the export never sees a lost sale.
+A customer who would have waited longer than their patience left without buying and is in
+no table: the export never sees a lost sale.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -59,15 +59,15 @@ The menu's history: a new period wherever a price change starts or a promotion e
 | Column | Type | Meaning |
 |---|---|---|
 | `product` | String | As in `clean.sales` |
-| `ingredient` | String | `coffee_beans`, `milk`, `chocolate`, `cup`, `filter_paper`, `croissant`, `pan_dulce` |
+| `ingredient` | String | As the shop's file names it (`coffee_beans`, `milk`, `cup`, ...) |
 | `quantity` | Float | In the ingredient's unit, for one |
 | `unit` | String | `g`, `ml` or `piece` |
 
 ## `clean.purchases` — one ingredient bought for a week
 
 Bought on Mondays: the week's use and its waste, at that month's cost. Coffee beans
-move with half the green coffee price in pesos; the rest moves with the consumer
-price index.
+move in part with the green coffee price in pesos (the share the shop's file says); the
+rest moves with the consumer price index.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -92,7 +92,7 @@ price index.
 ## `clean.shop_hours` — one hour the shop was open
 
 Every open hour from the first sale to the last, **zeros included**: an hour that sold
-nothing is a row. 8,251 rows. The items of `hourly_demand`.
+nothing is a row. The items of `hourly_demand`.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -110,7 +110,7 @@ nothing is a row. 8,251 rows. The items of `hourly_demand`.
 ## `features.hourly_demand_features` — tickets an hour, model input
 
 One row of `clean.shop_hours` with what the hour may know before it happens
-(`domains/coffee_shop/features.py`).
+(`domains/coffee/shops/features.py`).
 
 | Column | Type | Meaning |
 |---|---|---|

@@ -56,8 +56,8 @@ from dagster import (
     sensor,
 )
 
-from mlops_core.adapter import DomainAdapter, available_domains, load_adapter
-from mlops_core.config import ModelConfig, Settings
+from mlops_core.adapter import DomainAdapter, available_tenants, load_adapter
+from mlops_core.config import DomainConfig, ModelConfig, Settings
 from mlops_core.data.clean import build_clean
 from mlops_core.data.documents import fetch_documents
 from mlops_core.data.extract import checks_by_day, extract_all, http_client, ingestions
@@ -81,6 +81,12 @@ Materialized = MaterializeResult[None]
 SENSOR_SECONDS = 600
 # The calendar of a domain without a schedule: a read's day has to be some zone's.
 DEFAULT_TIMEZONE = "UTC"
+
+
+def _tenant(config: DomainConfig) -> str:
+    """A domain's or subdomain's name where Dagster wants an identifier: its assets' key
+    prefix, its group, its jobs and sensors (`<domain>`, `<domain>__<subdomain>`)."""
+    return config.tenant.replace("/", "__")
 
 
 def schedule_status(settings: Settings) -> DefaultScheduleStatus:
@@ -113,9 +119,9 @@ def model_asset_names(model: ModelConfig) -> list[str]:
 
 def domain_assets(adapter: DomainAdapter, settings: Settings) -> list[AssetsDefinition]:
     config = adapter.config
-    data_dir = settings.data_dir / config.name
-    prefix = [config.name]
-    group = config.name
+    data_dir = settings.data_dir / config.home
+    prefix = [_tenant(config)]
+    group = _tenant(config)
 
     @asset(name="raw_sources", key_prefix=prefix, group_name=group)
     def raw_sources() -> Materialized:
@@ -170,7 +176,7 @@ def reads_timezone(adapter: DomainAdapter) -> str:
 def read_days(adapter: DomainAdapter, name: str, settings: Settings) -> DailyPartitionsDefinition:
     """A partition a day, from the first day the source was read (today, if it never
     was) through today: a read made this morning is a partition before the day ends."""
-    raw_dir = settings.data_dir / adapter.config.name / "raw"
+    raw_dir = settings.data_dir / adapter.config.home / "raw"
     timezone = reads_timezone(adapter)
     days = sorted(checks_by_day(raw_dir, name, timezone))
     first = days[0] if days else datetime.now(ZoneInfo(timezone)).date().isoformat()
@@ -183,13 +189,13 @@ def read_assets(
     """`<source>_reads`: one partition per day a source whose history is its downloads
     was read."""
     config = adapter.config
-    raw_dir = settings.data_dir / config.name / "raw"
+    raw_dir = settings.data_dir / config.home / "raw"
     timezone = reads_timezone(adapter)
 
     @asset(
         name=f"{name}_reads",
-        key_prefix=[config.name],
-        group_name=config.name,
+        key_prefix=[_tenant(config)],
+        group_name=_tenant(config),
         partitions_def=read_days(adapter, name, settings),
         deps=[raw_sources],
     )
@@ -224,8 +230,8 @@ def model_assets(
 ) -> list[AssetsDefinition]:
     """One model's features, training and batch scores, downstream of the clean layer."""
     config = adapter.config
-    data_dir = settings.data_dir / config.name
-    prefix, group = [config.name], config.name
+    data_dir = settings.data_dir / config.home
+    prefix, group = [_tenant(config)], _tenant(config)
     features_name, model_name, predictions_name, drift_name = model_asset_names(model)
 
     @asset(name=features_name, key_prefix=prefix, group_name=group, deps=[clean_tables])
@@ -275,7 +281,7 @@ def domain_checks(
     adapter: DomainAdapter, settings: Settings, assets: list[AssetsDefinition]
 ) -> list[AssetChecksDefinition]:
     config = adapter.config
-    data_dir = settings.data_dir / config.name
+    data_dir = settings.data_dir / config.home
     by_name = {a.key.path[-1]: a for a in assets}
 
     @asset_check(asset=by_name["raw_sources"], name="sources_match_their_contracts")
@@ -311,7 +317,7 @@ def build_definitions(
     """Every installed domain's graph, or the ones given."""
     settings = settings or Settings()
     if adapters is None:
-        adapters = [load_adapter(name) for name in available_domains()]
+        adapters = [load_adapter(name) for name in available_tenants()]
     assets: list[AssetsDefinition] = []
     checks: list[AssetChecksDefinition] = []
     for adapter in adapters:
@@ -322,18 +328,18 @@ def build_definitions(
     # whose history is its downloads.
     jobs: list[UnresolvedAssetJobDefinition] = [
         define_asset_job(
-            name=f"{adapter.config.name}_{pipeline}",
-            selection=AssetSelection.assets(*[[adapter.config.name, name] for name in names]),
+            name=f"{_tenant(adapter.config)}_{pipeline}",
+            selection=AssetSelection.assets(*[[_tenant(adapter.config), name] for name in names]),
         )
         for adapter in adapters
         for pipeline, names in pipeline_assets(adapter).items()
     ]
-    read_jobs = {adapter.config.name: reads_jobs(adapter) for adapter in adapters}
+    read_jobs = {_tenant(adapter.config): reads_jobs(adapter) for adapter in adapters}
     jobs += [job for domain_jobs in read_jobs.values() for job in domain_jobs]
     schedules = [
         ScheduleDefinition(
-            name=f"{adapter.config.name}_daily_data",
-            job_name=f"{adapter.config.name}_data",
+            name=f"{_tenant(adapter.config)}_daily_data",
+            job_name=f"{_tenant(adapter.config)}_data",
             cron_schedule=adapter.config.schedule.data,
             execution_timezone=adapter.config.schedule.timezone,
             default_status=schedule_status(settings),
@@ -346,7 +352,7 @@ def build_definitions(
         for adapter in adapters
         for sensor in [
             *model_sensors(adapter, settings),
-            *read_sensors(adapter, settings, read_jobs[adapter.config.name]),
+            *read_sensors(adapter, settings, read_jobs[_tenant(adapter.config)]),
         ]
     ]
     return Definitions(
@@ -359,16 +365,16 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
     for it on data it has not learned from. Each request is keyed by the data version, so
     one change starts one run."""
     config = adapter.config
-    data_dir = settings.data_dir / config.name
-    job = f"{config.name}_ml"
+    data_dir = settings.data_dir / config.home
+    job = f"{_tenant(config)}_ml"
 
     def keys(model: str, *assets: str) -> list[AssetKey]:
         names = dict(zip(("features", "model", "predictions", "drift"),
                          model_asset_names(config.model_named(model)), strict=True))  # fmt: skip
-        return [AssetKey([config.name, names[asset]]) for asset in assets]
+        return [AssetKey([_tenant(config), names[asset]]) for asset in assets]
 
     @sensor(
-        name=f"{config.name}_new_data",
+        name=f"{_tenant(config)}_new_data",
         job_name=job,
         minimum_interval_seconds=SENSOR_SECONDS,
         default_status=sensor_status(settings),
@@ -387,7 +393,7 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
             )
 
     @sensor(
-        name=f"{config.name}_retrain",
+        name=f"{_tenant(config)}_retrain",
         job_name=job,
         minimum_interval_seconds=SENSOR_SECONDS,
         default_status=sensor_status(settings),
@@ -410,7 +416,7 @@ def model_sensors(adapter: DomainAdapter, settings: Settings) -> list[SensorDefi
 
 
 def reads_job(adapter: DomainAdapter, source: str) -> str:
-    return f"{adapter.config.name}_{source}_reads"
+    return f"{_tenant(adapter.config)}_{source}_reads"
 
 
 def reads_jobs(adapter: DomainAdapter) -> "list[UnresolvedAssetJobDefinition]":
@@ -419,7 +425,7 @@ def reads_jobs(adapter: DomainAdapter) -> "list[UnresolvedAssetJobDefinition]":
     return [
         define_asset_job(
             name=reads_job(adapter, source),
-            selection=AssetSelection.assets([adapter.config.name, f"{source}_reads"]),
+            selection=AssetSelection.assets([_tenant(adapter.config), f"{source}_reads"]),
         )
         for source in adapter.config.accumulate
     ]
@@ -433,11 +439,11 @@ def read_sensors(
     config = adapter.config
     if not config.accumulate:
         return []
-    raw_dir = settings.data_dir / config.name / "raw"
+    raw_dir = settings.data_dir / config.home / "raw"
     timezone = reads_timezone(adapter)
 
     @sensor(
-        name=f"{config.name}_reads",
+        name=f"{_tenant(config)}_reads",
         jobs=jobs,
         minimum_interval_seconds=SENSOR_SECONDS,
         default_status=sensor_status(settings),

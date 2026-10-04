@@ -184,21 +184,23 @@ flowchart LR
 
 Parquet is the source of truth for every layer and DuckDB the query engine over it.
 
-Domains are tenants. Each keeps its own data, models, API, agent and explorer, and reads
-another domain's tables only as its YAML declares them (`uses`), one by one and read-only:
-they appear in its catalog as `<domain>.<layer>.<table>`, and its agent reads their
-dictionary sections from the domain that owns them. A domain that declares nothing sees
-nothing of any other, whatever a query tries; and no domain imports another's code - the
-contract between them is the data.
+Domains are tenants, isolated from each other: each keeps its own data, models, API, agent
+and explorer, and none reads another's. A domain can hold **subdomains** - one per
+business it serves - that share its code and read the tables of it they list (`parent`),
+one by one and read-only, as `<domain>.<layer>.<table>`; their agent reads those tables'
+dictionary sections from the domain. A subdomain reads nothing of its siblings or of any
+other domain, and the domain reads nothing of theirs: their data lives beside its layers,
+never in them. Whatever a query tries.
 
-The second tenant is **`coffee_shop`**: one neighbourhood specialty coffee shop in Mexico
-City, for owners rather than for the market. It does not exist - its point-of-sale export
-is simulated, anchored to real data: when people buy and how they answer a price come from
-a real coffee machine's sales (CC0), and what it pays follows the coffee domain's green
-coffee in pesos and consumer price index, the two tables it declares. Its first model
-predicts the tickets an hour brings at the menu's prices or at prices moved by a percent.
-Learning a simulator's rules proves the pipeline, not a market, and the shop says so. It
-cost a package of its own and no change to the core's contract.
+Coffee's subdomains are **coffee shops**, for owners rather than for the market: a shop is
+a YAML file - menu, recipes, hours, staff, its corner of the city - and every shop gets the
+same pipeline, models and agent. Two demo shops, `cafe_de_barrio` (a specialty shop in
+Benito Juárez) and `cafe_de_paso` (a takeaway counter in Gustavo A. Madero), each opened
+in a block the `zones` model finds short of coffee shops. They do not exist: their
+point-of-sale exports are simulated, anchored to real data - when people buy and how they
+answer a price come from a real coffee machine's sales (CC0), and what they pay follows
+coffee's green coffee in pesos and consumer price index. Learning a simulator's rules
+proves the pipeline, not a market, and the shops say so.
 
 ## Quickstart
 

@@ -12,6 +12,13 @@ wrong, and it gets fixed here rather than patched around.
 
 A domain package exposes one function, `adapter()`, returning an object that satisfies
 `DomainAdapter`. It is found by name, so the core never imports a domain by hand.
+
+A domain may also hold subdomains - one per business it serves, say - each a tenant of
+its own that shares the domain's code and reads the tables of it it lists (`parent` in its
+config), and nothing of its siblings or of any other domain. The package then exposes
+three more: `subdomains()`, their names; `subdomain(name)`, one's adapter; and
+`subdomain_dir(name)`, where its files live (its data dictionary, its questions). A
+command names one as `<domain>/<subdomain>`.
 """
 
 from __future__ import annotations
@@ -157,29 +164,69 @@ def available_domains() -> list[str]:
     return sorted(module.name for module in pkgutil.iter_modules(package.__path__))
 
 
-def domain_dir(domain: str) -> Path:
-    """Where a domain's package lives: its config and the files it keeps beside its code,
-    such as the questions its retrieval is judged by. Written to only from a checkout,
-    where this is the source tree."""
+def available_subdomains(domain: str) -> list[str]:
+    """The subdomains a domain holds, by name; none for one that holds none."""
+    subdomains: Callable[[], list[str]] | None = getattr(_package(domain), "subdomains", None)
+    return sorted(subdomains()) if subdomains else []
+
+
+def available_tenants() -> list[str]:
+    """Every domain and every subdomain, as commands name them: `<domain>`,
+    `<domain>/<subdomain>`."""
+    return [
+        tenant
+        for domain in available_domains()
+        for tenant in [domain, *(f"{domain}/{sub}" for sub in available_subdomains(domain))]
+    ]
+
+
+def domain_dir(tenant: str) -> Path:
+    """Where a domain's or subdomain's files live: its config and what it keeps beside its
+    code, such as the questions its retrieval is judged by. Written to only from a
+    checkout, where this is the source tree."""
+    domain, _, subdomain = tenant.partition("/")
+    if subdomain:
+        directory: Path = _package(domain).subdomain_dir(subdomain)
+        return directory
     return Path(str(importlib.resources.files(f"{DOMAINS_PACKAGE}.{domain}")))
 
 
 def load_adapter(domain: str | None = None) -> DomainAdapter:
-    """The named domain's adapter; with no name, the only one installed.
+    """The named domain's or subdomain's adapter (`<domain>/<subdomain>`); with no name,
+    the only domain installed.
 
     Picking the lone domain is a convenience, not a guess: with two installed, a
-    command that does not say which one refuses to run.
+    command that does not say which one refuses to run. A domain is checked to have no
+    parent, and a subdomain to have the domain it was found in as its parent: neither can
+    reach another domain's data by what its config says.
     """
     if domain is None:
         installed = available_domains()
         if len(installed) != 1:
             raise ValueError(f"Name a domain (--domain or MLOPS_DOMAIN); installed: {installed}")
         domain = installed[0]
+    name, _, subdomain = domain.partition("/")
+    module = _package(name)
+    if not subdomain:
+        adapter: DomainAdapter = module.adapter()
+        if adapter.config.parent is not None:
+            raise ValueError(f"{name} is a domain: it cannot name a parent")
+        return adapter
+    held = available_subdomains(name)
+    if subdomain not in held:
+        raise ValueError(f"No subdomain '{subdomain}' in {name}; it holds {held}")
+    adapter = module.subdomain(subdomain)
+    config = adapter.config
+    if config.name != subdomain or config.parent is None or config.parent.domain != name:
+        raise ValueError(f"{domain} must be named {subdomain} and have {name} as its parent")
+    return adapter
+
+
+def _package(domain: str) -> Any:
+    """A domain's package, or an error that lists the installed ones."""
     try:
-        module = importlib.import_module(f"{DOMAINS_PACKAGE}.{domain}")
+        return importlib.import_module(f"{DOMAINS_PACKAGE}.{domain}")
     except ModuleNotFoundError as missing:
         if missing.name != f"{DOMAINS_PACKAGE}.{domain}":
             raise  # the domain exists but one of its own imports failed: say that instead
         raise ValueError(f"No domain '{domain}'; installed: {available_domains()}") from missing
-    adapter: DomainAdapter = module.adapter()
-    return adapter

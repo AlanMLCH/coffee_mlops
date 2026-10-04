@@ -11,7 +11,7 @@ from collections.abc import Mapping
 
 import polars as pl
 
-from domains.coffee_shop.clean import price_levels
+from domains.coffee.shops.clean import price_levels
 
 MENU_TABLE = "menu_prices"
 HOURS_CONTEXT = (MENU_TABLE,)

@@ -4,24 +4,24 @@ The connection is in-memory and read-only by construction: it holds views, never
 data, so any number of readers (CLI, API, agent, UI) can open one while the
 pipeline writes new partitions.
 
-The tables another domain lends (`DomainConfig.uses`) are a catalog of their own, named
-after it - `SELECT * FROM <domain>.clean.<table>` - holding only the tables declared.
+A subdomain's parent is a catalog of its own, named after it - `SELECT * FROM
+<parent>.clean.<table>` - holding only the tables the subdomain lists
+(`DomainConfig.parent`).
 """
 
-from collections.abc import Sequence
 from pathlib import Path
 
 import duckdb
 
-from mlops_core.config import DATA_LAYERS, DomainUse
+from mlops_core.config import DATA_LAYERS, ParentTables
 from mlops_core.storage import latest_partition, table_path
 
 LAYERS = DATA_LAYERS
 
 
-def connect(data_dir: Path, uses: Sequence[DomainUse] = ()) -> duckdb.DuckDBPyConnection:
-    """One schema per layer, one view per table: `SELECT * FROM clean.<table>`; and each
-    used domain's declared tables as `<domain>.<layer>.<table>`."""
+def connect(data_dir: Path, parent: ParentTables | None = None) -> duckdb.DuckDBPyConnection:
+    """One schema per layer, one view per table: `SELECT * FROM clean.<table>`; and, for a
+    subdomain, its parent's listed tables as `<parent>.<layer>.<table>`."""
     con = duckdb.connect()
     for layer in LAYERS:
         layer_dir = data_dir / layer
@@ -39,13 +39,13 @@ def connect(data_dir: Path, uses: Sequence[DomainUse] = ()) -> duckdb.DuckDBPyCo
                 f"CREATE VIEW {layer}.{table_dir.name} AS "
                 f"SELECT * FROM read_parquet('{parquet}', hive_partitioning = false)"
             )
-    for use in uses:
-        con.execute(f"ATTACH ':memory:' AS {use.domain}")
-        for name in use.qualified():
+    if parent is not None:
+        con.execute(f"ATTACH ':memory:' AS {parent.domain}")
+        for name in parent.qualified():
             domain, layer, table = name.split(".")
             partition = latest_partition(table_path(data_dir, name))
             if partition is None:
-                continue  # the other domain has not built it yet: not offered
+                continue  # the parent has not built it yet: not offered
             parquet = (partition / f"{table}.parquet").as_posix()
             con.execute(f"CREATE SCHEMA IF NOT EXISTS {domain}.{layer}")
             con.execute(
