@@ -1134,6 +1134,9 @@ models:
       period: decade # residuals and drift by decade: the quota era, the 2011 spike, 2025
     spec:
       target: change_pct
+      # Judged by its absolute error, and a month's change has heavy tails (frosts,
+      # droughts): learned as a median, as the random walk it must beat is one.
+      median: true
       categorical: [indicator, calendar_month]
       numeric:
         - price_last # US cents/lb, the month before
@@ -1411,6 +1414,9 @@ models:
       period: auction
     spec:
       target: premium_pct
+      # Judged by its absolute error, with tails a Gesha's premium makes heavy: learned as
+      # a median, not pulled towards the few lots that fetch ten times the rest.
+      median: true
       relative_to: auction_median_usd_per_lb
       unlabelled: true # an unsold lot: what it might have fetched
       categorical: [state, processing_method, score_band]
@@ -1787,15 +1793,20 @@ explore:
     - name: Coffee shops per km², block by block
       kind: areas
       unit: places per km²
-      description: DENUE's coffee shops per square kilometre of each of the 2020 Census' 2,431 urban AGEBs (a few dozen blocks each); an AGEB with none is grey
+      description: >-
+        DENUE's coffee shops per square kilometre of each of the 2020 Census' 2,431 urban
+        AGEBs (a few dozen blocks each); 0 where it lists none. An AGEB with no row would
+        read "no data", which is not what none means
       areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT zone_id, coffee_shops_per_km2, coffee_shops, borough
-        FROM analysis.zone_coffee_shops WHERE coffee_shops > 0
+        FROM analysis.zone_coffee_shops
     - name: Years of schooling, block by block
       kind: areas
       unit: years
-      description: Average years of schooling of people 15 and over in each urban AGEB, 2020 Census
+      description: >-
+        Average years of schooling of people 15 and over in each urban AGEB, 2020 Census.
+        "No data" is true for 27 of them: nobody lives there, or INEGI withheld the figure
       areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT zone_id, schooling_years, population, borough
@@ -1820,7 +1831,7 @@ explore:
       description: People entering the borough's Metro stations on an average day of the last year of the counts, each station's open days only
       sql: >-
         SELECT borough_id, metro_daily_entries, metro_stations, metrobus_stations
-        FROM analysis.borough_transit WHERE metro_daily_entries > 0
+        FROM analysis.borough_transit
     - name: Median shelf price of ground coffee
       kind: areas
       unit: MXN/kg
@@ -1855,17 +1866,16 @@ explore:
       unit: coffee shops missing
       description: >-
         The coffee shops a zone like it has - as the zones model predicts them without
-        ever seeing its borough - minus the ones DENUE lists in it, where that is one or
-        more. Jobs are known by borough only, so a residential block of a borough full of
-        offices is expected more than it would draw
+        ever seeing its borough - minus the ones DENUE lists in it; 0 where it lists as
+        many or more. Jobs are known by borough only, so a residential block of a borough
+        full of offices is expected more than it would draw
       areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
-        SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
+        SELECT p.zone_id, greatest(0, round(p.held_out_prediction - f.coffee_shops, 1)) AS missing,
                round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed, z.borough
         FROM predictions.zones_predictions p
         JOIN features.zones_features f USING (zone_id)
         JOIN clean.census_zones z USING (zone_id)
-        WHERE p.held_out_prediction - f.coffee_shops >= 1
     - name: Probably coffee shops, though their names do not say
       kind: points
       description: >-

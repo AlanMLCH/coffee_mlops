@@ -42,15 +42,17 @@ simulation:
 
 models:
   # How many tickets an hour brings, at the menu's prices or at prices the owner weighs.
-  # What an item knows is features.py: its day, its hour and the menu. Each shop registers
-  # its own (`<shop>-hourly-demand`).
+  # What an item knows is features.py: its day, its hour, the menu, and how the same
+  # weekday-and-hour went its last four times. Each shop registers its own
+  # (`<shop>-hourly-demand`).
   - name: hourly_demand # -> hourly_demand_features, hourly_demand_predictions
     description: >-
-      How many tickets the coffee shop sells in an hour of a given day, at the menu's
-      prices that day or with every price moved by a percent: the demand to staff and
-      stock for. A price beyond any the menu has had is answered as the nearest one it
-      had: trees do not extrapolate, so it does not say what a larger rise would do.
-    example: {day: "2026-09-07", hour: 8}
+      How many tickets the coffee shop sells in an hour of the next given day of the week,
+      from how the same weekday and hour went its last four times and the menu's prices that day, or with
+      every price moved by a percent: the demand to staff and stock for. A price beyond
+      any the menu has had is answered as the nearest one it had: trees do not
+      extrapolate, so it does not say what a larger rise would do.
+    example: {weekday: 1, hour: 8}
     items:
       table: shop_hours
       id: hour_id # 2026-03-02T08
@@ -60,7 +62,7 @@ models:
       target: tickets
       task: count
       categorical: [weekday_hour]
-      numeric: [hour, weekday, price_level]
+      numeric: [hour, weekday, price_level, slot_last, slot_mean_4w, history_price_level]
       leakage: [items, revenue_mxn, mean_minutes]
     training:
       # The shops' histories end in August 2026; the six months before are the test, the
@@ -213,16 +215,15 @@ explore:
       unit: coffee shops missing
       description: >-
         The coffee domain's view of the whole city: the coffee shops an AGEB like each would
-        have (its zones model, which never saw the AGEB's borough) minus the ones DENUE lists,
-        where that is one or more. It counts inside each AGEB: a neighbour across the street
-        in the next one is not counted - see the neighbourhood finding
+        have (its zones model, which never saw the AGEB's borough) minus the ones DENUE lists;
+        0 where it lists as many or more. It counts inside each AGEB: a neighbour across the
+        street in the next one is not counted - see the neighbourhood finding
       areas: {table: coffee.clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
-        SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
+        SELECT p.zone_id, greatest(0, round(p.held_out_prediction - f.coffee_shops, 1)) AS missing,
                round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed
         FROM coffee.predictions.zones_predictions p
         JOIN coffee.features.zones_features f USING (zone_id)
-        WHERE p.held_out_prediction - f.coffee_shops >= 1
   datasets:
     - name: Sales
       description: Every line of every ticket since the shop opened.

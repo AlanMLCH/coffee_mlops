@@ -30,8 +30,10 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 - **Trains nine models of four kinds** - quantities, counts, probabilities and ranges,
   each judged by its own loss (absolute error, Poisson deviance, Brier score, interval
   score) - each promoted only if a paired bootstrap is 95% sure it beats both the
-  baselines and the current champion; every run and model is in MLflow. Three were
-  refused, and say so.
+  baselines and the current champion; every run and model is in MLflow. A model with no
+  champion is never left unserved: the best there is - the candidate if it beats every
+  baseline on average, else that baseline, packaged as a model - serves as provisional,
+  and the API and the agent say so.
 - **Monitors drift** between periods with Evidently, and retrains once per new version
   of the data - letting the gate decide whether the new model ships.
 - **Answers questions** with an agent (LangGraph, local `qwen3.5:4b`) over three tools:
@@ -57,17 +59,19 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 |---|---|---|
 | Cup score (CQI, trained on 2010-2018, tested on 2022-2023) | MAE **1.648** points | 1.894, the best baseline; certain |
 | Price per kilogram of a roaster's bag (out of fold, 510 offers) | MAE **229.9** pesos/kg | 252.7, each shop's mean; 96% sure |
-| Next month's green coffee price change | **not promoted** | a random walk is hard to beat: 80% sure, short of 95% |
+| Next month's green coffee price change | **provisional: the past mean** | no model beat it with the gate's certainty; learned as a median, the candidate lost |
 | Coffee shops per city block group (2,431 AGEBs, out of fold by borough) | Poisson deviance **1.82** | 3.25, the city's mean; certain |
 | Is a place DENUE could not classify by name a coffee shop? (out of fold by zone) | Brier **0.150**, AUC 0.86 | 0.235, each borough's share; certain |
 | A jar's fair price on a shelf (PROFECO, tested on 2026) | MAE **18.4** pesos | 19.7, each product's mean; certain - mostly a level shift: coffee rose faster than everything else |
 | Does a household buy coffee? (ENIGH, out of fold by sampling unit) | Brier **0.1166**, AUC 0.59 | 0.1170, each state's share: certain, and barely better |
-| Green coffee's range 3, 6, 12 months ahead | **not promoted** | its own history's range covers better (the model's held 71% of 2021-2026, not 80%) |
-| A Cup of Excellence lot's premium over its auction | **not promoted** | each score band's past premium does better (MAE 54 against 71 points) |
+| Green coffee's range 3, 6, 12 months ahead | **provisional: the historical range** | the model's ranges held 71% of 2021-2026, not 80% |
+| A Cup of Excellence lot's premium over its auction | **provisional: each score band's past premium** | MAE 54; the model, learned as a median, 64 (71 before) |
 | Retrieval, 108 questions | nDCG@10 **0.600** (dense) | 0.455 (BM25); hybrid did not beat dense |
 | The agent, 54 questions end to end | **74%** correct, 98% verified, routing 94% | peripheral tables are kept from the local 4B model; runs of the same agent ranged 73-78% at v1.1 |
 | The agent, 25 held-out questions written before the fixes of 29 September | **80%** correct, 92% verified | 52% before them; 84% when shown three models, one mixed question now sent to a model alone |
 | The agent, 14 questions about the newer models | **86%** correct, routing 93% | 0% when listed every model or none of them; optimistic - written and fixed against |
+| The agent, 21 questions on the studies and the three provisional models | **43%** correct, routing 95% | 10% before the studies had dictionary sections: it was shown none of them |
+| A coffee shop's agent, 28 questions (Café de Barrio) | **36%** correct, routing 82% | every prediction right; its SQL right on 20%: the next piece of work |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns

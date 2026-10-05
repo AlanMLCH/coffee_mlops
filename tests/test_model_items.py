@@ -274,6 +274,10 @@ def test_a_lot_asked_about_online_meets_the_same_auction() -> None:
     assert row["gesha"] == 1.0 and row["processing_method"] == "washed"
     assert row["auction_median_usd_per_lb"] == 10.0  # all three of 2024's lots are others
     assert row["market_usd_per_lb"] == pytest.approx((200 + 5 * 5.5) / 100)
+    # A lot asked about without its varieties: none, not a failure (2026-10-04, the API
+    # answered such a request with a 500).
+    bare = add_lot_market(pl.DataFrame([AuctionLot(score=90).to_item()]), context)
+    assert (bare["gesha"][0], bare["varieties_n"][0]) == (0.0, 0.0)
 
 
 def test_a_household_bought_coffee_if_it_paid_for_any() -> None:

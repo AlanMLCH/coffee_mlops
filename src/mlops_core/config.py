@@ -381,6 +381,10 @@ class ModelSpec(BaseModel):
     # The gate then judges the range, by its interval score: width, plus a penalty for
     # every miss that grows with how far the truth fell outside.
     interval: float | None = Field(default=None, gt=0, lt=1)
+    # A regression learns the median (L1) instead of the mean (L2): for a target with
+    # heavy tails, judged by its absolute error - a few extreme items would otherwise pull
+    # every prediction towards them, and the gate scores what the median minimises.
+    median: bool = False
     # Items whose target is not known yet are kept: scored in batch, never learned from or
     # judged on. Without it, an item without a target breaks the feature contract.
     unlabelled: bool = False
@@ -404,6 +408,8 @@ class ModelSpec(BaseModel):
     def _interval_and_change_fit_the_task(self) -> Self:
         if self.interval is not None and self.task != "regression":
             raise ValueError(f"A range is predicted around a quantity, not a {self.task}")
+        if self.median and self.task != "regression":
+            raise ValueError(f"A median is learned for a quantity, not a {self.task}")
         if self.relative_to is not None and self.relative_to not in self.numeric:
             raise ValueError(f"relative_to must be a numeric feature: '{self.relative_to}'")
         return self

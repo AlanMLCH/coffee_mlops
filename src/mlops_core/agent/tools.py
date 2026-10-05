@@ -124,6 +124,9 @@ def described(response: dict[str, Any]) -> str:
         text += f"; in {level['of']}, from {level['now']:.2f} now to {level['prediction']:.2f}"
         if level.get("lower") is not None and level.get("upper") is not None:
             text += f" (between {level['lower']:.2f} and {level['upper']:.2f})"
+    if str(response.get("model_gate", "")).startswith("provisional"):
+        # Served because nothing passed the gate: the answer must not sound surer than that.
+        text += f" [the model is provisional - {response['model_gate']}]"
     return text
 
 

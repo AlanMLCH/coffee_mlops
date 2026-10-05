@@ -160,7 +160,12 @@ def test_the_domain_dictionary_describes_every_table_it_names() -> None:
     sections = table_sections(dictionary_path(domain_dir("coffee")).read_text(encoding="utf-8"))
 
     assert "clean.coffee_reviews" in sections
-    assert {name.split(".")[0] for name in sections} <= {"clean", "features", "predictions"}
+    assert {name.split(".")[0] for name in sections} <= {
+        "clean",
+        "features",
+        "predictions",
+        "analysis",  # the studies an owner asks about: unseen, the agent could answer none
+    }
 
 
 def test_a_question_is_shown_the_sections_like_it_and_the_ones_they_name() -> None:

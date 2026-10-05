@@ -1,9 +1,11 @@
 """A point and a range around it: what a regression with an `interval` serves.
 
 Three pipelines fitted on the same rows: one for the point, two at the quantiles of the
-range's edges. `predict` is the point, so whatever scores a model scores this one
-unchanged; `band` is the range. Light on purpose - numpy and scikit-learn only - because
-the prediction API loads it, and its image has nothing else.
+range's edges, and a `margin` that widens both edges so the range holds the truth as
+often as it says - set by conformal calibration on training rows the edges were
+not fitted on (`train.conformal_margin`). `predict` is the point, so whatever scores a
+model scores this one unchanged; `band` is the range. Light on purpose - numpy and
+scikit-learn only - because the prediction API loads it, and its image has nothing else.
 """
 
 from dataclasses import dataclass
@@ -16,10 +18,11 @@ from sklearn.base import BaseEstimator, RegressorMixin
 class Band(RegressorMixin, BaseEstimator):  # type: ignore[misc]
     """A point model and the two quantile models at the edges of its range."""
 
-    def __init__(self, point: Any, lower: Any, upper: Any) -> None:
+    def __init__(self, point: Any, lower: Any, upper: Any, margin: float = 0.0) -> None:
         self.point = point
         self.lower = lower
         self.upper = upper
+        self.margin = margin
 
     def fit(self, x: Any, y: Any, **fit_params: Any) -> Self:
         for model in (self.point, self.lower, self.upper):
@@ -31,9 +34,12 @@ class Band(RegressorMixin, BaseEstimator):  # type: ignore[misc]
         return prediction
 
     def band(self, x: Any) -> tuple[np.ndarray, np.ndarray]:
-        """The range's edges. Two quantile models fitted apart can cross on a row; the
-        range is then the two in order, never an upside-down one."""
+        """The range's edges, each moved out by the margin. Two quantile models fitted
+        apart can cross on a row; the range is then the two in order, never an upside-down
+        one. A range saved before margins existed has none."""
         low, high = self.lower.predict(x), self.upper.predict(x)
+        margin = float(getattr(self, "margin", 0.0))
+        low, high = np.minimum(low, high) - margin, np.maximum(low, high) + margin
         return np.minimum(low, high), np.maximum(low, high)
 
 

@@ -119,6 +119,9 @@ One row of `clean.shop_hours` with what the hour may know before it happens
 | `hour`, `weekday` | Int | As in `clean.shop_hours` |
 | `weekday_hour` | String | `<weekday>-<hh>`: the slot, `1-08` is a Monday at eight |
 | `price_level` | Float | The menu's that day; a request may move it by a percent |
+| `slot_last` | Float? | Tickets the same weekday and hour brought the last time before the item's day (last week's) |
+| `slot_mean_4w` | Float? | Their mean over its last four times |
+| `history_price_level` | Float? | The menu's level over those four times: a price changed since is the difference |
 | `tickets` | Float | Target |
 
 ## `predictions.hourly_demand_predictions` — expected tickets an hour

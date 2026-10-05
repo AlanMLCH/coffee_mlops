@@ -1132,3 +1132,10 @@ def test_a_domain_without_documents_gets_an_agent_without_a_library() -> None:
     assert config.corpus is None
     assert passages("Why does altitude matter?", 8) == []
     assert titles == {}
+
+
+def test_a_domain_without_documents_is_judged_on_its_tables_and_models(tmp_path: Path) -> None:
+    """Its evaluation reads no retrieval questions: it has no passage to retrieve."""
+    shop = load_adapter("coffee/cafe_de_barrio").config
+
+    assert cli._retrieval_questions(shop, tmp_path / "absent.jsonl") == []

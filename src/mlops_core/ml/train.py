@@ -32,6 +32,7 @@ import polars as pl
 from lightgbm import LGBMRegressor
 from mlflow import MlflowClient
 from mlflow.data.pandas_dataset import from_pandas
+from mlflow.exceptions import MlflowException
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import (
@@ -54,6 +55,7 @@ from mlops_core.config import (
     TrainingConfig,
 )
 from mlops_core.ml.band import Band, Predicted, predicted
+from mlops_core.ml.baseline_models import Lookup, Rate, lookup_key
 from mlops_core.ml.evaluation import (
     absolute_errors,
     loss_name,
@@ -78,6 +80,8 @@ TRUSTED_MODEL_TYPES = [
     "lightgbm.basic.Booster",
     "lightgbm.sklearn.LGBMRegressor",
     "mlops_core.ml.band.Band",
+    "mlops_core.ml.baseline_models.Lookup",
+    "mlops_core.ml.baseline_models.Rate",
 ]
 # What LightGBM minimises for each task. All three are regressors: a cross-entropy
 # regressor predicts the probability itself, so nothing downstream needs a classifier's
@@ -96,12 +100,21 @@ TUNING_SCORES: dict[Task, str] = {
 }
 
 
+# The share of the training items set aside to calibrate a range: the latest in time, or
+# whole groups. Enough to estimate a quantile of the misses; little enough to fit on.
+CALIBRATION_SHARE = 0.2
+# The gate's note on a version served though it did not pass: there was no champion, and
+# a mediocre model is better than none - but never one worse than a baseline.
+PROVISIONAL = "provisional"
+
+
 @dataclass(frozen=True)
 class TrainResult:
     run_id: str
     model_version: str
     promoted: bool
     metrics: dict[str, float]
+    provisional: str = ""  # the gate's note when, with no champion, the best there was is served
 
 
 def labelled(features: pl.DataFrame, spec: ModelSpec) -> pl.DataFrame:
@@ -248,10 +261,49 @@ def build_pipeline(
     objective: dict[str, Any] = (
         {"objective": "quantile", "alpha": quantile}
         if quantile is not None
-        else {"objective": OBJECTIVES[spec.task]}
+        else {"objective": "regression_l1" if spec.median else OBJECTIVES[spec.task]}
     )
     model = LGBMRegressor(random_state=seed, verbose=-1, **objective, **model_params)
     return Pipeline([("prep", prep), ("model", model)])
+
+
+def conformal_margin(
+    train: pl.DataFrame, model: ModelConfig, params: dict[str, Any], seed: int
+) -> float:
+    """How far to move a range's edges so it holds the truth as often as it says:
+    conformalized quantile regression (Romano, Patterson and Candès, 2019).
+
+    The band is fitted again without a share of the training items - the latest in time
+    for a temporal model, as a forecast meets them; whole groups for a group model - and
+    each of those is scored by how far it fell outside its range (negative inside). The
+    margin is the score's quantile at the range's own share, corrected for the sample:
+    the edges quantile models learn on their own rows tend to hold the truth less often
+    on rows they never saw.
+
+    Never negative: a range is widened when it misses more often than it says, never
+    narrowed. Narrowed on a calm stretch of the past, it fails when the future is not
+    calm - measured (2026-10-04): a price's range, calibrated on its last training years,
+    was narrowed by 5.8 points and held 56% of the test years' changes instead of 71%.
+    Zero when too few items are left to calibrate on."""
+    spec, split = model.spec, model.training.split
+    assert spec.interval is not None
+    if isinstance(split, TemporalSplit):
+        ordered = train.sort(model.items.time)
+        cut = int(ordered.height * (1 - CALIBRATION_SHARE))
+        fit_rows, held = ordered.head(cut), ordered.tail(ordered.height - cut)
+    else:
+        held_share = GroupSplit(kind="group", column=split.column, test_share=CALIBRATION_SHARE)
+        fit_rows, held = group_split(train, held_share, model.items.id, seed)
+    if fit_rows.height < 10 or held.height < 10:
+        return 0.0
+    band = build_model(spec, params, seed)
+    assert isinstance(band, Band)
+    band.fit(*xy(fit_rows, spec), **fit_params(spec))
+    x_held, y_held = xy(held, spec)
+    low, high = band.band(x_held)
+    misses = np.maximum(low - y_held, y_held - high)
+    level = min(1.0, spec.interval * (1 + 1 / len(misses)))
+    return max(0.0, float(np.quantile(misses, level)))
 
 
 def fit_params(spec: ModelSpec) -> dict[str, Any]:
@@ -335,6 +387,93 @@ def baselines(
         name: Predicted(point, *(by_group if name == grouped else overall))
         for name, point in points.items()
     }
+
+
+def servable_baselines(train: pl.DataFrame, spec: ModelSpec, cfg: TrainingConfig) -> dict[str, Any]:
+    """The baselines the API could serve, as models: those that read only the model's own
+    inputs, fitted on the training split exactly as `baselines` fits them, so the one
+    served is the one the gate measured. A group mean over a column that is not an input
+    (a split's group, say) cannot be served, and is left out."""
+    overall = float(train[spec.target].mean())  # type: ignore[arg-type]
+    group = cfg.baseline_group
+    models: dict[str, Any] = {"global_mean": Lookup(None, {}, overall)}
+    if group in spec.features:
+        means = train.group_by(group).agg(pl.col(spec.target).mean())
+        values = {lookup_key(key): float(mean) for key, mean in means.iter_rows()}
+        models[f"{group}_mean"] = Lookup(group, values, overall)
+    if cfg.baseline_constant is not None:
+        models["constant"] = Lookup(None, {}, cfg.baseline_constant)
+    if cfg.baseline_exposure is not None:
+        known = train.drop_nulls(cfg.baseline_exposure)
+        rate = float(known[spec.target].sum()) / float(known[cfg.baseline_exposure].sum())
+        models[f"{cfg.baseline_exposure}_rate"] = Rate(cfg.baseline_exposure, rate, overall)
+    if spec.interval is None:
+        return models
+    tail = (1 - spec.interval) / 2
+    target = pl.col(spec.target)
+    low = float(train[spec.target].quantile(tail))  # type: ignore[arg-type]
+    high = float(train[spec.target].quantile(1 - tail))  # type: ignore[arg-type]
+    edges = train.group_by(group).agg(target.quantile(tail), target.quantile(1 - tail).alias("hi"))
+    lows = {lookup_key(key): float(value) for key, value, _ in edges.iter_rows()}
+    highs = {lookup_key(key): float(value) for key, _, value in edges.iter_rows()}
+    grouped = f"{group}_mean"
+    return {
+        name: Band(point, Lookup(group, lows, low), Lookup(group, highs, high))
+        if name == grouped
+        else Band(point, Lookup(None, {}, low), Lookup(None, {}, high))
+        for name, point in models.items()
+    }
+
+
+def has_champion(client: MlflowClient, name: str) -> bool:
+    try:
+        client.get_model_version_by_alias(name, CHAMPION)
+    except MlflowException:
+        return False
+    return True
+
+
+def promote_provisional(
+    client: MlflowClient,
+    name: str,
+    version: str,
+    losses: np.ndarray,
+    baseline_losses: dict[str, np.ndarray],
+    servable: dict[str, Any],
+    x_test: pd.DataFrame,
+    versus_baseline: Comparison,
+) -> str:
+    """With no champion, serve the best there is rather than nothing: the candidate, when
+    on average it beats every baseline the API could serve - though not with the gate's
+    certainty - or else the best of those baselines, registered as a version of its own.
+    Either way the version says it is provisional, and the gate still decides what
+    replaces it. Returns that note."""
+    best = min(servable, key=lambda baseline: float(baseline_losses[baseline].mean()))
+    if float(losses.mean()) <= float(baseline_losses[best].mean()):
+        note = (
+            f"{PROVISIONAL}: no champion yet; better on average than every servable baseline, "
+            f"but only {versus_baseline.probability_better:.0%} sure it beats the best one"
+        )
+        served = version
+    else:
+        baseline = servable[best]
+        info = mlflow.sklearn.log_model(
+            baseline,
+            name="baseline",
+            signature=infer_signature(x_test, baseline.predict(x_test)),
+            input_example=x_test.head(3),
+            registered_model_name=name,
+            skops_trusted_types=TRUSTED_MODEL_TYPES,
+        )
+        served = str(info.registered_model_version)
+        note = (
+            f"{PROVISIONAL}: the {best} baseline, served until a model beats it; "
+            f"the candidate, v{version}, lost to it on average"
+        )
+    client.set_registered_model_alias(name, CHAMPION, served)
+    client.set_model_version_tag(name, served, "gate", note)
+    logger.warning("%s v%s %s", name, served, note)
+    return note
 
 
 def tune(train: pl.DataFrame, model: ModelConfig) -> tuple[dict[str, Any], float]:
@@ -496,6 +635,7 @@ def train_model(
                 "target": spec.target,
                 "task": spec.task,
                 "interval": spec.interval or "",
+                "median": spec.median,
                 "categorical": ",".join(spec.categorical),
                 "numeric": ",".join(spec.numeric),
                 "n_train": train.height,
@@ -529,6 +669,9 @@ def train_model(
 
         fitted = build_model(spec, best_params, cfg.seed)
         fitted.fit(x_train, y_train, **fit_params(spec))
+        if isinstance(fitted, Band):
+            fitted.margin = conformal_margin(train, model, best_params, cfg.seed)
+            mlflow.log_metric("conformal_margin", fitted.margin)
         scored = predicted(fitted, x_test)
         predictions = scored.point
         losses = row_losses(spec, y_test, scored)
@@ -591,14 +734,27 @@ def train_model(
             skops_trusted_types=TRUSTED_MODEL_TYPES,
         )
         version = str(info.registered_model_version)
+        client = MlflowClient()
         promoted = promote_if_better(
-            MlflowClient(),
+            client,
             cfg.registered_model,
             version,
             versus_baseline,
             versus_champion,
             cfg.min_probability_better,
         )
+        provisional = ""
+        if not promoted and not has_champion(client, cfg.registered_model):
+            provisional = promote_provisional(
+                client,
+                cfg.registered_model,
+                version,
+                losses,
+                baseline_losses,
+                servable_baselines(train, spec, cfg),
+                x_test,
+                versus_baseline,
+            )
     logger.info(
         "run %s -> %s v%s promoted=%s", run.info.run_id, cfg.registered_model, version, promoted
     )
@@ -607,6 +763,7 @@ def train_model(
         version,
         promoted,
         metrics | {f"best_baseline_test_{loss}": float(best_baseline.mean())},
+        provisional,
     )
 
 

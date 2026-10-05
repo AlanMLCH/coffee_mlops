@@ -1,0 +1,28 @@
+{"id": "s-data-01", "question": "Which products should I raise, and by how much?", "route": "data"}
+{"id": "s-data-02", "question": "What gross margin, in percent, did each product earn in the last month?", "route": "data"}
+{"id": "s-data-03", "question": "Which products are stars on the menu?", "route": "data"}
+{"id": "s-data-04", "question": "What would a 10% rise in every price do to a day's gross profit, in percent against now?", "route": "data"}
+{"id": "s-data-05", "question": "How much do my customers' tickets fall when every price rises 1%, over the whole day?", "route": "data"}
+{"id": "s-data-06", "question": "At which hours on Saturdays do nine orders in ten take longer than my target to be ready?", "route": "data"}
+{"id": "s-data-07", "question": "How many tickets does an average Monday bring?", "route": "data"}
+{"id": "s-data-08", "question": "What was my revenue in July 2026?", "route": "data"}
+{"id": "s-data-09", "question": "What did a kilogram of coffee beans cost me in my last purchase?", "route": "data"}
+{"id": "s-data-10", "question": "What share of my tickets are paid in cash?", "route": "data"}
+{"id": "s-data-11", "question": "How many coffee shops are within 500 metres of my shop?", "route": "data"}
+{"id": "s-data-12", "question": "How do the years of schooling in my block compare with my borough's and the city's?", "route": "data"}
+{"id": "s-data-13", "question": "In the last month, how did my menu's price level compare with inflation since I opened?", "route": "data"}
+{"id": "s-data-14", "question": "Which hour of the day brings the most tickets on average?", "route": "data"}
+{"id": "s-data-15", "question": "How much did staff cost me in August 2026?", "route": "data"}
+{"id": "s-data-16", "question": "What share of a latte's cost was the coffee in the last month?", "route": "data"}
+{"id": "s-data-17", "question": "What is the median price per kilogram the city's roasters charge for their coffee?", "route": "data"}
+{"id": "s-data-18", "question": "What did a kilogram of other mild Arabicas cost in pesos in the last published month?", "route": "data"}
+{"id": "s-pred-01", "question": "How long would an order of two items take on a Saturday at ten with one barista and 14 tickets in the hour?", "route": "prediction", "model": "order_minutes", "item": {"weekday": 6, "hour": 10, "items": 2, "baristas": 1, "tickets_in_hour": 14}}
+{"id": "s-pred-02", "question": "With two baristas on a Tuesday at nine and 18 tickets in that hour, how many minutes would a one-item order take?", "route": "prediction", "model": "order_minutes", "item": {"weekday": 2, "hour": 9, "items": 1, "baristas": 2, "tickets_in_hour": 18}}
+{"id": "s-pred-03", "question": "If a Sunday at eleven brings 20 tickets and only one barista is on shift, how long would a three-item order wait?", "route": "prediction", "model": "order_minutes", "item": {"weekday": 7, "hour": 11, "items": 3, "baristas": 1, "tickets_in_hour": 20}}
+{"id": "s-pred-04", "question": "How many tickets will next Monday at eight bring?", "route": "prediction", "model": "hourly_demand", "item": {"weekday": 1, "hour": 8}}
+{"id": "s-pred-05", "question": "If I raised every price by 5%, how many tickets would a Wednesday at noon bring?", "route": "prediction", "model": "hourly_demand", "item": {"weekday": 3, "hour": 12, "price_change_pct": 5}}
+{"id": "s-pred-06", "question": "How many tickets should I expect on a Friday at five in the afternoon?", "route": "prediction", "model": "hourly_demand", "item": {"weekday": 5, "hour": 17}}
+{"id": "s-mixed-01", "question": "How many tickets did Saturdays at ten bring on average, and how long would a one-item order take then with one barista and that many tickets?", "route": "mixed", "tools": ["data", "prediction"], "model": "order_minutes", "item": {"weekday": 6, "hour": 10, "items": 1, "baristas": 1}, "sql": "SELECT avg(tickets) AS tickets FROM clean.shop_hours WHERE weekday = 6 AND hour = 10"}
+{"id": "s-mixed-02", "question": "What was my gross margin last month, and how many tickets would next Monday at nine bring?", "route": "mixed", "tools": ["data", "prediction"], "model": "hourly_demand", "item": {"weekday": 1, "hour": 9}, "sql": "SELECT gross_margin_pct FROM analysis.inflation_impact ORDER BY month DESC LIMIT 1"}
+{"id": "s-none-01", "question": "What do the coffee shops around me charge for a latte?", "route": "data", "answerable": false}
+{"id": "s-none-02", "question": "How many of my customers came back more than once last month?", "route": "data", "answerable": false}

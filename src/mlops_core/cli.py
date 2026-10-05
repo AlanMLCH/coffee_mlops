@@ -229,7 +229,13 @@ def train(domain: Domain = None, model: ModelName = None) -> None:
     for name in _models(config, model):
         result = train_model(config, name, _data_dir(config), Settings().mlflow_tracking_uri)
         metrics = ", ".join(f"{k}={v:.3f}" for k, v in sorted(result.metrics.items()))
-        status = "promoted to champion" if result.promoted else "not promoted"
+        status = (
+            "promoted to champion"
+            if result.promoted
+            else f"not promoted; {result.provisional}"
+            if result.provisional
+            else "not promoted"
+        )
         registered = config.model_named(name).training.registered_model
         typer.echo(f"{registered} v{result.model_version}: {status}")
         typer.echo(f"run {result.run_id}: {metrics}")
@@ -782,7 +788,7 @@ def evaluate_agent(
     truths = known_answers(
         load_cases(case_files[0], RouteCase),
         load_cases(case_files[1], SqlCase),
-        load_questions(case_files[2], _corpus(config).topics),
+        _retrieval_questions(config, case_files[2]),
     )
     hidden = config.agent.hidden_tables
     unseen = [t for t in truths if t.sql is not None and reads_any(t.sql, hidden)]
@@ -1155,6 +1161,12 @@ def _qdrant(url: str) -> "QdrantClient":
 def _chunks_partition(data_dir: Path) -> str:
     partition = latest_partition(data_dir / "clean" / CHUNKS_TABLE)
     return partition.name if partition else ""
+
+
+def _retrieval_questions(config: DomainConfig, path: Path) -> list[Question]:
+    """The questions a passage answers; none for a domain with no documents, whose agent
+    is judged on its tables and models alone."""
+    return load_questions(path, config.corpus.topics) if config.corpus else []
 
 
 def _corpus(config: DomainConfig) -> CorpusConfig:

@@ -734,6 +734,233 @@ One household of `clean.household_coffee`.
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
 
+## `analysis.price_ladder` — a kilogram of coffee at one step from the farm to the shelf
+
+Each step is its own product - cherry, green coffee, a supermarket's ground or instant, a
+roaster's bag - so a gap between steps is not a margin. Six rows.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `step` | String | `cherry at the farm gate`, `green coffee at the port`, `supermarket, ground`, `supermarket, ground + sugar`, `supermarket, instant`, `specialty roaster` |
+| `source` | String | Where the price comes from: SIAP, World Bank and FRED, PROFECO, the roasters |
+| `unit` | String | What a kilogram is of: `kg of coffee cherry`, `kg of green coffee`, `kg of roasted coffee`... |
+| `measure` | String | How the price was summarised: `median`, `the month's price`, `value over volume` |
+| `mxn_per_kg` | Float | Pesos per kilogram |
+| `observations` | Int | Prices behind it |
+| `period` | String | When: a year (`2025`), a month (`2026-08`), a span or a day |
+
+## `analysis.green_coffee_in_pesos` — an international green coffee price in pesos, one month
+
+The World Bank's monthly prices at the month's mean exchange rate (FRED). Since 1993.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `period` | Date | First day of the month |
+| `indicator` | String | `other_milds` (the group Mexico's washed Arabicas trade in) or `robustas` |
+| `usd_cents_per_lb` | Float | US cents a pound |
+| `mxn_per_usd` | Float | Pesos per dollar, the month's mean |
+| `rate_days` | Int | Business days the exchange rate is the mean of |
+| `mxn_per_kg` | Float | Pesos per kilogram of green coffee |
+
+## `analysis.real_prices` — a step's price in pesos of one month, deflated by the INPC
+
+| Column | Type | Meaning |
+|---|---|---|
+| `step` | String | `cherry at the farm gate` (yearly), `green coffee at the port`, `ground coffee on a shelf` (monthly) |
+| `period` | Date | The year's (1 January) or the month's first day |
+| `frequency` | String | `annual` or `monthly` |
+| `nominal_mxn_per_kg` | Float | Pesos per kilogram of the day |
+| `real_mxn_per_kg` | Float | The same in pesos of `pesos_of` |
+| `pesos_of` | Date | The month whose pesos `real_mxn_per_kg` is in: the INPC's latest |
+
+## `analysis.price_transmission` — how much of a move in green coffee reaches a step's price
+
+The cumulative elasticity after each lag: 0.18 means a 1% rise in green coffee (in pesos)
+has moved the step's price 0.18% by then. 95% interval from a block bootstrap.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `step` | String | `ground coffee on a shelf`, `instant coffee on a shelf` (monthly, PROFECO), `cherry at the farm gate` (yearly, SIAP) |
+| `frequency` | String | `monthly` or `annual` |
+| `lag` | Int | Months (or years) after the move: 0 is the same month |
+| `pass_through` | Float | The elasticity, cumulative to that lag |
+| `ci_low`, `ci_high` | Float | Its 95% interval: one that holds 0 says no pass-through is shown |
+| `changes` | Int | Price changes it was estimated from |
+
+## `analysis.consumer_prices_by_borough` — the median shelf price of one coffee line in one borough
+
+PROFECO's prices over the last twelve months of its survey; 13 of the 16 boroughs have
+shelves in it.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `borough_id`, `borough` | String | The borough |
+| `line` | String | `ground`, `instant`, each also `, sweetened` or `, decaf` |
+| `median_mxn_per_kg` | Float | Median pesos per kilogram |
+| `prices`, `stores` | Int | Readings and stores behind it |
+
+## `analysis.consumer_prices_by_fortnight` — the median shelf price of one coffee line, one fortnight
+
+| Column | Type | Meaning |
+|---|---|---|
+| `scope` | String | `city` (Mexico City's shelves) or `national` |
+| `line` | String | As in `analysis.consumer_prices_by_borough` |
+| `fortnight` | Date | Its first day |
+| `median_mxn_per_kg` | Float | Median pesos per kilogram |
+| `prices`, `stores` | Int | Readings and stores behind it |
+
+## `analysis.market_summary` — the world's top coffee producers in the latest market year
+
+USDA PSD. **Volumes are in thousands of 60 kg bags.**
+
+| Column | Type | Meaning |
+|---|---|---|
+| `country` | String | PSD's name |
+| `production` | Float | Thousands of 60 kg bags |
+| `world_share_pct` | Float | Its share of the world's production, % |
+| `export_ratio` | Float | Exports over production, a fraction (0.6 is 60%) |
+| `domestic_consumption` | Float | Thousands of 60 kg bags |
+| `imported_share_of_use` | Float | Imports over domestic consumption, a fraction |
+
+## `analysis.household_coffee_by_state` — who buys coffee to drink at home, one state (ENIGH 2024)
+
+Weighted by the survey's expansion factors; the first row (`state` = `Mexico`, no
+`state_id`) is the country. **Every `_share` is a fraction from 0 to 1**, not a percent.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `state_id`, `state` | String | INEGI's state; `Ciudad de México` is the city |
+| `households_sampled`, `households` | Int | Households surveyed, and the households they stand for |
+| `bought_share` | Float | Households that bought coffee in the survey's week, a fraction |
+| `bought_share_low`, `bought_share_high` | Float | Its 90% interval |
+| `instant_share`, `ground_share`, `prepared_share` | Float | Households that bought each kind, a fraction |
+| `monthly_mxn` | Float | Pesos a month a household spends on coffee, every household counted |
+| `monthly_mxn_low`, `monthly_mxn_high` | Float | Its 90% interval |
+| `monthly_per_buyer_mxn` | Float | Pesos a month among the households that bought |
+| `income_per_mille` | Float | Coffee spending per 1,000 pesos of income |
+| `own_harvest_share` | Float | Households that drank coffee they grew, a fraction |
+
+## `analysis.household_coffee_by_decile` — the same, by income decile
+
+| Column | Type | Meaning |
+|---|---|---|
+| `area` | String | `Mexico` (the country) or `Ciudad de México` |
+| `income_decile` | Int | 1 is the poorest tenth of households, 10 the richest |
+| `households_sampled`, `households` | Int | Households surveyed, and the households they stand for |
+| `bought_share` | Float | Households that bought coffee in the survey's week, a fraction from 0 to 1 |
+| `bought_share_low`, `bought_share_high` | Float | Its 90% interval |
+| `instant_share`, `ground_share`, `prepared_share` | Float | Households that bought each kind, a fraction |
+| `monthly_mxn` | Float | Pesos a month a household spends on coffee, every household counted |
+| `monthly_mxn_low`, `monthly_mxn_high` | Float | Its 90% interval |
+| `monthly_per_buyer_mxn` | Float | Pesos a month among the households that bought |
+| `income_per_mille` | Float | Coffee spending per 1,000 pesos of income |
+| `own_harvest_share` | Float | Households that drank coffee they grew, a fraction |
+
+## `analysis.coe_by_year` — one year of Mexico's Cup of Excellence
+
+| Column | Type | Meaning |
+|---|---|---|
+| `year` | Int | The competition's year |
+| `lots`, `sold` | Int | Lots ranked, and sold at auction |
+| `median_score` | Float | The jury's median score |
+| `median_usd_per_lb`, `top_usd_per_lb` | Float | The median and the highest price, US dollars a pound |
+| `auction_usd` | Float | What the auction raised, US dollars |
+| `commodity_usd_per_lb` | Float | The year's mean other mild Arabicas price, US dollars a pound |
+| `mxn_per_usd` | Float | The year's mean exchange rate |
+| `median_times_commodity` | Float | The median lot's price over the commodity's |
+| `median_mxn_per_kg` | Float | The median lot's price in pesos a kilogram |
+
+## `analysis.coe_score_price` — what a point of score is worth at the Cup of Excellence
+
+One row: the percent a point of score adds to a lot's price, each year its own level.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `lots`, `years` | Int | Lots and years it was estimated from |
+| `percent_per_point` | Float | Percent a point adds to the price |
+| `percent_low`, `percent_high` | Float | Its 95% interval |
+| `rank_correlation` | Float | Spearman's rank correlation of score and price within years |
+| `rank_correlation_low`, `rank_correlation_high` | Float | Its 95% interval |
+
+## `analysis.flavor_profiles` — how often the roasters' coffees name a flavour category
+
+The share of single-origin coffees whose description names each SCA category.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `dimension` | String | What the coffees are grouped by: `all`, `origin`, `process`, `shop` |
+| `group` | String | The group: `every coffee` (for `all`), `Mexico` or `elsewhere`, `washed`, `natural`, `other`, or a shop |
+| `coffees` | Int | Coffees in the group |
+| `category` | String | `floral`, `fruity`, `sweet`, `nutty_cocoa`, `spice`, `roasted`, `sour_fermented`, `green_vegetative`, `other` |
+| `share_pct` | Float | Coffees naming it, % of the group |
+
+## `analysis.borough_coffee_shops` — one borough's coffee shops against its area, people and jobs
+
+DENUE's coffee shops (`kind = 'coffee'`).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `borough_id`, `borough` | String | The borough |
+| `area_km2` | Float | Its area |
+| `population` | Int | Residents, 2020 Census |
+| `schooling_years` | Float | Mean years of schooling, 15 and over |
+| `workplaces`, `jobs_estimate` | | DENUE's workplaces of every activity, and their staff estimated from its bands |
+| `coffee_shops` | Int | DENUE's coffee shops |
+| `per_km2`, `per_10k_people`, `per_1k_jobs` | Float | Coffee shops per km², per 10,000 residents, per 1,000 jobs |
+| `jobs_per_resident` | Float | The daytime population against the night-time one |
+
+## `analysis.zone_coffee_correlations` — which trait of an urban AGEB goes with its coffee shops
+
+Spearman's rank correlation of each trait with the AGEB's coffee shops per km², over the
+2,431 AGEBs, with a 95% interval.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `trait` | String | `schooling_years`, `people_per_km2`, `internet_pct`, `car_pct`, `computer_pct`, `aged_65_plus_pct` |
+| `zones` | Int | AGEBs with the trait known |
+| `rho` | Float | The correlation, -1 to 1 |
+| `rho_low`, `rho_high` | Float | Its 95% interval |
+
+## `analysis.chain_strategies` — what a supermarket chain charges for coffee, and how often it cuts
+
+| Column | Type | Meaning |
+|---|---|---|
+| `chain`, `store_type` | String | PROFECO's chain and kind of store |
+| `readings`, `stores` | Int | Prices and stores behind it |
+| `price_index` | Float | Its price against every chain's for the same product the same month: 1.05 is 5% dearer |
+| `ci_low`, `ci_high` | Float | Its 95% interval |
+| `cut_pct` | Float | Readings under 90% of what the same store asked that quarter, % |
+| `strategy` | String | `premium`, `discount` or `at the market`, and `promotional` or `steady` |
+
+## `analysis.production_by_state` — coffee grown in one Mexican state, one year (SIAP)
+
+| Column | Type | Meaning |
+|---|---|---|
+| `year` | Int | The harvest's year |
+| `state` | String | SIAP's state |
+| `municipalities` | Int | Municipalities that grew coffee |
+| `planted_ha` | Float | Hectares planted |
+| `production_t` | Float | Tonnes of coffee cherry |
+| `value_mxn` | Float | Its value, pesos |
+| `share_pct` | Float | The state's share of the year's national production, % |
+| `rural_price_mxn_per_t` | Float | Pesos per tonne of cherry at the farm gate |
+
+## `analysis.price_outlook` — where a green coffee price could be 3, 6 and 12 months ahead
+
+The range its own changes over each horizon have spanned, four times in five, since the
+series began, set on the last published price - the range the `green_range` model is held
+against (and is served while no model beats it).
+
+| Column | Type | Meaning |
+|---|---|---|
+| `indicator` | String | `other_milds` or `robustas` |
+| `horizon_months` | Int | 3, 6 or 12 |
+| `from_month`, `to_month` | Date | The last published month, and the one the horizon reaches |
+| `price_now` | Float | The last published price, US cents a pound |
+| `change_low_pct`, `change_median_pct`, `change_high_pct` | Float | The changes at the range's low end, middle and high end, % |
+| `months` | Int | Historical changes the range was drawn from |
+| `price_low`, `price_median`, `price_high` | Float | The same as prices, US cents a pound |
+
 ## Raw layer
 
 `raw/<source>/ingested_at=<timestamp>/` holds each download **exactly as served**, next

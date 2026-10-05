@@ -53,6 +53,9 @@ class Prediction(BaseModel):
     level: Level | None = None  # when the target is a percent change of a feature
     model_version: str
     model_source: str
+    # "provisional: ..." when the model serves because nothing passed the gate yet: a
+    # baseline, or a candidate not sure to beat one. Whoever answers with it says so.
+    model_gate: str = ""
     # Every feature the request did not supply: what the domain looked up for it, so a
     # surprising prediction can be explained.
     context: dict[str, float | str | None]
@@ -65,6 +68,7 @@ class ModelStatus(BaseModel):
     model_version: str
     model_source: str
     context_rows: int
+    gate: str = ""  # "promoted", or "provisional: ..." when nothing has passed yet
 
 
 class ReloadResult(BaseModel):
@@ -138,6 +142,7 @@ class Service:
             model_version=served.version,
             model_source=served.source,
             context_rows=sum(table.height for table in self.contexts[name].values()),
+            gate=served.gate,
         )
 
     def predict(self, name: str, request: ItemRequest) -> Prediction:
@@ -176,6 +181,7 @@ class Service:
             level=_level(spec.relative_to, features, point, lower, upper),
             model_version=served.version,
             model_source=served.source,
+            model_gate=served.gate,
             context={c: features[c].item() for c in looked_up},
         )
 

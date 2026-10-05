@@ -1,0 +1,21 @@
+{"id": "st-data-01", "question": "What does a kilogram of coffee cost at each step from the farm gate to a specialty roaster?", "route": "data"}
+{"id": "st-data-02", "question": "What did a kilogram of other mild Arabicas cost in pesos in August 2026?", "route": "data"}
+{"id": "st-data-03", "question": "In pesos of August 2026, what did a kilogram of coffee cherry fetch at the farm gate in 2025?", "route": "data"}
+{"id": "st-data-04", "question": "How much of a change in the green coffee price reaches ground coffee on a shelf in the same month?", "route": "data"}
+{"id": "st-data-05", "question": "In which borough is the median shelf price of ground coffee per kilogram highest?", "route": "data"}
+{"id": "st-data-06", "question": "Which country has the largest share of world coffee production?", "route": "data"}
+{"id": "st-data-07", "question": "What share of Mexico City's households bought coffee to drink at home?", "route": "data"}
+{"id": "st-data-08", "question": "Across Mexico, what share of the households in the poorest and in the richest income decile bought coffee?", "route": "data"}
+{"id": "st-data-09", "question": "What was the median price per pound of the lots sold at Mexico's Cup of Excellence in 2026?", "route": "data"}
+{"id": "st-data-10", "question": "By how many percent does a lot's price rise for each extra point of cup score at Mexico's Cup of Excellence?", "route": "data"}
+{"id": "st-data-11", "question": "Which flavour category do the roasters' coffee descriptions name most often?", "route": "data"}
+{"id": "st-data-12", "question": "Which borough has the most coffee shops per 10,000 residents?", "route": "data"}
+{"id": "st-data-13", "question": "Which trait of an urban AGEB goes most closely with how many coffee shops it has?", "route": "data"}
+{"id": "st-data-14", "question": "Which supermarket chain prices coffee highest against the others?", "route": "data"}
+{"id": "st-data-15", "question": "In which Mexican state was the most coffee produced in 2025?", "route": "data"}
+{"id": "st-data-16", "question": "Historically, between which prices in US cents a pound have other mild Arabicas ended up 12 months after a month like the last one published?", "route": "data"}
+{"id": "st-pred-01", "question": "What will the monthly change of the other mild Arabicas price be in September 2026?", "route": "prediction", "model": "green_price", "item": {"indicator": "other_milds", "month": "2026-09-01"}}
+{"id": "st-pred-02", "question": "In which range could the robustas price be 6 months after the last published month?", "route": "prediction", "model": "green_range", "item": {"indicator": "robustas", "months_ahead": 6}}
+{"id": "st-pred-03", "question": "Where could other mild Arabicas be 3 months after the last published month, and how wide is the range?", "route": "prediction", "model": "green_range", "item": {"indicator": "other_milds", "months_ahead": 3}}
+{"id": "st-pred-04", "question": "What premium over its auction's median could a washed lot from Chiapas scoring 90 fetch at Mexico's Cup of Excellence?", "route": "prediction", "model": "auction", "item": {"score": 90, "state": "Chiapas", "processing_method": "washed"}}
+{"id": "st-pred-05", "question": "At Mexico's Cup of Excellence, what premium could a natural lot from Veracruz scoring 88.5 fetch over its auction's median?", "route": "prediction", "model": "auction", "item": {"score": 88.5, "state": "Veracruz", "processing_method": "natural"}}

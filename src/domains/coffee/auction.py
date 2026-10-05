@@ -66,7 +66,11 @@ def auction_medians(items: pl.DataFrame, lots: pl.DataFrame) -> pl.DataFrame:
 def add_lot_market(items: pl.DataFrame, context: Mapping[str, pl.DataFrame]) -> pl.DataFrame:
     """Each lot with what its catalogue says, its auction's and its market's level, and
     its premium over the other lots."""
-    varieties = pl.col("varieties").fill_null(pl.lit([], pl.List(pl.String)))
+    # A request naming no variety arrives as an empty list polars types `list[null]`, which
+    # no string is "in": cast first, or every such request failed.
+    varieties = (
+        pl.col("varieties").cast(pl.List(pl.String)).fill_null(pl.lit([], pl.List(pl.String)))
+    )
     return (
         auction_medians(items, context[LOTS_TABLE])
         .join(market_by_year(context[PRICES_TABLE]), on="year", how="left")

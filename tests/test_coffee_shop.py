@@ -337,19 +337,37 @@ def test_an_export_with_no_sales_has_no_hours(shop_adapter: CoffeeShopAdapter) -
     tables = clean_shop(raw, shop_adapter.config.shop)
 
     empty = shop_hours(
-        tables["sales"].clear(), tables["orders"], tables["menu_prices"], tables["shifts"],
+        tables["sales"].clear(),
+        tables["orders"],
+        tables["menu_prices"],
+        tables["shifts"],
         shop_adapter.config.shop,
-    )  # fmt: skip
+    )
 
     assert empty.is_empty()
     assert list(empty.columns) == list(CLEAN_SCHEMAS["shop_hours"].columns)
     assert to_frame({"rows": []}).is_empty()
 
 
+def monday_eights(tickets: list[float]) -> pl.DataFrame:
+    """Four Mondays at eight, the last weeks the shop's tables hold, at the latest prices."""
+    days = [date(2026, 8, 10) + timedelta(days=7 * k) for k in range(len(tickets))]
+    return pl.DataFrame(
+        {
+            "date": days,
+            "weekday": [1] * len(days),
+            "hour": [8] * len(days),
+            "tickets": tickets,
+            "price_level": [1.06 * 1.08] * len(days),
+        }
+    )
+
+
 def test_an_hour_is_asked_at_the_menus_prices_or_moved(shop_adapter: CoffeeShopAdapter) -> None:
     menu = clean_menu(to_frame({"rows": _menu_history(shop_adapter.config.shop)}))
-    asked = ShopHour(day=date(2025, 3, 3), hour=8, price_change_pct=10)
-    later = ShopHour(day=date(2026, 9, 7), hour=8)
+    context = {"menu_prices": menu, "shop_hours": monday_eights([10.0, 12.0, 14.0, 16.0])}
+    asked = ShopHour(weekday=1, hour=8, price_change_pct=10)
+    now = ShopHour(weekday=1, hour=8)
     batch = pl.DataFrame(
         {
             "hour_id": ["2025-03-03T08"],
@@ -360,22 +378,29 @@ def test_an_hour_is_asked_at_the_menus_prices_or_moved(shop_adapter: CoffeeShopA
         }
     )
 
-    online = add_hour_context(
-        pl.DataFrame([asked.to_item(), later.to_item()]), {"menu_prices": menu}
-    )
-    scored = add_hour_context(batch, {"menu_prices": menu})
+    online = add_hour_context(pl.DataFrame([asked.to_item(), now.to_item()]), context)
+    scored = add_hour_context(batch, context)
 
-    assert online["price_level"].to_list() == pytest.approx([1.06 * 1.1, 1.06 * 1.08], rel=1e-3)
+    # The next Monday, at the menu in force, moved by the request's change.
+    assert online["price_level"].to_list() == pytest.approx(
+        [1.06 * 1.08 * 1.1, 1.06 * 1.08], rel=1e-3
+    )
     assert online["weekday_hour"].to_list() == ["1-08", "1-08"]
     assert "price_change_pct" not in online.columns
-    # A batch hour takes the menu's level, the same function as a request's.
+    # Its history is the latest weeks the tables hold: last time 16, the four's mean 13.
+    assert online["slot_last"].to_list() == [16.0, 16.0]
+    assert online["slot_mean_4w"].to_list() == [13.0, 13.0]
+    assert online["history_price_level"].to_list() == pytest.approx([1.06 * 1.08] * 2)
+    # A batch hour takes the menu's level, the same function as a request's, and the
+    # history before its day - none, before the tables' first Monday.
     assert scored["price_level"].to_list() == pytest.approx([1.06], rel=1e-3)
+    assert scored["slot_last"].to_list() == [None]
 
 
 def test_the_shops_model_is_answered_by_its_hooks(shop_adapter: CoffeeShopAdapter) -> None:
     model = shop_adapter.config.model_named("hourly_demand")
 
-    assert shop_adapter.context_tables("hourly_demand") == ("menu_prices",)
+    assert shop_adapter.context_tables("hourly_demand") == ("menu_prices", "shop_hours")
     assert shop_adapter.request_model("hourly_demand") is ShopHour
     assert ShopHour.model_validate(model.example).to_item()["weekday"] == 1
     assert shop_adapter.raw_contracts().keys() == {"vending_sales", *TABLES}
@@ -386,7 +411,9 @@ def test_the_shops_model_is_answered_by_its_hooks(shop_adapter: CoffeeShopAdapte
     assert shop_adapter.figures({}) == {}
     items = pl.DataFrame({"date": [date(2025, 1, 6)], "hour": [9], "weekday": [1]})
     menu = clean_menu(to_frame({"rows": _menu_history(shop_adapter.config.shop)}))
-    enriched = shop_adapter.enrich("hourly_demand", items, {"menu_prices": menu})
+    enriched = shop_adapter.enrich(
+        "hourly_demand", items, {"menu_prices": menu, "shop_hours": monday_eights([10.0])}
+    )
     assert enriched["weekday_hour"].to_list() == ["1-09"]
     with pytest.raises(ValueError, match="no code for model 'margins'"):
         shop_adapter.context_tables("margins")

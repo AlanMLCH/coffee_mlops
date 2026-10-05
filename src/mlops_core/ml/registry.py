@@ -42,6 +42,9 @@ class ServedModel:
     model: Any
     version: str
     source: str  # "registry" or "cache"
+    # The gate's note on the version: "promoted", or "provisional: ..." for one served
+    # because nothing had passed - which whoever reads its predictions should be told.
+    gate: str = ""
 
 
 def load_champion(
@@ -67,11 +70,12 @@ def load_champion(
 def _from_registry(registered_model: str, tracking_uri: str, cache_dir: Path) -> ServedModel:
     mlflow.set_tracking_uri(tracking_uri)
     version = mlflow.MlflowClient().get_model_version_by_alias(registered_model, CHAMPION)
+    gate = str((version.tags or {}).get("gate", ""))
     # Download once and load from the cache, so what is served is exactly what is cached.
-    _refresh_cache(f"models:/{registered_model}@{CHAMPION}", version.version, cache_dir)
+    _refresh_cache(f"models:/{registered_model}@{CHAMPION}", version.version, cache_dir, gate)
     model = mlflow.sklearn.load_model(str(cache_dir / CACHED_MODEL))
     logger.info("Serving %s v%s from the registry", registered_model, version.version)
-    return ServedModel(model, str(version.version), "registry")  # MLflow returns an int
+    return ServedModel(model, str(version.version), "registry", gate)  # MLflow returns an int
 
 
 def _from_cache(cache_dir: Path) -> ServedModel:
@@ -81,12 +85,14 @@ def _from_cache(cache_dir: Path) -> ServedModel:
             f"No champion in the registry and no cached model in {cache_dir}: train one, "
             "or read the `gate` tag of the last version to see why it was not promoted"
         )
-    version = str(json.loads(metadata_path.read_text())["version"])
+    metadata = json.loads(metadata_path.read_text())
+    version, gate = str(metadata["version"]), str(metadata.get("gate", ""))
     logger.warning("Serving cached v%s: it may be behind the registry", version)
-    return ServedModel(mlflow.sklearn.load_model(str(cache_dir / CACHED_MODEL)), version, "cache")
+    model = mlflow.sklearn.load_model(str(cache_dir / CACHED_MODEL))
+    return ServedModel(model, version, "cache", gate)
 
 
-def _refresh_cache(model_uri: str, version: str, cache_dir: Path) -> None:
+def _refresh_cache(model_uri: str, version: str, cache_dir: Path, gate: str = "") -> None:
     cache_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=cache_dir) as staging:
         downloaded = mlflow.artifacts.download_artifacts(artifact_uri=model_uri, dst_path=staging)
@@ -94,4 +100,4 @@ def _refresh_cache(model_uri: str, version: str, cache_dir: Path) -> None:
         shutil.rmtree(target, ignore_errors=True)
         shutil.move(downloaded, target)
     # Written last: a half-copied model has no metadata and is never served.
-    (cache_dir / CACHED_METADATA).write_text(json.dumps({"version": version}))
+    (cache_dir / CACHED_METADATA).write_text(json.dumps({"version": version, "gate": gate}))

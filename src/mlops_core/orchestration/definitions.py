@@ -245,7 +245,11 @@ def model_assets(
         """A tuned, tracked model; promoted to champion only if it passes the gate."""
         result = train_model(config, model.name, data_dir, settings.mlflow_tracking_uri)
         return MaterializeResult(
-            metadata={"version": result.model_version, "promoted": str(result.promoted)}
+            metadata={
+                "version": result.model_version,
+                "promoted": str(result.promoted),
+                "provisional": result.provisional,
+            }
             | {k: round(v, 4) for k, v in result.metrics.items()}
         )
 
