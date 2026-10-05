@@ -1,9 +1,34 @@
 # Local services, one profile per capability, so you start only what you need:
 #   docker compose --profile ml  up -d    # MLflow (tracking + registry)
-#   docker compose --profile api up -d    # prediction API
+#   docker compose --profile api up -d    # prediction APIs: coffee, and each shop
 #   docker compose --profile ai  up -d    # vector DB and agent (stage 3)
 # The pipelines themselves run natively with uv (see the Makefile).
 name: coffee-mlops
+
+# What every prediction API container shares; each names its tenant and port below.
+x-api: &api
+  profiles: [api, all]
+  build: .
+  image: coffee-mlops-api
+  volumes:
+    - ./data:/data:ro
+    - model-cache:/cache
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+    interval: 10s
+    timeout: 5s
+    retries: 6
+  restart: unless-stopped
+
+x-api-env: &api-env
+  MLOPS_DATA_DIR: /data
+  # The data mount is read-only, so the champion copy lives in its own volume.
+  MLOPS_MODEL_CACHE_DIR: /cache
+  MLOPS_MLFLOW_TRACKING_URI: http://mlflow:5000
 
 services:
   mlflow:
@@ -40,32 +65,34 @@ services:
       retries: 6
     restart: unless-stopped
 
+  # The prediction API: one container per tenant, each naming its domain or subdomain
+  # (`coffee/<shop>`) - with several installed the API refuses to guess which to serve.
+  # One image for all of them.
   api:
-    profiles: [api, all]
-    build: .
+    <<: *api
     environment:
-      # One container per tenant, each naming its domain: with several installed the API
-      # refuses to guess which one to serve.
+      <<: *api-env
       MLOPS_DOMAIN: coffee
-      MLOPS_DATA_DIR: /data
-      # The data mount is read-only, so the champion copy lives in its own volume.
-      MLOPS_MODEL_CACHE_DIR: /cache
-      MLOPS_MLFLOW_TRACKING_URI: http://mlflow:5000
-    volumes:
-      - ./data:/data:ro
-      - model-cache:/cache
     ports:
       - "127.0.0.1:8000:8000"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-      interval: 10s
-      timeout: 5s
-      retries: 6
-    restart: unless-stopped
+
+  # Coffee's shops, a container each: the shop's explorer and agent reach it with
+  # MLOPS_API_URL (http://127.0.0.1:8001 for Café de Barrio, 8002 for Café de Paso).
+  api-cafe-de-barrio:
+    <<: *api
+    environment:
+      <<: *api-env
+      MLOPS_DOMAIN: coffee/cafe_de_barrio
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  api-cafe-de-paso:
+    <<: *api
+    environment:
+      <<: *api-env
+      MLOPS_DOMAIN: coffee/cafe_de_paso
+    ports:
+      - "127.0.0.1:8002:8000"
 
   qdrant:
     profiles: [ai, all]

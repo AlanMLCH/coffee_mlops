@@ -146,7 +146,9 @@ its map against the city (the shop, the coffee shops within a kilometre, the blo
 of coffee shops), its sales, hours, orders and margins sliced by hand, and its findings:
 when to raise, what a price change would do to a day, the menu, where the hands fall short,
 what inflation did, its corner of the city. Every query runs in the shop's own locked
-session: the coffee tables it lists, and nothing of any other shop.
+session: the coffee tables it lists, and nothing of any other shop. Each shop's models are
+served by a container of their own (`docker compose --profile api up -d`: Café de Barrio's
+on port 8001, Café de Paso's on 8002), which its page's agent reaches with `MLOPS_API_URL`.
 
 `mlops export` writes a snapshot of what it shows, and `MLOPS_SHOWCASE=<the snapshot>` runs
 the same app over it alone, without the agent - a showcase that needs no local model and no

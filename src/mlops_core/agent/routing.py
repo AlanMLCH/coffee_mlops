@@ -15,9 +15,17 @@ from mlops_core.config import DomainConfig
 
 
 def routing_context(
-    config: DomainConfig, dictionary: str, views: Collection[str]
+    config: DomainConfig,
+    dictionary: str,
+    views: Collection[str],
+    served: Collection[str] | None = None,
 ) -> dict[str, str]:
-    """What the router prompt says about each tool, for this domain."""
+    """What the router prompt says about each tool, for this domain. `served` names the
+    models the API serves now: a model with no champion is not offered - routed to, it
+    could only refuse, and its description would draw questions the tables answer."""
+    models = [
+        m for m in config.agent.shown_models(config.models) if served is None or m.name in served
+    ]
     headings = [
         "  - " + section.splitlines()[0].removeprefix("## ").replace("`", "")
         for section in offered(dictionary, views).values()
@@ -26,9 +34,7 @@ def routing_context(
     return {
         "subject": config.name,
         "tables": "\n".join(headings),
-        "models": "\n".join(
-            f"  - {m.name}: {m.description}" for m in config.agent.shown_models(config.models)
-        ),
+        "models": "\n".join(f"  - {m.name}: {m.description}" for m in models),
         "topics": "\n".join(f"  - {name}: {t.description}" for name, t in topics.items()),
     }
 

@@ -58,11 +58,24 @@ def clean_census_zones(
     names = areas.select(
         pl.col("area_id").alias("borough_id"), pl.col("area_name").alias("borough")
     )
+    # An AGEB has no name: INEGI writes its number as the key's last four characters,
+    # the three of the number and its check character - 048-2 - within its borough.
+    ageb = pl.format("{}-{}", pl.col("zone_id").str.slice(9, 3), pl.col("zone_id").str.slice(12, 1))
     zones = (
         polygons.join(figures, on="zone_id")
-        .with_columns(pl.col("zone_id").str.slice(0, 5).alias("borough_id"))
+        .with_columns(pl.col("zone_id").str.slice(0, 5).alias("borough_id"), ageb.alias("ageb"))
         .join(names, on="borough_id", how="left")
-        .select("zone_id", "borough_id", "borough", "area_km2", "boundary", *ZONE.values())
+        .with_columns(pl.format("{} · AGEB {}", "borough", "ageb").alias("label"))
+        .select(
+            "zone_id",
+            "borough_id",
+            "borough",
+            "ageb",
+            "label",
+            "area_km2",
+            "boundary",
+            *ZONE.values(),
+        )
         .sort("zone_id")
     )
     logger.info(

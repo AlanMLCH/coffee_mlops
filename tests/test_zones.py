@@ -89,6 +89,9 @@ def test_each_zone_has_its_figures_its_polygon_and_its_borough(
         1000,
     )
     assert balderas["area_km2"] > 0
+    # No AGEB has a name: it is read as INEGI writes its number, within its borough.
+    number = f"{BALDERAS_ZONE[9:12]}-{BALDERAS_ZONE[12]}"
+    assert (balderas["ageb"], balderas["label"]) == (number, f"Cuauhtémoc · AGEB {number}")
     # Where nobody lives, no average schooling - INEGI writes a 0.
     empty = table.filter(pl.col("population") == 0)
     assert empty["schooling_years"].to_list() == [None]

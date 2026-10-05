@@ -280,7 +280,7 @@ for a drink in Mexico City: the shop's prices are compared with nobody's.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `measure` | String | `coffee shops within <r> m` (DENUE's and OSM's coffee shops), `residents`, `density`, `schooling`, `homes with internet`, `coffee shops listed in the AGEB`, `coffee shops an AGEB like it would have` (the `zones` model, held out), `beans, a kilogram` |
+| `measure` | String | `coffee shops within <r> m` (DENUE's and OSM's coffee shops, each place once: one both list is counted by DENUE's row), `residents`, `density`, `schooling`, `homes with internet`, `coffee shops listed in the AGEB`, `coffee shops an AGEB like it would have` (the `zones` model, held out), `beans, a kilogram` |
 | `shop` | Float | The shop's, or its AGEB's |
 | `borough`, `city` | Float? | The median AGEB of its borough, of the city; for beans, the city's roasters' median shelf price |
 | `unit` | String | What the numbers count |

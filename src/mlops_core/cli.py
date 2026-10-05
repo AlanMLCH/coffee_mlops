@@ -926,28 +926,22 @@ def mcp_server(
         from mlops_core.agent.tools import cite
         from mlops_core.explore.layers import areas_if_built
         from mlops_core.rag.llm import LocalModel, ollama_client
-        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
+        from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
 
     adapter = _adapter(domain)
     config = adapter.config
-    _corpus(config)
     settings = Settings()
     con = read_only(_data_dir(config), config.parent)
     areas = areas_if_built(con, config.explore)
     dictionary = domain_dictionary(config)
-    chunks, documents = _corpus_tables(config)
-    titles = {row["document_id"]: row for row in documents.iter_rows(named=True)}
-    client, _ = _current_index(config, settings, chunks)
     with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
         embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
-        search = IndexSearch(
-            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
-        )
+        passages, titles = _documents(config, settings, embedder)
         server = build_server(
             adapter,
             con,
             schema_context(dictionary, views(con)),
-            search.passages,
+            passages,
             api,
             lambda passage: cite(passage, titles),
             areas,
@@ -984,14 +978,11 @@ def agent_session(
     from mlops_core.agent.sql import read_only, views
     from mlops_core.agent.text_to_sql import VOTE_SEED, Generator
     from mlops_core.rag.llm import LocalModel, ollama_client
-    from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS, IndexSearch
+    from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
 
     config = adapter.config
-    _corpus(config)
     con = read_only(_data_dir(config), config.parent)
     dictionary = domain_dictionary(config)
-    chunks, documents = _corpus_tables(config)
-    client, _ = _current_index(config, settings, chunks)
     prompts = register_prompts(settings.mlflow_tracking_uri)
     with (
         ollama_client(settings.ollama_url) as http,
@@ -1007,13 +998,12 @@ def agent_session(
             settings.reply_cache if cache is None else cache,
         )
         embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
-        search = IndexSearch(
-            client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
-        )
+        passages, titles = _documents(config, settings, embedder)
         names = shown(views(con), config.agent.hidden_tables)
         linker = _linker(config, dictionary, names, embedder)
         # The models the API serves, each a card: a question is shown the closest.
-        finder = ModelFinder(model_cards(adapter, served_models(adapter, api)), embedder.embed)
+        served = served_models(adapter, api)
+        finder = ModelFinder(model_cards(adapter, served), embedder.embed)
         # The votes are the local model's, sampled: whichever model answers first.
         voters: list[Generator] = [
             LocalModel(http, AGENT_GENERATOR,
@@ -1027,10 +1017,10 @@ def agent_session(
                 adapter,
                 con,
                 schema_context(dictionary, names),
-                routing_context(config, dictionary, names),
-                search.passages,
+                routing_context(config, dictionary, names, served),
+                passages,
                 api,
-                {row["document_id"]: row for row in documents.iter_rows(named=True)},
+                titles,
                 prompts,
                 list(config.agent.sql_guards),
                 linker,
@@ -1097,6 +1087,24 @@ def _linker(
     if k is None:
         return None
     return SchemaLinker(offered(dictionary, names), embedder.embed, k, query_text)
+
+
+def _documents(
+    config: DomainConfig, settings: Settings, embedder: "LocalModel"
+) -> tuple[Callable[[str, int], list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    """How the agent searches the domain's documents, and each document's citation. A
+    domain with no corpus - a business that brings its tables, not a library - has none:
+    its agent answers from its tables and models, and finds no passage to cite."""
+    from mlops_core.rag.vectors import IndexSearch
+
+    if config.corpus is None:
+        return (lambda question, k: []), {}
+    chunks, documents = _corpus_tables(config)
+    client, _ = _current_index(config, settings, chunks)
+    search = IndexSearch(
+        client, config.name, chunks, lambda text: embedder.embed([text])[0].tolist()
+    )
+    return search.passages, {row["document_id"]: row for row in documents.iter_rows(named=True)}
 
 
 def _current_index(

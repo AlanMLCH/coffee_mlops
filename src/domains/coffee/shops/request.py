@@ -1,7 +1,7 @@
 """What a coffee shop's prediction API accepts: an hour of a day, or an order in it - and
 what the owner would change before it comes."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -35,9 +35,12 @@ class ShopHour(BaseModel):
 
 class ShopOrder(BaseModel):
     """An order, to know how long it would take from order to ready - with the hands and
-    the crowd the owner expects in its hour."""
+    the crowd the owner expects in its hour. Its day of the week is what matters, not a
+    date: asked for a date, a model invents one for "a Saturday"."""
 
-    day: date = Field(description="The day, YYYY-MM-DD")
+    weekday: int = Field(
+        ge=1, le=7, description="The day of the week: 1 Monday, 2 Tuesday ... 6 Saturday, 7 Sunday"
+    )
     hour: int = Field(ge=0, le=23, description="The hour it is ordered in, 0-23")
     items: int = Field(1, ge=1, le=10, description="Items on the ticket")
     baristas: int = Field(ge=1, le=6, description="Staff on shift behind the counter")
@@ -46,12 +49,15 @@ class ShopOrder(BaseModel):
     )
 
     def to_item(self) -> dict[str, Any]:
-        """The order as a row of `orders`, its minutes not known yet."""
+        """The order as a row of `orders`, its minutes not known yet: dated the next such
+        weekday, which no feature reads."""
+        today = datetime.now(UTC).date()
+        day = today + timedelta(days=(self.weekday - today.isoweekday()) % 7)
         return {
-            "date": self.day,
-            "month": self.day.strftime("%Y-%m"),
+            "date": day,
+            "month": day.strftime("%Y-%m"),
             "hour": self.hour,
-            "weekday": self.day.isoweekday(),
+            "weekday": self.weekday,
             "items": self.items,
             "baristas": self.baristas,
             "tickets_in_hour": self.tickets_in_hour,

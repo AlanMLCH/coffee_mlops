@@ -19,6 +19,7 @@ from mlops_core.agent.model_cards import (
     served_models,
 )
 from mlops_core.agent.tools import literal_values, predict
+from mlops_core.config import DomainConfig
 from tests.test_agent import PASSAGE, PREDICTED, Scripted, api, session  # noqa: F401
 
 # Words that pull a text toward one axis each: a stand-in embedder whose geometry is known.
@@ -189,3 +190,15 @@ def test_a_key_the_schema_gives_the_form_of_is_read_off_the_question() -> None:
     assert none.error.startswith("The item did not fit zones's request: zone_id")
     assert named.request == {"name": "Antojitos Mary", "zone_id": "0901500010010"}
     assert literal_values(adapter.request_model("zones"), "0901600010482 or 0901500010010") == {}
+
+
+def test_the_router_is_told_only_the_models_the_api_serves(coffee_config: DomainConfig) -> None:
+    """A model with no champion is not offered: routed to, it could only refuse, and its
+    description would draw questions the tables answer."""
+    from mlops_core.agent.routing import routing_context
+
+    served = routing_context(coffee_config, "", set(), served=["zones"])["models"]
+    every = routing_context(coffee_config, "", set())["models"]
+
+    assert served.startswith("  - zones:") and "review:" not in served
+    assert "review:" in every and "zones:" in every

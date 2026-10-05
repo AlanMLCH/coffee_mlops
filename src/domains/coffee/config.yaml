@@ -1788,7 +1788,7 @@ explore:
       kind: areas
       unit: places per km²
       description: DENUE's coffee shops per square kilometre of each of the 2020 Census' 2,431 urban AGEBs (a few dozen blocks each); an AGEB with none is grey
-      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT zone_id, coffee_shops_per_km2, coffee_shops, borough
         FROM analysis.zone_coffee_shops WHERE coffee_shops > 0
@@ -1796,7 +1796,7 @@ explore:
       kind: areas
       unit: years
       description: Average years of schooling of people 15 and over in each urban AGEB, 2020 Census
-      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT zone_id, schooling_years, population, borough
         FROM clean.census_zones WHERE schooling_years IS NOT NULL
@@ -1858,7 +1858,7 @@ explore:
         ever seeing its borough - minus the ones DENUE lists in it, where that is one or
         more. Jobs are known by borough only, so a residential block of a borough full of
         offices is expected more than it would draw
-      areas: {table: clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      areas: {table: clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
                round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed, z.borough

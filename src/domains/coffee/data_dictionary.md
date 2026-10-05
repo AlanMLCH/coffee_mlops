@@ -112,8 +112,10 @@ stations carry their `zone_id`.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `zone_id` | String | INEGI's 13-character key |
+| `zone_id` | String | INEGI's 13-character key: state, borough, locality, AGEB |
 | `borough_id`, `borough` | String | Its borough |
+| `ageb` | String | Its number as INEGI writes it, `048-2`: unique within its borough, not across them |
+| `label` | String | How a person reads it: `Miguel Hidalgo · AGEB 048-2`. An AGEB has no name |
 | `area_km2` | Float | Area |
 | `boundary` | Binary | Polygon as WKB, WGS84 |
 | `population` | Int | People, 2020 |

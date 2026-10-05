@@ -1093,6 +1093,8 @@ CENSUS_ZONES = pa.DataFrameSchema(
         "zone_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{9}[0-9A-Z]{4}$")),
         "borough_id": pa.Column(pl.String, pa.Check.str_matches(r"^\d{5}$")),
         "borough": pa.Column(pl.String),
+        "ageb": pa.Column(pl.String, pa.Check.str_matches(r"^[0-9A-Z]{3}-[0-9A-Z]$")),
+        "label": pa.Column(pl.String),  # "Miguel Hidalgo · AGEB 048-2"
         "area_km2": pa.Column(pl.Float64, pa.Check.gt(0)),
         "boundary": pa.Column(pl.Binary),
         "population": pa.Column(pl.Int64, pa.Check.ge(0)),

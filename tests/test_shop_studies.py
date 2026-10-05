@@ -310,11 +310,15 @@ def test_the_neighbourhood_is_read_from_the_parent_tables_the_shop_lists(
     near = shop.latitude + 0.002  # about 222 m north
     far = shop.latitude + 0.008  # about 890 m
     clean: dict[str, pl.DataFrame] = {
+        # The registers side by side: OSM's twin of DENUE's near shop is the same place.
         settings.coffee_shops: pl.DataFrame(
             {
-                "kind": ["coffee", "coffee", "juice"],
-                "latitude": [near, far, near],
-                "longitude": [shop.longitude] * 3,
+                "shop_id": ["denue-1", "osm-1", "denue-2", "osm-2", "denue-3"],
+                "source": ["denue", "osm", "denue", "osm", "denue"],
+                "matched_shop_id": ["osm-1", "denue-1", None, None, None],
+                "kind": ["coffee", "coffee", "coffee", "coffee", "juice"],
+                "latitude": [near, near, far, far, near],
+                "longitude": [shop.longitude] * 5,
             }
         ),
         settings.zones: pl.DataFrame(
@@ -359,7 +363,8 @@ def test_the_neighbourhood_is_read_from_the_parent_tables_the_shop_lists(
         )
     }
 
-    assert [rows[f"coffee shops within {r:g} m"]["shop"] for r in settings.radii_m] == [1, 1, 2]
+    # Each place once: the near shop both registers list counts one, the far two are two.
+    assert [rows[f"coffee shops within {r:g} m"]["shop"] for r in settings.radii_m] == [1, 1, 3]
     assert (rows["residents"]["shop"], rows["residents"]["borough"], rows["residents"]["city"]) == (
         3000.0,
         2000.0,
@@ -406,7 +411,7 @@ def test_an_order_knows_its_hours_crowd_in_batch_and_is_told_it_online(
 ) -> None:
     hours = pl.DataFrame({"date": [JAN], "hour": [10], "tickets": [14.0]})
     batch = pl.DataFrame({"date": [JAN], "hour": [10], "weekday": [3], "items": [2]})
-    asked = ShopOrder(day=date(2026, 9, 5), hour=10, items=2, baristas=1, tickets_in_hour=20)
+    asked = ShopOrder(weekday=6, hour=10, items=2, baristas=1, tickets_in_hour=20)
 
     known = add_order_context(batch, {"shop_hours": hours})
     told = shop_adapter.enrich(
@@ -421,7 +426,8 @@ def test_an_order_knows_its_hours_crowd_in_batch_and_is_told_it_online(
     assert shop_adapter.context_tables("order_minutes") == ("shop_hours",)
     assert shop_adapter.request_model("order_minutes") is ShopOrder
     example = shop_adapter.config.model_named("order_minutes").example
-    assert ShopOrder.model_validate(example).to_item()["weekday"] == 6
+    item = ShopOrder.model_validate(example).to_item()
+    assert item["weekday"] == item["date"].isoweekday() == 6  # the next Saturday
 
 
 def test_a_shop_says_what_it_aims_at_and_who_is_on_shift(shop_adapter: CoffeeShopAdapter) -> None:

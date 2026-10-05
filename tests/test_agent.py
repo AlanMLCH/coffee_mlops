@@ -28,7 +28,7 @@ from typer.testing import CliRunner
 
 import domains.coffee
 from mlops_core import cli
-from mlops_core.adapter import domain_dir
+from mlops_core.adapter import domain_dir, load_adapter
 from mlops_core.agent import registry
 from mlops_core.agent.graph import Agent
 from mlops_core.agent.prompts import PROMPTS
@@ -49,7 +49,7 @@ from mlops_core.agent.text_to_sql import (
 )
 from mlops_core.agent.tools import predict
 from mlops_core.agent.verify import cited_ids, figures, problems
-from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, SqlGuard
+from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, Settings, SqlGuard
 from mlops_core.data.corpus import CHUNKS_COLUMNS
 from mlops_core.rag import llm
 from mlops_core.rag.llm import ollama_client
@@ -1120,3 +1120,15 @@ def test_an_answer_that_cites_its_evidence_has_answered(
     reply = agent(generator, session).ask("Is it likely?")
 
     assert reply.answered is answered
+
+
+def test_a_domain_without_documents_gets_an_agent_without_a_library() -> None:
+    """A business brings its tables, not a library: its agent searches no index, and a
+    question about documents finds no passage, which the agent says."""
+    config = load_adapter("coffee/cafe_de_barrio").config
+
+    passages, titles = cli._documents(config, Settings(), embedder=None)  # type: ignore[arg-type]
+
+    assert config.corpus is None
+    assert passages("Why does altitude matter?", 8) == []
+    assert titles == {}

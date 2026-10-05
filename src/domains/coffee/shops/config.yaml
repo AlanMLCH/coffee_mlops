@@ -92,7 +92,7 @@ models:
       on shift and the tickets the hour brings: what a staffing would mean for the wait.
       A staffing or a crowd the shop never had in that hour is answered as the nearest it
       had.
-    example: {day: "2026-09-05", hour: 10, items: 2, baristas: 1, tickets_in_hour: 14}
+    example: {weekday: 6, hour: 10, items: 2, baristas: 1, tickets_in_hour: 14}
     items:
       table: orders
       id: ticket_id # 20260302-0042
@@ -185,7 +185,9 @@ explore:
       help: Products whose margin is below the one their category should keep (see the findings)
     - label: Coffee shops within 500 m
       sql: SELECT shop FROM analysis.neighbourhood WHERE measure = 'coffee shops within 500 m'
-      help: The coffee domain's coffee shops (DENUE and OpenStreetMap) around the shop
+      help: >-
+        The coffee domain's coffee shops around the shop, each place once (DENUE and
+        OpenStreetMap, a place both list counted by DENUE's row)
   layers:
     - name: The shop
       kind: points
@@ -194,14 +196,16 @@ explore:
     - name: Coffee shops within a kilometre
       kind: points
       description: >-
-        The coffee domain's coffee shops (INEGI's DENUE and OpenStreetMap) within a
-        kilometre of the shop, and how far
+        The coffee domain's coffee shops within a kilometre of the shop, and how far - each
+        place once: where INEGI's DENUE and OpenStreetMap both list it, DENUE's row
       sql: >-
         SELECT s.name, s.source, s.borough, s.latitude, s.longitude,
                round(111320 * sqrt(power(s.latitude - p.latitude, 2)
                  + power(cos(radians(p.latitude)) * (s.longitude - p.longitude), 2))) AS metres
         FROM coffee.clean.coffee_shops s, analysis.profile p
         WHERE s.kind = 'coffee'
+          AND NOT (s.source <> 'denue' AND coalesce(s.matched_shop_id IN (
+                SELECT shop_id FROM coffee.clean.coffee_shops WHERE source = 'denue'), false))
           AND 111320 * sqrt(power(s.latitude - p.latitude, 2)
             + power(cos(radians(p.latitude)) * (s.longitude - p.longitude), 2)) <= 1000
     - name: Where coffee shops are missing, block by block
@@ -212,7 +216,7 @@ explore:
         have (its zones model, which never saw the AGEB's borough) minus the ones DENUE lists,
         where that is one or more. It counts inside each AGEB: a neighbour across the street
         in the next one is not counted - see the neighbourhood finding
-      areas: {table: coffee.clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      areas: {table: coffee.clean.census_zones, id: zone_id, name: label, boundary: boundary}
       sql: >-
         SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
                round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed

@@ -23,6 +23,7 @@ from domains.coffee.shops.config import CoffeeShopConfig, ShopConfig, StudiesCon
 POPULAR_SHARE = 0.7
 EARTH_RADIUS_M = 6_371_000.0
 COFFEE = "coffee"  # the kind of place the parent's register calls a coffee shop
+OFFICIAL = "denue"  # the register whose row stands for a place both registers list
 OWN_TABLES = ("sales", "orders", "recipes", "purchases", "shifts", "shop_hours")
 
 PRICE_RESPONSE = {
@@ -577,7 +578,7 @@ def neighbourhood(
     rows: list[dict[str, object]] = []
     places = clean.get(settings.coffee_shops)
     if places is not None:
-        coffee = places.filter(pl.col("kind") == COFFEE)
+        coffee = once(places.filter(pl.col("kind") == COFFEE))
         distance = _metres(shop.latitude, shop.longitude)
         for radius in settings.radii_m:
             near = coffee.filter(distance <= radius).height
@@ -633,6 +634,15 @@ def neighbourhood(
             )
         )
     return pl.DataFrame(rows, schema=NEIGHBOURHOOD)
+
+
+def once(places: pl.DataFrame) -> pl.DataFrame:
+    """Each place once. The parent's two registers are side by side, not merged: a place
+    both list is two rows, linked by `matched_shop_id`, and the official register's row
+    stands for it."""
+    official = places.filter(pl.col("source") == OFFICIAL)["shop_id"]
+    twin = (pl.col("source") != OFFICIAL) & pl.col("matched_shop_id").is_in(official.implode())
+    return places.filter(~twin.fill_null(False))
 
 
 def _metres(latitude: float, longitude: float) -> pl.Expr:
