@@ -32,6 +32,7 @@ parent:
     - features.zones_features
     - predictions.zones_predictions
     - clean.roaster_offers
+    - clean.census_zones
 
 simulation:
   sales_pattern: vending_sales
@@ -137,6 +138,224 @@ studies:
   zones: coffee.features.zones_features
   zone_expectations: coffee.predictions.zones_predictions
   roaster_offers: coffee.clean.roaster_offers
+
+# The explorer (`make explore DOMAIN=coffee/<shop>`): one shop's own data against the city.
+# The title and the map's centre are the shop's (shops/__init__.py sets them from its file);
+# every query runs in the shop's locked session, which reads the coffee tables listed in
+# `parent` and nothing of any other shop.
+explore:
+  title: A coffee shop
+  intro: >-
+    One coffee shop's own data - its sales, prices, costs, hands and waits - and its corner
+    of Mexico City, from the coffee domain's tables. The shop does not exist: its
+    point-of-sale export is simulated, anchored to real data, so what it shows is how the
+    owner's questions get answered, not a market.
+  view: {latitude: 19.43, longitude: -99.13, zoom: 14.2, pitch: 35}
+  metrics:
+    - label: Tickets a day
+      sql: SELECT tickets_per_day FROM analysis.price_scenarios WHERE change_pct = 0
+      help: The last eight weeks' average; the line is month by month since the shop opened
+      trend: >-
+        SELECT sum(tickets) / count(DISTINCT date) FROM clean.shop_hours
+        GROUP BY month ORDER BY month
+    - label: Average ticket
+      sql: >-
+        SELECT sum(revenue_mxn) / sum(tickets) FROM clean.shop_hours
+        WHERE date > (SELECT max(date) FROM clean.shop_hours) - INTERVAL 56 DAY
+      unit: MXN
+      help: Revenue over tickets, the last eight weeks; the line is month by month
+      trend: >-
+        SELECT sum(revenue_mxn) / sum(tickets) FROM clean.shop_hours
+        GROUP BY month ORDER BY month
+    - label: Gross margin
+      sql: SELECT gross_margin_pct FROM analysis.inflation_impact ORDER BY month DESC LIMIT 1
+      unit: "%"
+      decimals: 1
+      help: Revenue less what went into what was sold, waste included, the last month; before staff and rent
+      trend: SELECT gross_margin_pct FROM analysis.inflation_impact ORDER BY month
+    - label: Nine orders in ten ready within
+      sql: >-
+        SELECT quantile_cont(minutes, 0.9) FROM clean.orders
+        WHERE date > (SELECT max(date) FROM clean.orders) - INTERVAL 56 DAY
+      unit: min
+      decimals: 1
+      help: From order to ready, the last eight weeks; the owner's target is in the profile
+    - label: Products to raise
+      sql: SELECT count(*) FROM analysis.price_alerts WHERE status = 'raise'
+      help: Products whose margin is below the one their category should keep (see the findings)
+    - label: Coffee shops within 500 m
+      sql: SELECT shop FROM analysis.neighbourhood WHERE measure = 'coffee shops within 500 m'
+      help: The coffee domain's coffee shops (DENUE and OpenStreetMap) around the shop
+  layers:
+    - name: The shop
+      kind: points
+      description: Where the shop stands - its AGEB's centroid
+      sql: SELECT name, concept, zone_id, latitude, longitude FROM analysis.profile
+    - name: Coffee shops within a kilometre
+      kind: points
+      description: >-
+        The coffee domain's coffee shops (INEGI's DENUE and OpenStreetMap) within a
+        kilometre of the shop, and how far
+      sql: >-
+        SELECT s.name, s.source, s.borough, s.latitude, s.longitude,
+               round(111320 * sqrt(power(s.latitude - p.latitude, 2)
+                 + power(cos(radians(p.latitude)) * (s.longitude - p.longitude), 2))) AS metres
+        FROM coffee.clean.coffee_shops s, analysis.profile p
+        WHERE s.kind = 'coffee'
+          AND 111320 * sqrt(power(s.latitude - p.latitude, 2)
+            + power(cos(radians(p.latitude)) * (s.longitude - p.longitude), 2)) <= 1000
+    - name: Where coffee shops are missing, block by block
+      kind: areas
+      unit: coffee shops missing
+      description: >-
+        The coffee domain's view of the whole city: the coffee shops an AGEB like each would
+        have (its zones model, which never saw the AGEB's borough) minus the ones DENUE lists,
+        where that is one or more. It counts inside each AGEB: a neighbour across the street
+        in the next one is not counted - see the neighbourhood finding
+      areas: {table: coffee.clean.census_zones, id: zone_id, name: zone_id, boundary: boundary}
+      sql: >-
+        SELECT p.zone_id, round(p.held_out_prediction - f.coffee_shops, 1) AS missing,
+               round(p.held_out_prediction, 1) AS expected, f.coffee_shops AS listed
+        FROM coffee.predictions.zones_predictions p
+        JOIN coffee.features.zones_features f USING (zone_id)
+        WHERE p.held_out_prediction - f.coffee_shops >= 1
+  datasets:
+    - name: Sales
+      description: Every line of every ticket since the shop opened.
+      table: clean.sales
+      measures:
+        revenue_mxn: sum(line_total_mxn)
+        items: sum(quantity)
+        tickets: count(DISTINCT ticket_id)
+      dimensions: [product, category, hour, weekday, channel, payment]
+      filters: [category, channel, payment]
+    - name: Open hours
+      description: Every hour the shop was open, the empty ones included.
+      table: clean.shop_hours
+      measures:
+        tickets_an_hour: avg(tickets)
+        revenue_mxn: sum(revenue_mxn)
+        staff_on_shift: avg(baristas)
+      dimensions: [hour, weekday, month]
+      filters: [weekday]
+    - name: Orders and their waits
+      description: Every ticket, from order to ready.
+      table: clean.orders
+      measures:
+        median_minutes: median(minutes)
+        p90_minutes: quantile_cont(minutes, 0.9)
+        orders: count(*)
+      dimensions: [hour, weekday, baristas, items, month]
+      filters: [weekday, baristas]
+    - name: What each product earned
+      description: Price, what went into one (waste included) and the margin, month by month.
+      table: analysis.product_margins
+      measures:
+        mean_margin_pct: avg(margin_pct)
+        units: sum(units)
+        mean_price_mxn: avg(price_mxn)
+      dimensions: [month, product, category]
+      filters: [category, product]
+  findings:
+    - title: When to raise
+      text: >-
+        Each product's gross margin in the last month against the one its category should
+        keep: raise now, watch (it would fall below if green coffee reaches the top of its
+        outlook and prices keep rising as in the last year), or fine as it is.
+      sql: >-
+        SELECT product, round(margin_pct, 1) AS margin_pct, target_pct,
+               round(margin_at_horizon_pct, 1) AS margin_at_horizon_pct,
+               round(raise_needed_pct, 1) AS raise_needed_pct, status
+        FROM analysis.price_alerts
+      kind: bar
+      x: product
+      y: margin_pct
+      color: status
+    - title: What a price change would do to a day
+      text: >-
+        Every price moved by a percent: a day's gross profit against now, by the elasticity
+        the shop's own price changes give, with the range its interval allows. A range that
+        straddles zero means the shop's history cannot tell; past the levels the menu has had,
+        the constant elasticity is an assumption.
+      sql: >-
+        SELECT change_pct, round(versus_now_pct, 1) AS versus_now_pct,
+               round(versus_now_low_pct, 1) AS low_pct, round(versus_now_high_pct, 1) AS high_pct,
+               round(tickets_per_day) AS tickets_per_day, within_history
+        FROM analysis.price_scenarios ORDER BY change_pct
+      kind: line
+      x: change_pct
+      y: versus_now_pct
+    - title: The menu, as menu engineering reads it
+      text: >-
+        The last three months: how much of the items each product sells against its margin
+        in pesos. Stars sell and earn; plowhorses sell thin; puzzles earn but sit; dogs do
+        neither.
+      sql: >-
+        SELECT product, round(mix_pct, 1) AS mix_pct, round(margin_mxn, 1) AS margin_mxn, class
+        FROM analysis.menu_engineering
+      kind: scatter
+      x: mix_pct
+      y: margin_mxn
+      color: class
+    - title: Where the hands fall short
+      text: >-
+        Nine orders in ten are ready within this many minutes, hour by hour, each day of the
+        week (1 is Monday): where the line climbs past the owner's target, the slot has too
+        few hands for its crowd - and a customer facing the queue may leave unrecorded.
+      sql: >-
+        SELECT hour, CAST(weekday AS VARCHAR) AS weekday, round(wait_p90_minutes, 1) AS wait_p90_minutes
+        FROM analysis.staffing WHERE wait_p90_minutes IS NOT NULL ORDER BY weekday, hour
+      kind: line
+      x: hour
+      y: wait_p90_minutes
+      color: weekday
+    - title: What inflation did
+      text: >-
+        The menu's level and the cost of the mix of products against the month the shop
+        opened, in pesos of that month (deflated by INEGI's consumer price index): a real
+        menu level above 1 is a rise inflation did not take back.
+      sql: >-
+        SELECT month, 'menu, real' AS series, round(real_price_level, 3) AS level
+        FROM analysis.inflation_impact
+        UNION ALL
+        SELECT month, 'cost of the mix, real', round(real_cost_index, 3)
+        FROM analysis.inflation_impact ORDER BY month
+      kind: line
+      x: month
+      y: level
+      color: series
+    - title: Its corner of the city
+      text: >-
+        The shop's block against its borough's and the city's median block, from the coffee
+        domain's tables. No public source says what a coffee shop charges for a drink in
+        Mexico City: its prices are compared with nobody's.
+      sql: >-
+        SELECT measure, round(shop, 1) AS shop, round(borough, 1) AS borough,
+               round(city, 1) AS city, unit
+        FROM analysis.neighbourhood
+      kind: table
+  about: |
+    **What is real.** When people buy and how they answer a price come from a real coffee
+    machine's sales (CC0, on Hugging Face). What the shop pays follows the coffee domain's
+    green coffee in pesos and INEGI's consumer price index. The city around it - its coffee
+    shops, its blocks and how many coffee shops each would have - is the coffee domain's,
+    read from the tables this shop lists and nothing else.
+
+    **What is assumed.** The menu, its prices and recipes, the hours, the staff and their
+    cost, the waste, the price changes and the owner's targets: the shop's file. **What is
+    simulated**: every ticket, its items and minute, the queue - a customer who would wait
+    past their patience leaves, unrecorded - the weekly purchases and the shifts.
+
+    **The limits.** A simulated shop proves the pipeline, not a market: each study reads
+    back what the simulator was given, which is how it is checked. The elasticity is the
+    whole menu's, and constant past the prices the menu has had. No public source gives a
+    coffee shop's drink prices in Mexico City.
+  examples:
+    - Which products should I raise, and by how much?
+    - What would a 10% rise in every price do to a day's gross profit?
+    - At which hours do nine orders in ten take longer than eight minutes?
+    - How long would an order of two items take on a Saturday at ten with one barista and 14 tickets in the hour?
+    - Which products are stars on the menu?
 
 monitoring:
   drift_share: 0.5

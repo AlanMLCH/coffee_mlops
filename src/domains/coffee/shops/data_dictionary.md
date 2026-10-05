@@ -154,6 +154,17 @@ One row of `clean.orders` with what the order may know before it is made
 | `model_version` | String | Registry version that produced the row |
 | `predicted_at` | Datetime (UTC) | When the batch job ran |
 
+## `analysis.profile` — the shop itself, one row
+
+| Column | Type | Meaning |
+|---|---|---|
+| `name`, `concept` | String | What the shop is called and what it is |
+| `zone_id` | String | The urban AGEB it stands in (`coffee.clean.census_zones`) |
+| `latitude`, `longitude` | Float | Where it stands: the AGEB's centroid |
+| `first_day`, `last_day` | Date | The history its tables hold |
+| `products` | Int | Products on its menu |
+| `wait_target_minutes` | Float | Minutes from order to ready the owner wants no customer to wait past |
+
 ## `analysis.product_margins` — what one product earned in one month
 
 What went into one is its recipe at the month's purchase prices, times what the shop buys

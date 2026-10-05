@@ -140,6 +140,14 @@ verdict. Everything it draws is a read-only query; every answer shows the query 
 The map draws the models too: the block groups short of coffee shops, the places that are
 probably coffee shops though their names do not say, and the shelves under their fair price.
 
+Each coffee shop has its own: `make explore DOMAIN=coffee/<shop> PORT=8503` opens the
+shop's numbers - tickets a day, average ticket, gross margin, waits, products to raise -
+its map against the city (the shop, the coffee shops within a kilometre, the blocks short
+of coffee shops), its sales, hours, orders and margins sliced by hand, and its findings:
+when to raise, what a price change would do to a day, the menu, where the hands fall short,
+what inflation did, its corner of the city. Every query runs in the shop's own locked
+session: the coffee tables it lists, and nothing of any other shop.
+
 `mlops export` writes a snapshot of what it shows, and `MLOPS_SHOWCASE=<the snapshot>` runs
 the same app over it alone, without the agent - a showcase that needs no local model and no
 services. What a source's terms keep home (Cup of Excellence's lots, the roasters'

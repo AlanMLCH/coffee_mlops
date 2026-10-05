@@ -118,6 +118,7 @@ def test_the_shop_reads_only_what_it_lists_of_coffee(shop_adapter: CoffeeShopAda
         "coffee.features.zones_features",
         "coffee.predictions.zones_predictions",
         "coffee.clean.roaster_offers",
+        "coffee.clean.census_zones",
     }
     as_json = config.model_dump(mode="json")
     undeclared = {**as_json["simulation"], "inflation": "coffee.clean.consumer_prices"}

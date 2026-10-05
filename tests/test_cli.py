@@ -418,6 +418,11 @@ def test_the_explore_command_launches_the_explorer_headless(
     assert theme.read_text(encoding="utf-8").startswith("[theme]")
     assert REPO_ROOT not in theme.parents
 
+    # A subdomain's explorer is told the whole tenant: its name alone is no package.
+    result = CliRunner().invoke(cli.app, ["explore", "--domain", "coffee/cafe_de_paso"])
+    assert result.exit_code == 0, result.output
+    assert os.environ["MLOPS_DOMAIN"] == "coffee/cafe_de_paso"
+
 
 def test_secrets_reports_what_is_configured_without_printing_it(
     monkeypatch: pytest.MonkeyPatch,

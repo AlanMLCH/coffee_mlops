@@ -2,6 +2,7 @@
 worked out by hand: margins, the price response and its scenarios, when to raise, what
 inflation did, the menu, the hands, and the shop's corner of the city."""
 
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -379,6 +380,7 @@ def test_every_study_runs_on_a_simulated_shop(shop_adapter: CoffeeShopAdapter) -
     tables = adapter.studies(clean)
 
     assert set(tables) == {
+        "profile",
         "product_margins",
         "price_response",
         "price_scenarios",
@@ -442,3 +444,33 @@ def test_a_shop_says_what_it_aims_at_and_who_is_on_shift(shop_adapter: CoffeeSho
         )
     with pytest.raises(ValidationError, match="Open with nobody on shift"):
         ShopConfig.model_validate({**shop, "shifts": shop["shifts"][:1]})
+
+
+def test_a_shops_explorer_reads_its_own_tables_and_the_parents_it_lists() -> None:
+    """Every query the explorer holds - numbers, layers, findings, tables - names the
+    shop's own tables or the coffee tables it lists, and nothing else: the page cannot
+    show another shop's data, whatever its YAML says."""
+    for name in domains.coffee.shops.businesses():
+        config = domains.coffee.shops.shop_config(name)
+        assert config.explore is not None
+        assert config.explore.title == config.shop.name
+        assert (config.explore.view.latitude, config.explore.view.longitude) == (
+            config.shop.latitude,
+            config.shop.longitude,
+        )
+        named = {
+            table
+            for query in config.explore.queries
+            for table in re.findall(
+                r"(?<![\w.])(?:\w+\.)?(?:clean|features|predictions|analysis)\.\w+", query
+            )
+        }
+        lent = {table for table in named if table.count(".") == 2}
+        assert lent <= config.parent_tables, f"{name} reads {sorted(lent - config.parent_tables)}"
+        assert any(table.startswith("coffee.") for table in named)  # it is set against the city
+        own = {table.split(".")[1] for table in named - lent if table.startswith("clean.")}
+        assert own <= set(config_tables(name)), own
+
+
+def config_tables(name: str) -> list[str]:
+    return list(domains.coffee.shops.adapter(name).clean_contracts())

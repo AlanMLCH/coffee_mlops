@@ -298,7 +298,7 @@ def explore(domain: Domain = None, port: int = 8502) -> None:
     from mlops_core.explore.style import write_theme
 
     app_path = Path(__file__).resolve().parent / "explore" / "app.py"
-    os.environ["MLOPS_DOMAIN"] = _adapter(domain).config.name
+    os.environ["MLOPS_DOMAIN"] = _adapter(domain).config.tenant
     # Outside the repo: the theme is rewritten on every launch, from the code.
     theme = write_theme(Path(tempfile.gettempdir()) / "mlops-explore-theme.toml")
     sys.argv = ["streamlit", "run", str(app_path), "--server.port", str(port),

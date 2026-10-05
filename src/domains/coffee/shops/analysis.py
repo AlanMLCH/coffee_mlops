@@ -74,6 +74,7 @@ def studies(clean: Mapping[str, pl.DataFrame], config: CoffeeShopConfig) -> dict
     )
     cpi = clean.get(config.simulation.inflation)
     return {
+        "profile": profile(shop),
         "product_margins": margins,
         "price_response": response,
         "price_scenarios": price_scenarios(
@@ -94,6 +95,26 @@ def studies(clean: Mapping[str, pl.DataFrame], config: CoffeeShopConfig) -> dict
         ),
         "neighbourhood": neighbourhood(shop, clean, clean["purchases"], beans, settings),
     }
+
+
+def profile(shop: ShopConfig) -> pl.DataFrame:
+    """The shop itself, one row: what and where it is, and what its owner aims at - for
+    the map's pin and for whoever asks what the shop is."""
+    return pl.DataFrame(
+        [
+            {
+                "name": shop.name,
+                "concept": shop.concept,
+                "zone_id": shop.zone_id,
+                "latitude": shop.latitude,
+                "longitude": shop.longitude,
+                "first_day": shop.first_day,
+                "last_day": shop.last_day,
+                "products": len(shop.menu),
+                "wait_target_minutes": shop.wait_target_minutes,
+            }
+        ]
+    )
 
 
 def beans_of(shop: ShopConfig) -> set[str]:

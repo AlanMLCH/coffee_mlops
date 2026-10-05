@@ -112,7 +112,7 @@ status:
 	uv run mlops status --domain $(DOMAIN)
 
 explore:
-	uv run mlops explore --domain $(DOMAIN)
+	uv run mlops explore --domain $(DOMAIN) $(if $(PORT),--port $(PORT))
 
 questions:
 	uv run mlops rag draft --domain $(DOMAIN)
