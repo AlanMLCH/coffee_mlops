@@ -690,6 +690,7 @@ def providers_command(
             Cooldowns,
             Ping,
             environment,
+            lasting,
             load_providers,
             provider_client,
         )
@@ -710,7 +711,13 @@ def providers_command(
         elif config.paid and not settings.paid_providers:
             state = "paid: left out (MLOPS_PAID_PROVIDERS is not true)"
         elif until is not None:
-            state = f"set aside until {until:%Y-%m-%d %H:%M} UTC: {aside[config.name]['reason']}"
+            entry = aside[config.name]
+            since = datetime.fromisoformat(entry["since"]) if entry.get("since") else None
+            state = (
+                f"set aside since {since:%Y-%m-%d %H:%M}, for {lasting(until - since)}, "
+                if since is not None
+                else "set aside "
+            ) + f"until {until:%Y-%m-%d %H:%M} UTC: {entry['reason']}"
         else:
             state = "ready"
             ready.append(config)

@@ -31,6 +31,7 @@ from mlops_core.rag.providers import (
     Unavailable,
     environment,
     json_text,
+    lasting,
     load_providers,
     provider_client,
     quota_until,
@@ -148,6 +149,8 @@ def test_only_providers_with_a_key_are_asked_and_the_paid_only_if_allowed() -> N
         (httpx.Response(429, text='{"retryDelay": "30s"}'), NOW + timedelta(seconds=30)),
         (httpx.Response(429, text="Limit tokens per day (TPD) reached"),
          datetime(2026, 9, 30, tzinfo=UTC)),
+        (httpx.Response(429, text="Monthly token limit exceeded"),
+         datetime(2026, 10, 1, tzinfo=UTC)),
         (httpx.Response(429, headers={"retry-after": "soon"}), NOW + timedelta(minutes=1)),
     ],
 )  # fmt: skip
@@ -155,6 +158,19 @@ def test_a_provider_out_of_quota_is_asked_again_when_it_says(
     response: httpx.Response, until: datetime
 ) -> None:
     assert quota_until(response, NOW) == until
+
+
+def test_a_monthly_quota_comes_back_on_the_first_of_the_next_month_and_a_pause_reads_well() -> None:
+    december = datetime(2026, 12, 31, 23, 0, tzinfo=UTC)
+    out = httpx.Response(429, text="Requests per month exceeded")
+
+    assert quota_until(out, december) == datetime(2027, 1, 1, tzinfo=UTC)
+    assert [lasting(timedelta(seconds=s)) for s in (45, 720, 27_000, 259_200)] == [
+        "45 s",
+        "12 min",
+        "7.5 h",
+        "3.0 d",
+    ]
 
 
 def test_a_refusal_is_quota_or_unavailability() -> None:
@@ -297,7 +313,13 @@ def test_the_first_provider_with_quota_answers_and_the_rest_wait(tmp_path: Path)
                   Cooldowns(state), clock=lambda: NOW + timedelta(hours=1))  # fmt: skip
     assert later.ask("q", Shape).sql == "SELECT 2"
     saved = json.loads(state.read_text(encoding="utf-8"))
-    assert saved["aside"]["groq"]["reason"] == "HTTP 429: tokens per day"
+    # When it ran out, how long it takes to come back, and when it does.
+    assert saved["aside"]["groq"] == {
+        "since": NOW.isoformat(),
+        "until": (NOW + timedelta(hours=3)).isoformat(),
+        "pause_seconds": 10_800,
+        "reason": "HTTP 429: tokens per day",
+    }
     assert saved["spent"]["2026-09-29"]["gemini"] == {"input": 10, "output": 2}
 
 
@@ -435,7 +457,8 @@ def test_the_providers_command_says_who_is_ready_aside_or_keyless(
     listed: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cooldowns = Cooldowns(listed.data_dir / "llm" / "providers.json")
-    cooldowns.set_aside("paid", datetime.now(UTC) + timedelta(hours=2), "HTTP 429: daily")
+    now = datetime.now(UTC)
+    cooldowns.set_aside("paid", now + timedelta(hours=2), "HTTP 429: daily", since=now)
     cooldowns.spend("free", {"input": 1200, "output": 30, "cached": 1000, "calls": 2},
                     "2026-09-29")  # fmt: skip
     monkeypatch.setenv("MLOPS_PROVIDERS_FILE", str(listed.providers_file))
@@ -452,11 +475,21 @@ def test_the_providers_command_says_who_is_ready_aside_or_keyless(
     lines = result.output.splitlines()
     assert lines[0] == "1. free - m-1: ready"
     assert lines[1] == "2. keyless - m-2: no key (NOBODY_KEY is not set)"
-    assert lines[2].startswith("3. paid - m-3: set aside until ") and "HTTP 429: daily" in lines[2]
+    # When it ran out, for how long, and until when.
+    assert lines[2].startswith(f"3. paid - m-3: set aside since {now:%Y-%m-%d %H:%M}, for 2.0 h, ")
+    assert "until " in lines[2] and lines[2].endswith("UTC: HTTP 429: daily")
     assert lines[3].startswith("4. local")
     assert "2026-09-29 free: 2 calls, 1,200 tokens in (1,000 cached), 30 out" in result.output
     assert "check free: answered" in result.output
     assert "k1" not in result.output and "k2" not in result.output  # never a key
+
+    # A state file written before the start was kept still reads, with what it has.
+    state = listed.data_dir / "llm" / "providers.json"
+    older = json.loads(state.read_text(encoding="utf-8"))
+    del older["aside"]["paid"]["since"]
+    state.write_text(json.dumps(older), encoding="utf-8")
+    again = CliRunner().invoke(cli.app, ["agent", "providers"])
+    assert again.output.splitlines()[2].startswith("3. paid - m-3: set aside until ")
 
 
 def test_a_paid_provider_waits_for_permission_and_a_bad_key_is_reported(

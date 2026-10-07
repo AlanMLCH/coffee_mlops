@@ -6,14 +6,16 @@ was measured with. A hosted model answers more questions right, faster, for as l
 its free tier lasts, so the agent can ask one first. A chain asks the first provider
 that still has quota. A provider that says it is out - HTTP 429, or a quota named in a
 402 or 403 - is set aside until the moment it says; when it does not say, until the next
-UTC day if the message is about a daily quota, and for a minute otherwise. A per-minute
+UTC day if the message is about a daily quota, the first of the next month for a monthly
+one (Mistral's free mode), and for a minute otherwise. A per-minute
 limit that clears within a few seconds is waited out once instead. A key refused, a
 provider down or a reply that is not the shape asked for sets it aside too, for longer.
 The local model is never set aside: the chain cannot run dry. When no provider has a
 key, the chain is the local model alone, as before.
 
-When a provider is set aside, and every token it spends, is written to a small state
-file, so the next run does not ask a provider whose daily quota is gone.
+When a provider is set aside - when it ran out, how long it takes to come back, and
+when it does - and every token it spends, is written to a small state file, so the next
+run does not ask a provider whose quota is gone.
 
 Verified 2026-09-29 against each provider's documentation, and each endpoint answered a
 request without a key with 401 (the address is right, nothing was spent):
@@ -74,6 +76,7 @@ MAX_WAIT = 20.0  # seconds a per-minute limit is waited out rather than moving o
 FAILURE_PAUSE = timedelta(minutes=10)  # a provider down, or a reply of the wrong shape
 QUOTA_PAUSE = timedelta(minutes=1)  # out of quota, with nothing said about until when
 DAILY = re.compile(r"per.?day|daily|\bTPD\b|\bRPD\b|PerDay", re.IGNORECASE)
+MONTHLY = re.compile(r"per.?month|monthly|PerMonth", re.IGNORECASE)
 QUOTA = re.compile(r"quota|rate.?limit|credit|exhausted|insufficient", re.IGNORECASE)
 QUESTION = "\nQuestion:"  # every prompt ends with its question: what comes before is stable
 LOCAL = "local"
@@ -185,7 +188,8 @@ class Unavailable(RuntimeError):
 
 def quota_until(response: httpx.Response, now: datetime) -> datetime:
     """When a provider out of quota will answer again: what its `retry-after` header or its
-    error body says; else the next UTC day for a daily quota, and a minute for the rest."""
+    error body says; else the first of the next month for a monthly quota, the next UTC
+    day for a daily one, and a minute for the rest."""
     after = response.headers.get("retry-after")
     if after is not None:
         try:
@@ -196,9 +200,24 @@ def quota_until(response: httpx.Response, now: datetime) -> datetime:
     delay = re.search(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"', text)  # Gemini's error body
     if delay:
         return now + timedelta(seconds=float(delay.group(1)))
+    if MONTHLY.search(text):
+        following = (now.date().replace(day=1) + timedelta(days=32)).replace(day=1)
+        return datetime.combine(following, datetime.min.time(), tzinfo=UTC)
     if DAILY.search(text):
         return datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
     return now + QUOTA_PAUSE
+
+
+def lasting(pause: timedelta) -> str:
+    """How long a pause is, as a person reads it: 45 s, 12 min, 7.5 h, 3.0 d."""
+    seconds = pause.total_seconds()
+    if seconds < 60:
+        return f"{seconds:.0f} s"
+    if seconds < 3600:
+        return f"{seconds / 60:.0f} min"
+    if seconds < 86400:
+        return f"{seconds / 3600:.1f} h"
+    return f"{seconds / 86400:.1f} d"
 
 
 def raise_for(provider: str, response: httpx.Response, now: datetime) -> None:
@@ -404,9 +423,16 @@ class Cooldowns:
         until = datetime.fromisoformat(entry["until"])
         return until if until > now else None
 
-    def set_aside(self, name: str, until: datetime, reason: str) -> None:
+    def set_aside(self, name: str, until: datetime, reason: str, since: datetime) -> None:
+        """`name` is not asked from `since`, when it ran out, until `until`, when it said
+        it would answer again; how long that is is kept too."""
         with self._lock:
-            self._state["aside"][name] = {"until": until.isoformat(), "reason": reason}
+            self._state["aside"][name] = {
+                "since": since.isoformat(),
+                "until": until.isoformat(),
+                "pause_seconds": round((until - since).total_seconds()),
+                "reason": reason,
+            }
             self._save()
 
     def spend(self, name: str, usage: Mapping[str, int], today: str) -> None:
@@ -512,9 +538,10 @@ class Chain:
             return answer
 
     def _aside(self, member: ApiModel, until: datetime, reason: str) -> None:
-        logger.warning("%s set aside until %s: %s", member.model,
+        now = self._clock()
+        logger.warning("%s set aside for %s, until %s: %s", member.model, lasting(until - now),
                        until.isoformat(timespec="seconds"), reason)  # fmt: skip
-        self._cooldowns.set_aside(member.name, until, reason)
+        self._cooldowns.set_aside(member.name, until, reason, since=now)
 
     def _why(self) -> list[str]:
         aside = self._cooldowns.report()["aside"]
