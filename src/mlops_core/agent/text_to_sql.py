@@ -53,6 +53,7 @@ from mlops_core.agent.sql import (
     MAX_ROWS,
     QueryResult,
     Refused,
+    qualified_views,
     run_select,
     unquoted_views,
     views,
@@ -292,7 +293,8 @@ def _repaired(
     sql, error = "", ""
     for attempt in range(1, MAX_ATTEMPTS + 1):
         repair = REPAIR.format(sql=sql, error=error, hint=repair_hint(error)) if attempt > 1 else ""
-        sql = unquoted_views(generator.ask(prompt + repair, SqlReply).sql.strip(), names)
+        written = generator.ask(prompt + repair, SqlReply).sql.strip()
+        sql = qualified_views(unquoted_views(written, names), names)
         if not _reads_a_table(sql, names):
             error = NO_TABLE
             continue
@@ -316,7 +318,7 @@ def _again(
     before: SqlAnswer,
 ) -> SqlAnswer:
     """One more query; kept only if it runs - a rewrite that fails loses nothing."""
-    sql = unquoted_views(generator.ask(prompt, SqlReply).sql.strip(), names)
+    sql = qualified_views(unquoted_views(generator.ask(prompt, SqlReply).sql.strip(), names), names)
     kept = SqlAnswer(before.sql, before.result, None, before.attempts + 1)
     if not _reads_a_table(sql, names) or writes_prose(sql):
         return kept

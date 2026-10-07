@@ -1,0 +1,15 @@
+{"id": "hs-data-01", "question": "Which product sold the most units in August 2026?", "sql": "SELECT product FROM clean.sales WHERE date >= DATE '2026-08-01' AND date < DATE '2026-09-01' GROUP BY product ORDER BY sum(quantity) DESC LIMIT 1"}
+{"id": "hs-data-02", "question": "What does my average ticket come to, in pesos?", "sql": "SELECT sum(line_total_mxn) / count(DISTINCT ticket_id) AS mxn_per_ticket FROM clean.sales"}
+{"id": "hs-data-03", "question": "How many items does a ticket hold on average?", "sql": "SELECT avg(items) AS items FROM clean.orders"}
+{"id": "hs-data-04", "question": "On an average day, which day of the week brings the most revenue?", "sql": "SELECT weekday FROM clean.shop_hours GROUP BY weekday ORDER BY sum(revenue_mxn) / count(DISTINCT date) DESC LIMIT 1"}
+{"id": "hs-data-05", "question": "Which product brings in the most revenue on my menu over the last three months?", "sql": "SELECT product FROM analysis.menu_engineering ORDER BY revenue_mxn DESC LIMIT 1"}
+{"id": "hs-data-06", "question": "What was the median wait from order to ready in August 2026, in minutes?", "sql": "SELECT median(minutes) AS minutes FROM clean.orders WHERE month = '2026-08'"}
+{"id": "hs-data-07", "question": "How many hours did my baristas work in July 2026?", "sql": "SELECT sum(hours) AS hours FROM clean.shifts WHERE role = 'barista' AND date >= DATE '2026-07-01' AND date < DATE '2026-08-01'"}
+{"id": "hs-data-08", "question": "What does staff cost me per ticket at eight in the morning on Mondays?", "sql": "SELECT staff_cost_per_ticket_mxn FROM analysis.staffing WHERE weekday = 1 AND hour = 8"}
+{"id": "hs-data-09", "question": "How many litres of milk did I buy in August 2026?", "sql": "SELECT sum(quantity) / 1000 AS litres FROM clean.purchases WHERE ingredient = 'milk' AND date >= DATE '2026-08-01' AND date < DATE '2026-09-01'"}
+{"id": "hs-data-10", "question": "What does a latte cost on my menu today?", "sql": "SELECT price_mxn FROM clean.menu_prices WHERE product = 'latte' AND valid_to IS NULL"}
+{"id": "hs-data-11", "question": "How many millilitres of milk go into a cappuccino?", "sql": "SELECT quantity FROM clean.recipes WHERE product = 'cappuccino' AND ingredient = 'milk'"}
+{"id": "hs-data-12", "question": "By how much is the price of other mild Arabicas expected to change over the next six months, at the median?", "sql": "SELECT change_median_pct FROM coffee.analysis.price_outlook WHERE indicator = 'other_milds' AND horizon_months = 6"}
+{"id": "hs-data-13", "question": "How dense is the population around my shop, against the city?", "sql": "SELECT shop, city FROM analysis.neighbourhood WHERE measure = 'density'"}
+{"id": "hs-data-14", "question": "What was Mexico's consumer price index in the latest month published?", "sql": "SELECT index FROM coffee.clean.consumer_price_index ORDER BY month DESC LIMIT 1"}
+{"id": "hs-data-15", "question": "How much revenue did takeaway orders bring in August 2026?", "sql": "SELECT sum(line_total_mxn) AS revenue_mxn FROM clean.sales WHERE channel = 'takeaway' AND date >= DATE '2026-08-01' AND date < DATE '2026-09-01'"}

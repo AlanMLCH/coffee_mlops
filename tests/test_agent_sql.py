@@ -22,7 +22,7 @@ from mlops_core.agent.dictionary import (
     schema_context,
     table_sections,
 )
-from mlops_core.agent.sql import Refused, read_only, run_select, views
+from mlops_core.agent.sql import Refused, qualified_views, read_only, run_select, views
 from mlops_core.storage import write_table
 
 
@@ -153,6 +153,9 @@ def test_a_models_inputs_are_not_offered_even_when_built() -> None:
 
     assert "clean.lots" in shown
     assert "lot_features" not in shown
+    # Nor a parent's, lent to a subdomain under the parent's name.
+    lent = DICTIONARY.replace("`features.lot_features`", "`market.features.lot_features`")
+    assert "lot_features" not in schema_context(lent, {"market.features.lot_features"})
 
 
 def test_the_domain_dictionary_describes_every_table_it_names() -> None:
@@ -201,3 +204,39 @@ def test_the_sql_writer_is_linked_only_when_the_domain_asks() -> None:
     assert config.agent.schema_sections is None
     assert cli._linker(config, dictionary, names, embedder) is None
     assert isinstance(cli._linker(linked, dictionary, names, embedder), SchemaLinker)
+
+
+def test_a_parents_table_written_without_its_domain_is_qualified() -> None:
+    """A subdomain's small model drops the parent's name; when the table can only be one
+    of the parent's, it is named as the session has it - and nothing else is touched."""
+    names = {"clean.sales", "market.clean.places", "market.analysis.trend", "other.analysis.trend"}
+
+    assert qualified_views("SELECT count(*) FROM clean.places p", names) == (
+        "SELECT count(*) FROM market.clean.places p"
+    )
+    assert qualified_views("SELECT * FROM clean.sales", names) == "SELECT * FROM clean.sales"
+    # Two lent tables could be meant: left as written, for the error to say so.
+    assert qualified_views("SELECT * FROM analysis.trend", names) == "SELECT * FROM analysis.trend"
+    assert qualified_views("SELECT s.clean FROM clean.unknown s", names) == (
+        "SELECT s.clean FROM clean.unknown s"
+    )
+
+
+def test_a_table_put_in_another_layer_or_domain_is_named_as_the_session_has_it() -> None:
+    """The table's name is right and its layer, or its domain, is not: when only one view
+    has that table, it is the one meant."""
+    names = {"clean.sales", "analysis.alerts", "market.clean.places", "market.analysis.trend"}
+
+    assert qualified_views("SELECT * FROM clean.alerts a", names) == (
+        "SELECT * FROM analysis.alerts a"
+    )
+    assert qualified_views("SELECT * FROM market.clean.alerts", names) == (
+        "SELECT * FROM analysis.alerts"
+    )
+    assert qualified_views("SELECT * FROM market.analysis.places JOIN clean.trend", names) == (
+        "SELECT * FROM market.clean.places JOIN market.analysis.trend"
+    )
+    # An alias named like a layer: its columns are no table's name, and are left alone.
+    assert qualified_views("SELECT clean.quantity FROM clean.sales clean", names) == (
+        "SELECT clean.quantity FROM clean.sales clean"
+    )

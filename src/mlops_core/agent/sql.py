@@ -29,7 +29,7 @@ from typing import Any
 import duckdb
 
 from mlops_core.catalog import LAYERS, connect
-from mlops_core.config import ParentTables
+from mlops_core.config import DATA_LAYERS, ParentTables
 from mlops_core.storage import table_path
 
 MAX_ROWS = 50  # what an answer can use; more is a sign the query should aggregate
@@ -116,6 +116,32 @@ def unquoted_views(sql: str, names: Collection[str]) -> str:
     column or alias with a dot in it is left alone.
     """
     return _QUOTED.sub(lambda m: m.group(1) if m.group(1) in names else m.group(0), sql)
+
+
+_NAMED = re.compile(rf"(?<![\w.])((?:\w+\.)?(?:{'|'.join(DATA_LAYERS)})\.\w+)(?![\w.])")
+
+
+def qualified_views(sql: str, names: Collection[str]) -> str:
+    """A view named with the wrong domain or layer, named as the session has it - when
+    the session has no view of the name as written and exactly one of that table:
+    `clean.shops` -> `market.clean.shops` (a parent's table written without its domain),
+    `clean.alerts` -> `analysis.alerts` (a table put in another layer).
+
+    Seen 2026-10-05: a subdomain's agent wrote two of its parent's tables without the
+    parent's name, and every repair kept them so; and 2026-10-07, two of its own studies
+    under `clean.` and under its parent's name. A name the session has, or one that could
+    be either of two tables, is left as it is, for the error to say so.
+    """
+
+    def qualify(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name in names:
+            return name
+        table = name.rsplit(".", 1)[1]
+        found = [view for view in names if view.rsplit(".", 1)[1] == table]
+        return found[0] if len(found) == 1 else name
+
+    return _NAMED.sub(qualify, sql)
 
 
 def views(con: duckdb.DuckDBPyConnection) -> set[str]:

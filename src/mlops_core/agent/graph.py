@@ -141,6 +141,9 @@ class Agent:
     # The served models closest to a question, each with its inputs; unset, every model
     # the domain offers, as `routing` lists them.
     models: ModelFinder | None = None
+    # Whether the domain has documents to search; a business that brings only its tables
+    # has none, and a question routed to them is asked of the tables.
+    library: bool = True
 
     def __post_init__(self) -> None:
         self.generator = TracedGenerator(self.generator)
@@ -213,9 +216,14 @@ class Agent:
         the question describes, the tables for a figure computed from their records. One
         route is replaced: an item described, and no figure asked of the tables, sent to
         the tables - its query finds nothing and the answer is left to explain why.
-        Otherwise a tool is only ever added, never taken away."""
+        Otherwise a tool is only ever added, never taken away - but the documents, in a
+        domain with none: what was meant for them goes to the tables."""
         if chosen == "data" and needs.predicts and not needs.figures:
             chosen = "prediction"
+        if chosen == "knowledge" and not self.library:
+            # Seen 2026-10-07: a business's agent, which has no library, sent a question
+            # its tables answer to the documents, and found nothing.
+            chosen = "data"
         if chosen != "mixed":
             plan: dict[str, str | None] = {chosen: question}
         else:
@@ -229,6 +237,9 @@ class Agent:
                 plan = reply.by_tool()
             if not any(plan.values()):  # a plan with no tool: ask the tables and the documents
                 plan = {"data": question, "knowledge": question}
+            if not self.library and plan.get("knowledge"):
+                plan["data"] = plan.get("data") or plan["knowledge"]
+                plan["knowledge"] = None
         if needs.predicts and not plan.get("prediction"):
             plan["prediction"] = question
         if needs.figures and not plan.get("data") and not plan.get("prediction"):

@@ -44,7 +44,11 @@ def domain_dictionary(config: DomainConfig) -> str:
         theirs = table_sections(owner.read_text(encoding="utf-8"))
         for table in parent.tables:
             if table in theirs:
-                lent = theirs[table].replace(f"`{table}`", f"`{parent.domain}.{table}`")
+                # Every lent table a section names, named as this domain reads it: a
+                # section that says `clean.places` teaches the query to write it so.
+                lent = theirs[table]
+                for named in parent.tables:
+                    lent = lent.replace(f"`{named}`", f"`{parent.domain}.{named}`")
                 text += "\n\n" + lent
     return text
 
@@ -68,8 +72,13 @@ def offered(text: str, views: Collection[str]) -> dict[str, str]:
     return {
         view: section
         for view, section in table_sections(text).items()
-        if view in views and not view.startswith(MODEL_INPUTS)
+        if view in views and not _model_inputs(view)
     }
+
+
+def _model_inputs(view: str) -> bool:
+    """A table of model inputs, this domain's or its parent's (`<parent>.features.x`)."""
+    return view.startswith(MODEL_INPUTS) or f".{MODEL_INPUTS}" in view
 
 
 def shown(views: Collection[str], hidden: Collection[str]) -> set[str]:

@@ -10,9 +10,15 @@ are assumptions in the shop's file. Money is in Mexican pesos of the day.
 Every table below is an immutable Parquet partition and a DuckDB view
 (`SELECT * FROM clean.sales`). The Pandera contract in the code is the authority.
 
+**What no table holds.** No other coffee shop's menu or prices: `coffee.clean.coffee_shops`
+says where they are, not what they charge. And no customer: a point-of-sale export
+carries none, so nothing follows a person from one ticket to the next. A date column
+holds days: a period longer than a day is a range of them.
+
 ## `clean.sales` — one line of a ticket
 
-A product sold, at the price it was sold at.
+A product sold, at the price it was sold at. **A row is a line of a ticket, not a
+ticket**: a ticket of three products is three rows, its channel and payment on each.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -80,6 +86,8 @@ rest moves with the consumer price index.
 
 ## `clean.shifts` — one shift worked
 
+A row is one person's shift, and carries what it cost.
+
 | Column | Type | Meaning |
 |---|---|---|
 | `date` | Date | The day |
@@ -93,7 +101,8 @@ rest moves with the consumer price index.
 ## `clean.shop_hours` — one hour the shop was open
 
 Every open hour from the first sale to the last, **zeros included**: an hour that sold
-nothing is a row. The items of `hourly_demand`.
+nothing is a row. The items of `hourly_demand`. **A row is an hour, not a day**: its
+columns count that hour alone.
 
 | Column | Type | Meaning |
 |---|---|---|

@@ -1032,6 +1032,7 @@ def agent_session(
                 linker,
                 voters,
                 finder,
+                library=config.corpus is not None,
             ),
             identity,
         )

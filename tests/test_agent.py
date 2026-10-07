@@ -129,6 +129,7 @@ def agent(
     session: duckdb.DuckDBPyConnection,
     responder: Callable[[httpx.Request], httpx.Response] | None = None,
     voters: Sequence[Scripted] = (),
+    library: bool = True,
 ) -> Agent:
     return Agent(
         generator,
@@ -141,6 +142,7 @@ def agent(
         {"fao": {"title": "Arabica coffee manual", "publisher": "FAO", "year": 2005}},
         {"answer": "prompts:/mlops-agent-answer/1"},
         voters=list(voters),
+        library=library,
     )
 
 
@@ -846,6 +848,42 @@ def test_the_second_opinion_adds_a_tool_and_never_takes_one_away(
     assert second.route == "mixed" and second.sql is not None and second.sql.sql == TOP
     assert third.route == "mixed" and third.answered and third.prediction is not None
     assert "No prediction: " in both.asked("AnswerReply")[0]
+
+
+def test_a_domain_without_documents_sends_what_was_meant_for_them_to_the_tables(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A business has no library: a route to one could only end in no answer, so the
+    question - or the part of it meant for the documents - is asked of the tables."""
+    shapes: dict[str, Any] = {
+        "SqlReply": lambda p: {"sql": TOP},
+        "AnswerReply": lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    }
+    routed = Scripted(RouteReply=lambda p: {"route": "knowledge"}, **shapes)
+    split = Scripted(
+        RouteReply=lambda p: {"route": "mixed"},
+        PlanReply=lambda p: {"parts": [{"question": "Why does it grow?", "tool": "knowledge"}]},
+        **shapes,
+    )
+    both = Scripted(
+        RouteReply=lambda p: {"route": "mixed"},
+        PlanReply=lambda p: {
+            "parts": [
+                {"question": "Which state grows most?", "tool": "data"},
+                {"question": "Why there?", "tool": "knowledge"},
+            ]
+        },
+        **shapes,
+    )
+
+    first = agent(routed, session, library=False).ask("Which state grows most?")
+    second = agent(split, session, library=False).ask("Why does it grow?")
+    third = agent(both, session, library=False).ask("Which state grows most, and why?")
+
+    assert first.route == "data" and first.sql is not None and first.passages == []
+    assert second.sql is not None and "Why does it grow?" in split.asked("SqlReply")[0]
+    assert third.sql is not None and "Which state grows most?" in both.asked("SqlReply")[0]
+    assert second.passages == [] and third.passages == []
 
 
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:

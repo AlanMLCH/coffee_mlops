@@ -144,8 +144,12 @@ def test_a_parent_table_not_built_yet_is_not_offered(root: Path) -> None:
 
 def test_pruning_a_domain_leaves_its_subdomains_alone(root: Path) -> None:
     newer = datetime.now(UTC) + timedelta(minutes=1)
-    write_table(pl.DataFrame({"month": ["2026-09"], "index": [143.0]}),
-                root / "market" / "clean" / "prices", {}, newer)  # fmt: skip
+    write_table(
+        pl.DataFrame({"month": ["2026-09"], "index": [143.0]}),
+        root / "market" / "clean" / "prices",
+        {},
+        newer,
+    )
     write_table(pl.DataFrame({"sold": [4]}), shop(root, "corner") / "clean" / "sales", {}, newer)
 
     pruned = prune_layers(root / "market", keep=1)
@@ -164,19 +168,26 @@ def test_the_agent_reads_a_parent_tables_section_from_the_parent(
         "# Shop\n\n## `clean.sales` — one sale\n\n| `sold` | Int | Units |\n", encoding="utf-8"
     )
     (homes["market"] / "data_dictionary.md").write_text(
-        "# Market\n\n## `clean.prices` — one month\n\nJoin `clean.prices` on month.\n\n"
-        "## `clean.buyers` — kept\n\nNot lent.\n",
+        "# Market\n\n## `clean.prices` — one month\n\nJoin `clean.prices` on month, "
+        "or `clean.stalls` on stall.\n\n"
+        "## `clean.stalls` — one stall\n\nAs in `clean.prices`.\n\n"
+        "## `clean.buyers` — kept\n\nNot lent, unlike `clean.prices`.\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(dictionary, "domain_dir", lambda name: homes[name])
 
     text = domain_dictionary(
-        tenant("corner", ParentTables(domain="market", tables=["clean.prices"]))
+        tenant("corner", ParentTables(domain="market", tables=["clean.prices", "clean.stalls"]))
     )
 
     sections = dictionary.table_sections(text)
-    assert set(sections) == {"clean.sales", "market.clean.prices"}
-    assert "Join `market.clean.prices` on month." in sections["market.clean.prices"]
+    assert set(sections) == {"clean.sales", "market.clean.prices", "market.clean.stalls"}
+    # Every lent table a section names is named as the subdomain reads it.
+    assert (
+        "Join `market.clean.prices` on month, or `market.clean.stalls` on stall."
+        in sections["market.clean.prices"]
+    )
+    assert "As in `market.clean.prices`." in sections["market.clean.stalls"]
     assert "buyers" not in text
 
 

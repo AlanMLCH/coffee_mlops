@@ -141,6 +141,19 @@ studies:
   zone_expectations: coffee.predictions.zones_predictions
   roaster_offers: coffee.clean.roaster_offers
 
+# Kept from the local agent (2026-10-05): the tables the map and the studies read, not an
+# owner's questions - the AGEBs' outlines, the zones model's batch scores, and the shop's
+# own models' batch scores (its models answer through the prediction tool, an hour or an
+# order at a time). A first evaluation found the agent querying the census for "how does
+# my block compare", which the neighbourhood study answers. They stay queryable, and MCP
+# offers them.
+agent:
+  hidden_tables:
+    - coffee.clean.census_zones
+    - coffee.predictions.zones_predictions
+    - predictions.hourly_demand_predictions
+    - predictions.order_minutes_predictions
+
 # The explorer (`make explore DOMAIN=coffee/<shop>`): one shop's own data against the city.
 # The title and the map's centre are the shop's (shops/__init__.py sets them from its file);
 # every query runs in the shop's locked session, which reads the coffee tables listed in
