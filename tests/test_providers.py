@@ -355,7 +355,30 @@ def test_one_model_measured_alone_waits_out_longer_limits_a_few_times() -> None:
     over = Chain([Member("groq", daily)], None, clock=lambda: NOW, sleep=slept.append)  # type: ignore[list-item]
     with pytest.raises(NoModelLeft, match="tokens per day"):
         over.ask("q", Shape)
-    assert slept == [45.0, 45.0, 45.0, 45.0, 45.0]
+    # Two, then three asking it, then three for its pause to pass - on a clock that never
+    # moves, it never does; the daily limit is not waited for at all.
+    assert slept == [45.0] * 8
+
+
+def test_alone_a_model_set_aside_for_moments_is_waited_for_not_failed() -> None:
+    """Set aside for seven seconds by the question before, it answers the next one after
+    them; set aside for hours, the question fails at once, and says why."""
+    moment = [NOW]
+
+    def sleep(seconds: float) -> None:
+        moment[0] += timedelta(seconds=seconds)
+
+    cooldowns = Cooldowns()
+    cooldowns.set_aside("groq", NOW + timedelta(seconds=7), "per minute", since=NOW)
+    chain = Chain([Member("groq", {"sql": "SELECT 1"})], None, cooldowns,  # type: ignore[list-item]
+                  clock=lambda: moment[0], sleep=sleep)  # fmt: skip
+
+    assert chain.ask("q", Shape).sql == "SELECT 1" and moment[0] == NOW + timedelta(seconds=7)
+
+    cooldowns.set_aside("groq", moment[0] + timedelta(hours=5), "per day", since=moment[0])
+    with pytest.raises(NoModelLeft, match="per day"):
+        chain.ask("q", Shape)
+    assert moment[0] == NOW + timedelta(seconds=7)
 
 
 def test_a_provider_down_or_wrong_is_set_aside_and_the_local_model_answers() -> None:

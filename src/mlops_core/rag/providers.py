@@ -493,21 +493,37 @@ class Chain:
         )
 
     def ask[Reply: BaseModel](self, prompt: str, reply: type[Reply]) -> Reply:
-        for member in self._members:
-            now = self._clock()
-            if self._cooldowns.until(member.name, now) is not None:
+        # Alone, a member set aside for moments is waited for, as `_try` waits: seen
+        # 2026-10-07, one set aside for 7 s failed the three questions asked within them.
+        rounds = ALONE_WAITS if self._local is None else 0
+        while True:
+            for member in self._members:
+                now = self._clock()
+                if self._cooldowns.until(member.name, now) is not None:
+                    continue
+                answer = self._try(member, prompt, reply)
+                if answer is not None:
+                    self._seen.name = member.model
+                    return answer
+            if self._local is not None:
+                self._seen.name = self._local_name
+                return self._local.ask(prompt, reply)
+            wait = self._soonest()
+            if rounds > 0 and wait is not None and wait <= ALONE_WAIT:
+                rounds -= 1
+                self._sleep(wait)
                 continue
-            answer = self._try(member, prompt, reply)
-            if answer is not None:
-                self._seen.name = member.model
-                return answer
-        if self._local is None:
             raise NoModelLeft(
                 "every provider is set aside and the local model is not in the chain: "
                 + "; ".join(self._why())
             )
-        self._seen.name = self._local_name
-        return self._local.ask(prompt, reply)
+
+    def _soonest(self) -> float | None:
+        """Seconds until the first member set aside may be asked again; None if none will."""
+        now = self._clock()
+        untils = [self._cooldowns.until(member.name, now) for member in self._members]
+        waits = [(until - now).total_seconds() for until in untils if until is not None]
+        return min(waits) if waits else None
 
     def _try[Reply: BaseModel](
         self, member: ApiModel, prompt: str, reply: type[Reply]
