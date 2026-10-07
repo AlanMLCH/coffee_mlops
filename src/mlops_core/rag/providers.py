@@ -566,8 +566,15 @@ class Chain:
         self._cooldowns.set_aside(member.name, until, reason, since=now)
 
     def _why(self) -> list[str]:
+        """Why each member is set aside now - not a pause the file still holds that has
+        passed, nor another chain's member."""
+        now = self._clock()
         aside = self._cooldowns.report()["aside"]
-        return [f"{name} until {e['until']} ({e['reason']})" for name, e in aside.items()]
+        return [
+            f"{m.name} until {aside[m.name]['until']} ({aside[m.name]['reason']})"
+            for m in self._members
+            if self._cooldowns.until(m.name, now) is not None
+        ]
 
 
 # --- Replies kept -------------------------------------------------------------------------

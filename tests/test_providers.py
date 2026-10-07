@@ -370,15 +370,22 @@ def test_alone_a_model_set_aside_for_moments_is_waited_for_not_failed() -> None:
 
     cooldowns = Cooldowns()
     cooldowns.set_aside("groq", NOW + timedelta(seconds=7), "per minute", since=NOW)
-    chain = Chain([Member("groq", {"sql": "SELECT 1"})], None, cooldowns,  # type: ignore[list-item]
+    # Another chain's member, and a pause that has passed: never named as the reason.
+    cooldowns.set_aside("other", NOW + timedelta(days=1), "per day", since=NOW)
+    cooldowns.set_aside("lite", NOW - timedelta(hours=1), "busy", since=NOW - timedelta(hours=2))
+    lite = Member("lite", Unavailable("lite", "HTTP 503: high demand"))
+    chain = Chain([Member("groq", {"sql": "SELECT 1"}), lite], None, cooldowns,  # type: ignore[list-item]
                   clock=lambda: moment[0], sleep=sleep)  # fmt: skip
 
     assert chain.ask("q", Shape).sql == "SELECT 1" and moment[0] == NOW + timedelta(seconds=7)
 
     cooldowns.set_aside("groq", moment[0] + timedelta(hours=5), "per day", since=moment[0])
-    with pytest.raises(NoModelLeft, match="per day"):
+    cooldowns.set_aside("lite", moment[0] + timedelta(hours=5), "busy", since=moment[0])
+    with pytest.raises(NoModelLeft) as none:
         chain.ask("q", Shape)
     assert moment[0] == NOW + timedelta(seconds=7)
+    assert "groq until" in str(none.value) and "lite until" in str(none.value)
+    assert "other" not in str(none.value)
 
 
 def test_a_provider_down_or_wrong_is_set_aside_and_the_local_model_answers() -> None:
