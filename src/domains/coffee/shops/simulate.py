@@ -26,6 +26,7 @@ stop growing where the crowd does, which is what an efficiency model has to find
 """
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -88,7 +89,16 @@ def sales_anchors(sales: pl.DataFrame, resamples: int = 1000, seed: int = 7) -> 
     priced = frame.join(reference, on="coffee_name", how="inner").with_columns(
         (pl.col("money") / pl.col("reference")).alias("ratio")
     )
-    days = priced.group_by("date").agg(pl.len().alias("units"), pl.col("ratio").mean())
+    # A day's mean ratio is summed exactly (math.fsum): polars sums a group in the pieces
+    # its threads split it into, and the last bit moved between runs - and with it the
+    # elasticity and every byte of the export, which must not change while the sales do not.
+    days = (
+        priced.group_by("date")
+        .agg(pl.len().alias("units"), pl.col("ratio"))
+        .with_columns(
+            pl.col("ratio").map_elements(lambda r: math.fsum(r) / len(r), return_dtype=pl.Float64)
+        )
+    )
     calendar = pl.DataFrame({"date": pl.date_range(first, last, eager=True)})
     daily = (
         calendar.join(days, on="date", how="left")
