@@ -337,6 +337,27 @@ def test_a_short_limit_is_waited_out_once_and_a_long_one_moves_on() -> None:
     assert fallback.ask("q", Shape).sql == "LOCAL" and fallback.last == "local"
 
 
+def test_one_model_measured_alone_waits_out_longer_limits_a_few_times() -> None:
+    """With no local model to answer instead, a per-minute limit is waited out - up to two
+    minutes, three times - rather than failing the question it fell on."""
+    slept: list[float] = []
+    minute = OutOfQuota("groq", NOW + timedelta(seconds=45), "tokens per minute")
+    patient = Chain([Member("groq", minute, minute, {"sql": "SELECT 1"})], None,  # type: ignore[list-item]
+                    clock=lambda: NOW, sleep=slept.append)  # fmt: skip
+
+    assert patient.ask("q", Shape).sql == "SELECT 1" and slept == [45.0, 45.0]
+
+    daily = OutOfQuota("groq", NOW + timedelta(hours=6), "tokens per day")
+    spent = Chain([Member("groq", minute, minute, minute, minute)], None,  # type: ignore[list-item]
+                  clock=lambda: NOW, sleep=slept.append)  # fmt: skip
+    with pytest.raises(NoModelLeft):
+        spent.ask("q", Shape)
+    over = Chain([Member("groq", daily)], None, clock=lambda: NOW, sleep=slept.append)  # type: ignore[list-item]
+    with pytest.raises(NoModelLeft, match="tokens per day"):
+        over.ask("q", Shape)
+    assert slept == [45.0, 45.0, 45.0, 45.0, 45.0]
+
+
 def test_a_provider_down_or_wrong_is_set_aside_and_the_local_model_answers() -> None:
     wrong = ValidationError.from_exception_data("Shape", [])
     down = Member("down", Unavailable("down", "HTTP 503"))

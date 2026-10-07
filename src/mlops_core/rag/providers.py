@@ -73,6 +73,9 @@ logger = logging.getLogger(__name__)
 TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_WAIT = 20.0  # seconds a per-minute limit is waited out rather than moving on
+# With nothing to move on to: Groq's 8,000 tokens a minute against a ~5,000-token SQL
+# prompt asks for waits of 40 s and more.
+ALONE_WAIT, ALONE_WAITS = 120.0, 3
 FAILURE_PAUSE = timedelta(minutes=10)  # a provider down, or a reply of the wrong shape
 QUOTA_PAUSE = timedelta(minutes=1)  # out of quota, with nothing said about until when
 DAILY = re.compile(r"per.?day|daily|\bTPD\b|\bRPD\b|PerDay", re.IGNORECASE)
@@ -510,15 +513,18 @@ class Chain:
         self, member: ApiModel, prompt: str, reply: type[Reply]
     ) -> Reply | None:
         """The member's reply, or None and the member set aside. A limit that clears
-        within `MAX_WAIT` seconds is waited out once."""
-        waited = False
+        within `MAX_WAIT` seconds is waited out once - or, with no model to fall back on
+        (one model measured), within `ALONE_WAIT`, up to `ALONE_WAITS` times: a per-minute
+        limit there would otherwise fail the question it fell on."""
+        alone = self._local is None
+        patience, waits = (ALONE_WAIT, ALONE_WAITS) if alone else (MAX_WAIT, 1)
         while True:
             try:
                 answer = member.ask(prompt, reply)
             except OutOfQuota as out:
                 wait = (out.until - self._clock()).total_seconds()
-                if not waited and wait <= MAX_WAIT:
-                    waited = True
+                if waits > 0 and wait <= patience:
+                    waits -= 1
                     self._sleep(max(wait, 0.0))
                     continue
                 self._aside(member, out.until, out.reason)
