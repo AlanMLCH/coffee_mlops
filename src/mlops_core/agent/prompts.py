@@ -61,6 +61,13 @@ class NeedsReply(BaseModel):
     figures: bool  # asks for a figure computed from the tables' records
 
 
+class HoldsReply(BaseModel):
+    """Whether a query's result is what its question asked for, and if not, what it is."""
+
+    holds: bool
+    instead: str  # what the result holds in its place, when it does not
+
+
 class AnswerReply(BaseModel):
     text: str
     citations: list[str]  # the evidence the text cites: "sql", "prediction", "c2"
@@ -155,7 +162,7 @@ query returned.
 ROUTER = """You route questions about {subject} to the tool that can answer them.
 
 - data: figures, counts, rankings and comparisons read from the domain's tables (listed
-  below).
+  below).{studies}
 - prediction: what one of these models estimates for an item the question describes by
   its attributes - what such an item would score, cost or count, how likely it is to be
   something: what it would be, not what one was. The item may be like the ones the tables
@@ -184,7 +191,7 @@ NEEDS = """Two yes-or-no questions about a question on {subject}.
 - predicts: does the question describe an item by its attributes - one that may be like
   the items the tables list - and ask what one of these models estimates for it, rather
   than what the records say? A question about what a model already predicted for items
-  in the tables is not this. The models, each with what it is asked with:
+  in the tables is not this.{needs_studies} The models, each with what it is asked with:
 {models}
 - figures: does the question ask for a figure computed from the records in the tables -
   a count, an average, a total, a maximum, a share - or a ranking of them?
@@ -200,7 +207,7 @@ each written as a question of its own that reads without the rest, and give each
 the one tool that answers it:
 
 - data: figures, counts and rankings read from the records in the tables - a median, an
-  average, a maximum of what they list.
+  average, a maximum of what they list.{plan_studies}
 - prediction: what one of these models estimates for one item the question describes by
   its attributes, an item that may be like the ones the tables list. Keep every detail the
   question gives about the item. A question that describes no such item has no prediction
@@ -236,6 +243,26 @@ states, in the vocabulary its description gives - a place by its name, not an ad
 
 The fields:
 {fields}
+
+Question: {question}
+"""
+
+# Before a query's result is evidence, when the domain asks (`agent.check_result`): a
+# result can run, look like an answer and hold something else - the business's own
+# prices for its competitors', a count of tickets for a count of customers - and every
+# generator tried answered from it (2026-10-07).
+HOLDS = """A question about {subject}, and what a query of the tables returned for it.
+
+Does the result hold what the question asks for - the very quantity it asks about, of the
+very things it names? Or something else in its place: another quantity, other things, a
+wider or a narrower scope? A result that holds it, rounded or with more columns than
+asked, holds it. If it does not, say in a few words what it holds instead.
+
+The query:
+{sql}
+
+What it returned:
+{result}
 
 Question: {question}
 """
@@ -291,4 +318,5 @@ PROMPTS: dict[str, tuple[str, type[BaseModel] | None]] = {
     "choose-model": (CHOOSE_MODEL, None),
     "describe-item": (DESCRIBE_ITEM, None),
     "answer": (ANSWER + FIX, AnswerReply),
+    "holds": (HOLDS, HoldsReply),
 }

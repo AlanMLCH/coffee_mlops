@@ -36,8 +36,11 @@ def routing_context(
         "tables": "\n".join(headings),
         "models": "\n".join(f"  - {m.name}: {m.description}" for m in models),
         "topics": "\n".join(f"  - {name}: {t.description}" for name, t in topics.items()),
+        "studies": "",  # the studies closest to a question, set per question when shown
     }
 
 
 def route(generator: Generator, context: dict[str, str], question: str) -> Route:
-    return generator.ask(ROUTER.format(question=question, **context), RouteReply).route
+    # No studies unless the context shows some: a context built before they existed reads.
+    shown = {"studies": ""} | dict(context)
+    return generator.ask(ROUTER.format(question=question, **shown), RouteReply).route

@@ -1,0 +1,13 @@
+{"id": "h2-data-01", "question": "If I cut every price by 10%, how many tickets would a day bring?", "sql": "SELECT tickets_per_day FROM analysis.price_scenarios WHERE change_pct = -10"}
+{"id": "h2-data-02", "question": "Would raising all my prices 20% change my gross profit a day, and by what percent?", "sql": "SELECT versus_now_pct FROM analysis.price_scenarios WHERE change_pct = 20"}
+{"id": "h2-data-03", "question": "In my quiet hours, by what percent do tickets change for a 1% change in prices?", "sql": "SELECT elasticity FROM analysis.price_response WHERE scope = 'quiet hours'"}
+{"id": "h2-data-04", "question": "Which products should I keep an eye on because their margin could fall below target in the coming months?", "sql": "SELECT product FROM analysis.price_alerts WHERE status = 'watch'"}
+{"id": "h2-data-05", "question": "At the top of its range, by what percent could the price of robustas change a year from now?", "sql": "SELECT change_high_pct FROM coffee.analysis.price_outlook WHERE indicator = 'robustas' AND horizon_months = 12"}
+{"id": "h2-data-06", "question": "What would a day's revenue be if I raised every price by 15%?", "sql": "SELECT revenue_per_day FROM analysis.price_scenarios WHERE change_pct = 15"}
+{"id": "h2-data-07", "question": "Against my first month, what does an hour of staff cost now, as an index?", "sql": "SELECT wage_index FROM analysis.inflation_impact ORDER BY month DESC LIMIT 1"}
+{"id": "h2-data-08", "question": "Which products sell well but earn a thin margin?", "sql": "SELECT product FROM analysis.menu_engineering WHERE class = 'plowhorse'"}
+{"id": "h2-data-09", "question": "How many tickets did I ring up on Sundays in August 2026?", "sql": "SELECT count(DISTINCT ticket_id) AS tickets FROM clean.sales WHERE weekday = 7 AND date >= DATE '2026-08-01' AND date < DATE '2026-09-01'"}
+{"id": "h2-data-10", "question": "What share of my revenue, in percent, comes from pastries?", "sql": "SELECT 100.0 * sum(line_total_mxn) FILTER (WHERE category = 'pastry') / sum(line_total_mxn) AS pastry_pct FROM clean.sales"}
+{"id": "h2-data-11", "question": "How many orders took more than ten minutes to be ready in July 2026?", "sql": "SELECT count(*) AS orders FROM clean.orders WHERE minutes > 10 AND month = '2026-07'"}
+{"id": "h2-data-12", "question": "What did I spend on milk in August 2026?", "sql": "SELECT sum(cost_mxn) AS milk_mxn FROM clean.purchases WHERE ingredient = 'milk' AND date >= DATE '2026-08-01' AND date < DATE '2026-09-01'"}
+{"id": "h2-data-13", "question": "How many coffee shops are within 1,000 metres of my shop?", "sql": "SELECT shop FROM analysis.neighbourhood WHERE measure = 'coffee shops within 1000 m'"}

@@ -34,15 +34,18 @@ from mlops_core.agent.model_cards import ModelFinder
 from mlops_core.agent.prompts import (
     ANSWER,
     FIX,
+    HOLDS,
     NEEDS,
     PLAN,
     PLAN_AGAIN,
     AnswerReply,
+    HoldsReply,
     NeedsReply,
     PlanReply,
     Route,
 )
 from mlops_core.agent.routing import route
+from mlops_core.agent.study_cards import NO_STUDIES, StudyFinder
 from mlops_core.agent.text_to_sql import Generator, SqlAnswer, write_sql
 from mlops_core.agent.tools import PredictionAnswer, cite, described, predict
 from mlops_core.agent.verify import cited_ids, problems
@@ -59,6 +62,7 @@ MAX_ANSWERS = 2  # the first answer and one rewrite
 # what gets through is near enough to the domain for the answer to say it does not answer.
 MIN_PASSAGE_SCORE = 0.45
 NO_ANSWER = "I found no answer to this in the tables, the models or the documents."
+OFF_TARGET = "the query's result is not what the question asks: it holds "
 
 Passages = Callable[[str, int], list[dict[str, Any]]]
 
@@ -141,6 +145,12 @@ class Agent:
     # The served models closest to a question, each with its inputs; unset, every model
     # the domain offers, as `routing` lists them.
     models: ModelFinder | None = None
+    # The studies closest to a question, shown to the steps that choose a tool; unset,
+    # none (`agent.study_cards`).
+    studies: StudyFinder | None = None
+    # Whether a query's result is checked against the question before it is evidence
+    # (`agent.check_result`).
+    check_result: bool = False
     # Whether the domain has documents to search; a business that brings only its tables
     # has none, and a question routed to them is asked of the tables.
     library: bool = True
@@ -197,20 +207,27 @@ class Agent:
                 if cards is not None
                 else self.routing["models"]
             )
-            chosen = route(self.generator, self.routing | {"models": models}, question)
-            needs = self._needs(question, models)
-        taken, plan = self._planned(question, chosen, needs, models)
-        shown = [card.name for card in cards] if cards is not None else None
-        return {"route": taken, "plan": plan, "models": shown}
+            shown = self.studies.blocks(question) if self.studies is not None else NO_STUDIES
+            context = self.routing | {"models": models, "studies": shown["studies"]}
+            chosen = route(self.generator, context, question)
+            needs = self._needs(question, models, shown["needs_studies"])
+        taken, plan = self._planned(question, chosen, needs, models, shown["plan_studies"])
+        names = [card.name for card in cards] if cards is not None else None
+        return {"route": taken, "plan": plan, "models": names}
 
-    def _needs(self, question: str, models: str) -> NeedsReply:
+    def _needs(self, question: str, models: str, studies: str = "") -> NeedsReply:
         """A second opinion, as two yes-or-no questions: one route of four is the call the
         small model got wrong most (a bag it describes sent to the tables)."""
-        prompt = NEEDS.format(subject=self.routing["subject"], models=models, question=question)
+        prompt = NEEDS.format(
+            subject=self.routing["subject"],
+            models=models,
+            question=question,
+            needs_studies=studies,
+        )
         return self.generator.ask(prompt, NeedsReply)
 
     def _planned(
-        self, question: str, chosen: Route, needs: NeedsReply, models: str
+        self, question: str, chosen: Route, needs: NeedsReply, models: str, studies: str = ""
     ) -> tuple[Route, dict[str, str | None]]:
         """The route's tools, with what the second opinion adds: a prediction for an item
         the question describes, the tables for a figure computed from their records. One
@@ -218,7 +235,10 @@ class Agent:
         the tables - its query finds nothing and the answer is left to explain why.
         Otherwise a tool is only ever added, never taken away - but the documents, in a
         domain with none: what was meant for them goes to the tables."""
-        if chosen == "data" and needs.predicts and not needs.figures:
+        # Not when the router was shown the studies: told that a what-if a study holds is
+        # data, it said so, and the second opinion - which a small model reads less well -
+        # turned five such answers into predictions (2026-10-07). It still adds one.
+        if chosen == "data" and needs.predicts and not needs.figures and self.studies is None:
             chosen = "prediction"
         if chosen == "knowledge" and not self.library:
             # Seen 2026-10-07: a business's agent, which has no library, sent a question
@@ -229,7 +249,10 @@ class Agent:
         else:
             with _span("plan"):
                 prompt = PLAN.format(
-                    subject=self.routing["subject"], models=models, question=question
+                    subject=self.routing["subject"],
+                    models=models,
+                    question=question,
+                    plan_studies=studies,
                 )
                 reply = self.generator.ask(prompt, PlanReply)
                 if reply.repeats():  # handed whole to two tools: asked once more
@@ -261,7 +284,25 @@ class Agent:
             answer = write_sql(
                 self.generator, self.con, schema, part, guards=self.guards, voters=self.voters
             )
+            if self.check_result and answer.result is not None and not answer.empty:
+                instead = self._holds_instead(part, answer)
+                if instead is not None:
+                    answer = SqlAnswer(answer.sql, None, OFF_TARGET + instead, answer.attempts)
             return {"sql": answer}
+
+    def _holds_instead(self, question: str, answer: SqlAnswer) -> str | None:
+        """What a query's result holds in place of what `question` asks; None if it holds
+        what was asked."""
+        assert answer.result is not None
+        prompt = HOLDS.format(
+            subject=self.routing["subject"],
+            question=question,
+            sql=answer.sql,
+            result=answer.result.as_text(),
+        )
+        with _span("holds"):
+            reply = self.generator.ask(prompt, HoldsReply)
+        return None if reply.holds else (reply.instead.strip() or "something else")
 
     def _prediction(self, state: State) -> State:
         part = state["plan"].get("prediction")
@@ -411,7 +452,9 @@ def _why(state: State) -> list[str]:
     """What each tool that ran came back with, when none of it was evidence."""
     reasons = []
     sql, prediction = state["sql"], state["prediction"]
-    if sql is not None:
+    if sql is not None and sql.error is not None and sql.error.startswith(OFF_TARGET):
+        reasons.append(f"The tables: {sql.error}.")
+    elif sql is not None:
         reasons.append(
             f"The tables: the query failed ({sql.error})."
             if sql.result is None

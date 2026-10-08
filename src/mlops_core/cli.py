@@ -983,12 +983,13 @@ def agent_session(
     already point at MLflow: the prompts are registered there. Public: the explorer app
     asks this same agent."""
     from mlops_core.agent.benchmark import GENERATOR_OPTIONS
-    from mlops_core.agent.dictionary import domain_dictionary, schema_context, shown
+    from mlops_core.agent.dictionary import domain_dictionary, offered, schema_context, shown
     from mlops_core.agent.graph import AGENT_GENERATOR, Agent
     from mlops_core.agent.model_cards import ModelFinder, model_cards, served_models
     from mlops_core.agent.registry import register_prompts
     from mlops_core.agent.routing import routing_context
     from mlops_core.agent.sql import read_only, views
+    from mlops_core.agent.study_cards import StudyFinder, study_cards
     from mlops_core.agent.text_to_sql import VOTE_SEED, Generator
     from mlops_core.rag.llm import LocalModel, ollama_client
     from mlops_core.rag.vectors import EMBEDDING_MODEL, QUERY_OPTIONS
@@ -1017,6 +1018,14 @@ def agent_session(
         # The models the API serves, each a card: a question is shown the closest.
         served = served_models(adapter, api)
         finder = ModelFinder(model_cards(adapter, served), embedder.embed)
+        # The studies, each a card too, when the domain shows them.
+        studies = (
+            StudyFinder(
+                study_cards(offered(dictionary, names)), embedder.embed, config.agent.study_cards
+            )
+            if config.agent.study_cards
+            else None
+        )
         # The votes are the local model's, sampled: whichever model answers first.
         voters: list[Generator] = [
             LocalModel(http, AGENT_GENERATOR,
@@ -1040,6 +1049,8 @@ def agent_session(
                 voters,
                 finder,
                 library=config.corpus is not None,
+                studies=studies,
+                check_result=config.agent.check_result,
             ),
             identity,
         )

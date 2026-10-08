@@ -34,6 +34,7 @@ from mlops_core.agent.graph import Agent
 from mlops_core.agent.prompts import PROMPTS
 from mlops_core.agent.registry import PREFIX, register_prompts
 from mlops_core.agent.sql import QueryResult, read_only, views
+from mlops_core.agent.study_cards import StudyCard, StudyFinder
 from mlops_core.agent.text_to_sql import (
     NO_TABLE,
     PROSE,
@@ -130,6 +131,8 @@ def agent(
     responder: Callable[[httpx.Request], httpx.Response] | None = None,
     voters: Sequence[Scripted] = (),
     library: bool = True,
+    studies: StudyFinder | None = None,
+    check_result: bool = False,
 ) -> Agent:
     return Agent(
         generator,
@@ -143,6 +146,8 @@ def agent(
         {"answer": "prompts:/mlops-agent-answer/1"},
         voters=list(voters),
         library=library,
+        studies=studies,
+        check_result=check_result,
     )
 
 
@@ -884,6 +889,81 @@ def test_a_domain_without_documents_sends_what_was_meant_for_them_to_the_tables(
     assert second.sql is not None and "Why does it grow?" in split.asked("SqlReply")[0]
     assert third.sql is not None and "Which state grows most?" in both.asked("SqlReply")[0]
     assert second.passages == [] and third.passages == []
+
+
+def test_the_closest_studies_are_shown_to_the_router_the_second_opinion_and_the_plan(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """An answer already computed is in front of every step that chooses a tool."""
+    card = StudyCard("analysis.harvests", "what a harvest would bring at every price", "")
+    studies = StudyFinder([card], lambda texts: np.ones((len(texts), 2)), shown=1)
+    generator = Scripted(
+        RouteReply=lambda p: {"route": "mixed"},
+        PlanReply=lambda p: {"parts": [{"question": "Which state?", "tool": "data"}]},
+        SqlReply=lambda p: {"sql": TOP},
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+
+    agent(generator, session, studies=studies).ask("What would a harvest bring?")
+
+    listed = "analysis.harvests: what a harvest would bring at every price"
+    for shape in ("RouteReply", "NeedsReply", "PlanReply"):
+        assert listed in generator.asked(shape)[0], shape
+
+    # Shown the studies, a router's "data" stands: the second opinion adds a prediction,
+    # and no longer takes the tables' place.
+    what_if = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        NeedsReply=lambda p: {"predicts": True, "figures": False},
+        SqlReply=lambda p: {"sql": TOP},
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya"},
+        AnswerReply=lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    )
+    both = agent(what_if, session, studies=studies).ask("What would a harvest bring?")
+    assert both.route == "mixed" and both.sql is not None and both.prediction is not None
+
+
+def test_a_result_that_holds_something_else_is_no_answer(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Asked for one thing, the tables returned another: not evidence, and the reply says
+    what they hold. A result that holds what was asked is kept; and a mixed question keeps
+    its prediction when its query misses."""
+    shapes: dict[str, Any] = {
+        "SqlReply": lambda p: {"sql": TOP},
+        "AnswerReply": lambda p: {"text": "Chiapas [sql].", "citations": ["sql"]},
+    }
+    elsewhere = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        HoldsReply=lambda p: {"holds": False, "instead": "the states' own harvests"},
+        **shapes,
+    )
+    kept = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        HoldsReply=lambda p: {"holds": True, "instead": ""},
+        **shapes,
+    )
+    mixed = Scripted(
+        RouteReply=lambda p: {"route": "data"},
+        NeedsReply=lambda p: {"predicts": True, "figures": True},
+        HoldsReply=lambda p: {"holds": False, "instead": " "},
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya"},
+        SqlReply=lambda p: {"sql": TOP},
+        AnswerReply=lambda p: {"text": "84.4 [prediction].", "citations": ["prediction"]},
+    )
+
+    refused = agent(elsewhere, session, check_result=True).ask("What do importers pay?")
+    answered = agent(kept, session, check_result=True).ask("Which state grows most?")
+    partly = agent(mixed, session, check_result=True).ask("What would a Kenyan lot score?")
+
+    assert not refused.answered and refused.sql is not None and refused.sql.result is None
+    assert "it holds the states' own harvests." in refused.text
+    assert "Question: What do importers pay?" in elsewhere.asked("HoldsReply")[0]
+    assert answered.answered and answered.sql is not None and answered.sql.result is not None
+    assert partly.answered and partly.prediction is not None
+    assert "it holds something else" in mixed.asked("AnswerReply")[0]
 
 
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:

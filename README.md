@@ -41,10 +41,14 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   the model a question needs the way it finds a passage - by retrieval over a card per
   served model, its description and the inputs its request takes - and is shown the two
   closest, not every model; a key the request's schema gives the form of is read off the
-  question. Every
+  question. A domain's studies - answers already computed, what a price change would do,
+  where a price may go - are found the same way and shown to the steps that choose a
+  tool, so a question about what would happen reads the study instead of asking a model
+  for one hour; and a query's result is checked against the question before it counts
+  as evidence (a business's own prices are no answer to what its competitors charge). Every
   figure in an answer is checked against its evidence before it is shown, and when the
   tools find nothing it says so instead of writing an answer. Free tiers of hosted models
-  (Gemini, Groq, Mistral, OpenRouter) can answer first, each set aside when its quota runs
+  (Gemini, Groq, OpenRouter) can answer first, each set aside when its quota runs
   out; the local model is always the last, so the agent never runs dry.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
   Desktop, Claude Code or an IDE (the agent's tools with its own checks, the explorer's

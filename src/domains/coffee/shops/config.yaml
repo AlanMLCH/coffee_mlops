@@ -148,6 +148,14 @@ studies:
 # my block compare", which the neighbourhood study answers. They stay queryable, and MCP
 # offers them.
 agent:
+  # The three studies closest to a question are shown to the steps that choose a tool:
+  # every generator tried sent "what would a 10% rise do to a day's gross profit" to the
+  # demand model (one hour at a time) instead of the price scenarios. Three, of eleven: a
+  # question about prices often sits between two studies.
+  study_cards: 3
+  # A query's result is checked against its question before it is evidence: asked what
+  # other coffee shops charge, every generator answered with this shop's own prices.
+  check_result: true
   hidden_tables:
     - coffee.clean.census_zones
     - coffee.predictions.zones_predictions

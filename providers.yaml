@@ -38,8 +38,9 @@ providers:
     base_url: https://api.mistral.ai/v1
     model: mistral-small-latest
     key: MISTRAL_API_KEY
+    paid: true
     note: >-
-      Free mode, monthly limits in the admin panel; the free tier may train on the prompts.
+      Paid: no free mode as of 2026-10-07. A monthly quota is read from its refusal.
 
   - name: openrouter
     base_url: https://openrouter.ai/api/v1

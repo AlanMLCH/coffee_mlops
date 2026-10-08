@@ -838,6 +838,15 @@ class AgentConfig(BaseModel):
     # prediction questions to the tables that three had routed right). The API, the MCP
     # server and the explorer still serve them.
     hidden_models: list[str] = []
+    # How many studies - the `analysis` tables offered, the domain's and its parent's - the
+    # steps that choose a tool are shown, the closest to each question (`study_cards`):
+    # answers already computed, which a question about what would happen otherwise sends
+    # to a model. 0: none, and they read the list of tables alone, as before.
+    study_cards: int = Field(default=0, ge=0)
+    # Whether a query's result is checked against what its question asked before it is
+    # evidence: a result that holds something else in its place (the business's own prices
+    # for a competitor's) is no answer. One more call for each question the tables answer.
+    check_result: bool = False
 
     def shown_models(self, models: list[ModelConfig]) -> list[ModelConfig]:
         """The domain's models the local agent may route to and ask."""
