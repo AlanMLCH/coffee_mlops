@@ -28,6 +28,7 @@ the same questions): a change to a prompt or a tool is judged as a model is.
 import json
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -114,11 +115,15 @@ def run_evaluation(
     ask: Callable[[str], Reply],
     truths: Sequence[Truth],
     con: duckdb.DuckDBPyConnection,
-    trace_id: Callable[[], str | None] = mlflow.get_last_active_trace_id,
+    trace_id: Callable[[], str | None] = lambda: mlflow.get_last_active_trace_id(thread_local=True),
+    workers: int = 1,
 ) -> pl.DataFrame:
-    """Ask every question and check every answer: one row per question."""
-    rows = []
-    for truth in truths:
+    """Ask every question and check every answer: one row per question, in the cases'
+    order. With `workers` above one, that many questions are asked at once - for hosted
+    models, whose calls wait on the network; a local model still takes one call at a
+    time (`rag.llm.LOCAL_TURN`). Each question's trace is the one its own thread left."""
+
+    def one(truth: Truth) -> dict[str, Any]:
         start = time.perf_counter()
         try:
             reply = ask(truth.case.question)
@@ -126,7 +131,13 @@ def run_evaluation(
             reply = Reply(truth.case.question, truth.case.route, "", [], None, None, [],
                           [f"The agent failed: {type(failed).__name__}: {failed}"])  # fmt: skip
         seconds = time.perf_counter() - start
-        rows.append(check(truth, reply, con) | {"seconds": seconds, "trace_id": trace_id()})
+        return check(truth, reply, con) | {"seconds": seconds, "trace_id": trace_id()}
+
+    if workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            rows = list(pool.map(one, truths))
+    else:
+        rows = [one(truth) for truth in truths]
     return pl.DataFrame(rows, schema=SCHEMA)
 
 

@@ -6,9 +6,16 @@ against it (Ollama 0.34.2). The schema comes from a pydantic model and the reply
 validated against that same model, so a reply that parses is a reply the code can use.
 
 Local and keyless: no request carries a secret, so no secret can reach a log.
+
+One request at a time, whoever asks: every model here shares one GPU (6 GB on the laptop
+this runs on). Asked several things at once, Ollama queues them or splits the card -
+and a 4B model's 5,000-token context fits once, not three times; and requests batched
+together are computed in another order, so the same prompt can come back otherwise. So
+while hosted models answer several questions at once, the local one takes its turns.
 """
 
 import logging
+import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 
@@ -23,6 +30,8 @@ logger = logging.getLogger(__name__)
 TIMEOUT = httpx.Timeout(300.0, connect=5.0)
 # Texts per embedding request: 32 chunks took 1.4 s on the laptop's GPU (2026-09-24).
 EMBEDDING_BATCH = 32
+# Every request to a local model holds it: one at a time, from any thread.
+LOCAL_TURN = threading.Lock()
 
 
 @contextmanager
@@ -66,7 +75,8 @@ class LocalModel:
                 # The context the model is loaded with: without it Ollama loads the
                 # default, and a query-sized model is the one that fits beside another.
                 body["options"] = self._options
-            response = self._client.post("/api/embed", json=body)
+            with LOCAL_TURN:
+                response = self._client.post("/api/embed", json=body)
             response.raise_for_status()
             vectors.extend(response.json()["embeddings"])
         return np.array(vectors, dtype=np.float32)
@@ -82,18 +92,17 @@ class LocalModel:
             return self._ask(prompt, reply)
 
     def _ask[Reply: BaseModel](self, prompt: str, reply: type[Reply]) -> Reply:
-        response = self._client.post(
-            "/api/chat",
-            json={
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "format": reply.model_json_schema(),
-                "stream": False,
-                # A reasoning model would otherwise think aloud first; the schema already
-                # says what the answer must be, and the thinking would only cost time.
-                "think": False,
-                "options": self._options,
-            },
-        )
+        body = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "format": reply.model_json_schema(),
+            "stream": False,
+            # A reasoning model would otherwise think aloud first; the schema already
+            # says what the answer must be, and the thinking would only cost time.
+            "think": False,
+            "options": self._options,
+        }
+        with LOCAL_TURN:
+            response = self._client.post("/api/chat", json=body)
         response.raise_for_status()
         return reply.model_validate_json(response.json()["message"]["content"])

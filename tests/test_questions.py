@@ -7,7 +7,10 @@ which passages are asked about and which excerpts can be labels, not what a mode
 
 import json
 import logging
+import threading
+import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -337,6 +340,37 @@ def test_a_reply_cut_short_is_asked_for_once_more(caplog: pytest.LogCaptureFixtu
         with pytest.raises(ValidationError):  # cut twice: an error, said
             model.ask("Flag?", Flag)
     assert "gave a malformed Flag; asking again" in caplog.text
+
+
+def test_the_local_model_takes_one_request_at_a_time_from_any_thread() -> None:
+    """One GPU: replies and embeddings asked from several threads at once reach Ollama one
+    after another."""
+    inside, most = [0], [0]
+    count = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        with count:
+            inside[0] += 1
+            most[0] = max(most[0], inside[0])
+        time.sleep(0.02)
+        with count:
+            inside[0] -= 1
+        if request.url.path == "/api/embed":
+            return httpx.Response(200, json={"embeddings": [[1.0, 0.0]]})
+        return httpx.Response(200, json={"message": {"content": json.dumps({"flag": True})}})
+
+    class Flag(BaseModel):
+        flag: bool
+
+    with ollama_client("http://ollama.test", httpx.MockTransport(handler)) as client:
+        model = LocalModel(client, DRAFTING_MODEL, OPTIONS)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            calls = [pool.submit(model.ask, "Flag?", Flag) for _ in range(4)]
+            calls += [pool.submit(model.embed, ["a text"]) for _ in range(2)]
+            for call in calls:
+                call.result()
+
+    assert most[0] == 1
 
 
 def test_a_model_ollama_does_not_have_is_named_with_how_to_get_it() -> None:

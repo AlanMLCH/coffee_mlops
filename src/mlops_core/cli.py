@@ -754,6 +754,14 @@ def evaluate_agent(
             "a provider's name from providers.yaml, or chain (the whole chain)"
         ),
     ] = "local",
+    workers: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            help="Questions asked at once when hosted models answer; the local model "
+            "alone is asked one at a time, and takes one call at a time in a chain",
+        ),
+    ] = 4,
 ) -> None:
     """Ask the agent every routing question and check each answer end to end.
 
@@ -785,6 +793,7 @@ def evaluate_agent(
             versus,
         )
         from mlops_core.agent.prompts import PROMPTS, version
+        from mlops_core.rag.providers import LOCAL
 
     adapter = _adapter(domain)
     config = adapter.config
@@ -811,7 +820,10 @@ def evaluate_agent(
         agent_session(adapter, settings, only, cache=False) as (agent, identity),
         mlflow.start_run() as run,
     ):
-        answers = run_evaluation(agent.ask, truths, agent.con)
+        # Hosted models wait on the network: several questions at once. The local model
+        # alone, one at a time - it takes its calls one at a time anyway (`LOCAL_TURN`).
+        at_once = 1 if generator == LOCAL else workers
+        answers = run_evaluation(agent.ask, truths, agent.con, workers=at_once)
         table, previous = record(answers, _data_dir(config), cases=cases)
         comparison = versus(previous, answers) if previous is not None else None
         version_ = code_version()
@@ -821,6 +833,7 @@ def evaluate_agent(
             comparison,
             {
                 "generator": identity,
+                "questions_at_once": at_once,
                 **{f"option_{k}": v for k, v in GENERATOR_OPTIONS.items()},
                 **{
                     f"prompt_{name}": version(template, reply) if reply else "domain"

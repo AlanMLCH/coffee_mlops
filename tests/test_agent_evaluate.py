@@ -4,6 +4,8 @@ correct, and how two runs are compared.
 Replies are built by hand: what is under test is the judging, not the agent.
 """
 
+import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -286,6 +288,28 @@ def test_every_question_is_asked_timed_and_traced(session: duckdb.DuckDBPyConnec
     assert table.schema == pl.Schema(SCHEMA)
     assert table["sql_ok"].to_list() == [True, None]
     assert table["trace_id"].to_list() == ["tr-1", "tr-1"]
+
+
+def test_questions_asked_at_once_come_back_in_order_each_with_its_own_trace(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Hosted models answer several questions at once: the rows keep the cases' order, and
+    each question's trace is the one its own thread left, not the last one anyone did."""
+    truths = [Truth(case(f"data-0{n}", "data"), TOP_STATE, ()) for n in range(1, 5)]
+    threads: set[int] = set()
+    left = threading.local()
+
+    def ask(text: str) -> Reply:
+        threads.add(threading.get_ident())
+        left.trace = f"tr-{text}"
+        time.sleep(0.05 if text == "data-01?" else 0.01)  # the first comes back last
+        return reply(rows=[("Chiapas",)])
+
+    table = run_evaluation(ask, truths, session, trace_id=lambda: left.trace, workers=3)
+
+    assert table["case_id"].to_list() == ["data-01", "data-02", "data-03", "data-04"]
+    assert table["trace_id"].to_list() == [f"tr-data-0{n}?" for n in range(1, 5)]
+    assert len(threads) > 1 and table["sql_ok"].all()
 
 
 def test_a_question_that_breaks_the_agent_is_a_wrong_answer_not_a_lost_run(
