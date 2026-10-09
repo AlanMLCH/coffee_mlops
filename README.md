@@ -80,7 +80,8 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
 | The agent, 25 held-out questions written before the fixes of 29 September | **80%** correct, 92% verified | 52% before them; 84% when shown three models, one mixed question now sent to a model alone |
 | The agent, 14 questions about the newer models | **86%** correct, routing 93% | 0% when listed every model or none of them; optimistic - written and fixed against |
 | The agent, 21 questions on the studies and the three provisional models | **43%** correct, routing 95% | 10% before the studies had dictionary sections: it was shown none of them |
-| A coffee shop's agent, 28 questions (Café de Barrio) | **36%** correct, routing 82% | every prediction right; its SQL right on 20%: the next piece of work |
+| A coffee shop's agent, 28 questions (Café de Barrio) | **86%** correct on the hosted chain, 61% on the local 4B | 36% before it was shown its studies and its results were checked against the question; six references corrected that asked for a column their question did not; partly optimistic: the check's last fix came from this set, and the local model answered 43 of the chain's 150 calls. With planning (now on), 46% on the 4B; the hosted run is next |
+| A coffee shop's agent planning its questions, 18 needing several tools, one or none | **83%** correct, 100% verified (Gemini Flash-Lite) | routing: 12 of 16 measured; a prediction that needs what the tables found, 3 of 4 against none; 6 of 6 questions about something else declined before any tool ran; on the 4B, 50% against 61% |
 
 The numbers come with their limits, stated where they are measured: the cup-score error
 is mostly a level shift (2023 lots were graded 1.5 points higher), the price model learns
@@ -233,7 +234,8 @@ owner:
 - where its hands fall short;
 - its corner of the city against the rest.
 
-It also gets a served model of how long an order takes for a given crowd and staffing.
+It also gets two served models: how many tickets an hour brings, and how long an order
+takes for a given crowd and staffing.
 Learning a simulator's rules proves the pipeline, not a market, and the shops say so; what
 it does prove is that the estimators recover the answers the simulator was given.
 
@@ -292,6 +294,20 @@ make explore                  # the map, the agent, the findings, the models: ht
 make status                   # what is ready, and the command for what is not
 ```
 
+A coffee shop, once coffee's own tables and studies are built - its simulated export, its
+models and studies, then its explorer, whose agent asks the shop's own API (Café de
+Barrio's on port 8001, Café de Paso's on 8002):
+
+```bash
+make extract DOMAIN=coffee/cafe_de_barrio && make clean-layer DOMAIN=coffee/cafe_de_barrio
+make ml DOMAIN=coffee/cafe_de_barrio && make analysis DOMAIN=coffee/cafe_de_barrio
+MLOPS_API_URL=http://127.0.0.1:8001 make explore DOMAIN=coffee/cafe_de_barrio PORT=8503
+
+# its agent, measured: hosted models four questions at once, the local one in turn
+MLOPS_API_URL=http://127.0.0.1:8001 uv run mlops agent evaluate \
+  --domain coffee/cafe_de_barrio --cases plan --generator chain
+```
+
 A source whose host is down is named and the rest are stored: run `make extract` again
 later, and only what is missing is fetched. Everything runs by hand: `make extract` again
 keeps the history of the sources that only show the present (the ICO's page shows the
@@ -331,7 +347,11 @@ current month; run it before a month ends). `make help` lists every target.
 
 The coffee domain closes at **v1.1.1**: 25 sources, the household survey, Cup of
 Excellence, prices in real pesos, the map block by block, nine models of four kinds and
-the explorer's showcase. Next, v1.2 measures larger hosted models for the agent. A second domain (video games) is the test of whether the framework is reusable,
+the explorer's showcase. **v1.2 is under way**: free hosted models (Gemini, Groq,
+OpenRouter) answer first and the local model last, and the coffee shops' agent plans each
+question, reads its studies and checks its results against the question. Next: planning
+measured on the hosted models across every set, and the coffee domain's agent moved to
+the same design. A second domain (video games) is the test of whether the framework is reusable,
 and its cost in new lines will be published here.
 
 > **The CQI data is not current.** Both public snapshots of the Coffee Quality
