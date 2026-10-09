@@ -960,7 +960,9 @@ def test_a_result_that_holds_something_else_is_no_answer(
 
     assert not refused.answered and refused.sql is not None and refused.sql.result is None
     assert "it holds the states' own harvests." in refused.text
-    assert "Question: What do importers pay?" in elsewhere.asked("HoldsReply")[0]
+    checked = elsewhere.asked("HoldsReply")[0]
+    assert "Question: What do importers pay?" in checked
+    assert "## `clean.mexico_production` — coffee grown" in checked  # the table it read
     assert answered.answered and answered.sql is not None and answered.sql.result is not None
     assert partly.answered and partly.prediction is not None
     assert "it holds something else" in mixed.asked("AnswerReply")[0]

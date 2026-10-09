@@ -250,13 +250,22 @@ Question: {question}
 # Before a query's result is evidence, when the domain asks (`agent.check_result`): a
 # result can run, look like an answer and hold something else - the business's own
 # prices for its competitors', a count of tickets for a count of customers - and every
-# generator tried answered from it (2026-10-07).
-HOLDS = """A question about {subject}, and what a query of the tables returned for it.
+# generator tried answered from it (2026-10-07). Shown no description of the tables, the
+# check took a count of tickets named `customers` for customers, and turned down three
+# values to compare because they were not compared yet (2026-10-08): it reads the
+# sections of the tables the query read, and the two rules below.
+HOLDS = """A question about {subject}, a query of the tables written for it, and what the
+query returned. The tables it read are described below.
 
 Does the result hold what the question asks for - the very quantity it asks about, of the
 very things it names? Or something else in its place: another quantity, other things, a
-wider or a narrower scope? A result that holds it, rounded or with more columns than
-asked, holds it. If it does not, say in a few words what it holds instead.
+wider or a narrower scope? Judge each column by what the query computes it from, as the
+tables' descriptions say, never by the name the query gives it. A result that holds the
+figures the answer needs holds it, even when the answer must still compare, round or
+rank them, or when it has more columns than asked. If it does not, say in a few words
+what it holds instead.
+
+{tables}
 
 The query:
 {sql}

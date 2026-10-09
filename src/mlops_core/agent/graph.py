@@ -30,6 +30,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
 from mlops_core.adapter import DomainAdapter
+from mlops_core.agent.dictionary import reads_any, table_sections
 from mlops_core.agent.model_cards import ModelFinder
 from mlops_core.agent.prompts import (
     ANSWER,
@@ -294,8 +295,14 @@ class Agent:
         """What a query's result holds in place of what `question` asks; None if it holds
         what was asked."""
         assert answer.result is not None
+        read = [
+            section
+            for view, section in table_sections(self.schema).items()
+            if reads_any(answer.sql, [view])
+        ]
         prompt = HOLDS.format(
             subject=self.routing["subject"],
+            tables="\n\n".join(read),
             question=question,
             sql=answer.sql,
             result=answer.result.as_text(),
