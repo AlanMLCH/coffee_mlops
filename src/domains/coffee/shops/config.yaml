@@ -156,6 +156,14 @@ agent:
   # A query's result is checked against its question before it is evidence: asked what
   # other coffee shops charge, every generator answered with this shop's own prices.
   check_result: true
+  # Each question is planned before any tool runs - about the shop or not, and as steps
+  # with the steps each needs - instead of routed: a mixed question the router called
+  # `data` was never split, and its prediction never asked with what the tables found.
+  planner: true
+  # What the agent answers about, as its prompts say it; {name} is the shop's own.
+  subject: >-
+    the coffee shop {name} - its sales, menu and prices, costs, staff and waits, and its
+    corner of Mexico City, with the coffee market it buys in
   hidden_tables:
     - coffee.clean.census_zones
     - coffee.predictions.zones_predictions

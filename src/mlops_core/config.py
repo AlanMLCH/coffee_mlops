@@ -847,6 +847,12 @@ class AgentConfig(BaseModel):
     # evidence: a result that holds something else in its place (the business's own prices
     # for a competitor's) is no answer. One more call for each question the tables answer.
     check_result: bool = False
+    # Whether a question is planned before any tool runs - in scope or not, and as steps,
+    # each with its tool and the steps it needs (`agent.planner`) - instead of routed.
+    planner: bool = False
+    # What the domain is about, in words, as every prompt names it ("a question about
+    # {subject}"); unset, its name. The planner judges whether a question is in scope by it.
+    subject: str | None = None
 
     def shown_models(self, models: list[ModelConfig]) -> list[ModelConfig]:
         """The domain's models the local agent may route to and ask."""

@@ -15,6 +15,9 @@ from pydantic import BaseModel
 Route = Literal["data", "prediction", "knowledge", "mixed"]
 ROUTES: tuple[Route, ...] = ("data", "prediction", "knowledge", "mixed")
 Tool = Literal["data", "prediction", "knowledge"]  # a route that is one tool
+# What a reply says it took: a route, or "none" - declined before any tool ran, the
+# question being about something else (`agent.planner`).
+ReplyRoute = Literal["data", "prediction", "knowledge", "mixed", "none"]
 
 
 class SqlReply(BaseModel):
@@ -66,6 +69,24 @@ class HoldsReply(BaseModel):
 
     holds: bool
     instead: str  # what the result holds in its place, when it does not
+
+
+class PlannedStep(BaseModel):
+    """One thing to find, with the one tool that finds it; `uses` names the earlier steps
+    whose results it needs (`#s1`'s hour, `#s1`'s count)."""
+
+    id: str  # "s1", "s2": how a later step names it
+    tool: Tool
+    ask: str  # what this step finds, as a question that reads alone
+    uses: list[str]  # ids of earlier steps it needs; empty when it needs none
+
+
+class StepPlan(BaseModel):
+    """A question planned: whether it is about the domain at all, and the steps that answer
+    it - found at once where nothing ties them, in order where one needs another."""
+
+    in_scope: bool
+    steps: list[PlannedStep]
 
 
 class AnswerReply(BaseModel):
@@ -276,6 +297,43 @@ What it returned:
 Question: {question}
 """
 
+# One call that plans the whole question (`agent.planner`), in place of the router, the
+# second opinion and the plan of a mixed question: the route decided whether there was a
+# plan at all, and a question the router called `data` was never split - its prediction,
+# which needed what the tables found first, never made (2026-10-09). The plan names
+# what each step needs from another, so a step runs once what it needs is found and
+# steps that need nothing from each other run at once (ReWOO, LLMCompiler). And it says
+# when a question is about none of the domain: declined before any tool runs.
+PLANNER = """You plan how to answer a question about {subject} with the sources below.
+
+{sources}
+
+The tables:
+{tables}
+
+Plan the question:
+- in_scope: false only when the question is about something else altogether, none of
+  what these sources cover. A question about {subject} that the sources may not hold is
+  in scope: the tools will say what they found.
+- steps: one step per thing to find, each with the one source that finds it and an `ask`
+  written as a question that reads alone. A question one source answers is one step.
+- A step that needs another step's result - a value it is asked with, the thing it is
+  about - lists that step's id in `uses` and says in its `ask` what it takes from it ("the
+  hour s1 finds", "that many tickets, from s1"). Steps that need nothing from each other
+  have empty `uses`: they are found at once.
+- A study already computed answers a what-if for the whole business: that is data. A
+  model is for one item the question describes, one at a time.
+- Comparing or combining what the steps find is left to the answer: it is not a step.
+
+Question: {question}
+"""
+
+PLANNER_AGAIN = """
+Your plan could not be run:
+{problems}
+Plan the question again.
+"""
+
 ANSWER = """Answer the question about {subject} from the evidence below, and from nothing else.
 
 Rules:
@@ -328,4 +386,5 @@ PROMPTS: dict[str, tuple[str, type[BaseModel] | None]] = {
     "describe-item": (DESCRIBE_ITEM, None),
     "answer": (ANSWER + FIX, AnswerReply),
     "holds": (HOLDS, HoldsReply),
+    "planner": (PLANNER + PLANNER_AGAIN, StepPlan),
 }

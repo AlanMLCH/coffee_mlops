@@ -30,7 +30,7 @@ import mlflow
 import polars as pl
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from mlops_core.agent.prompts import ROUTER_VERSION, ROUTES, SQL_VERSION, Route, Tool
+from mlops_core.agent.prompts import ROUTER_VERSION, ROUTES, SQL_VERSION, ReplyRoute, Tool
 from mlops_core.agent.routing import route
 from mlops_core.agent.sql import QueryResult, run_select
 from mlops_core.agent.text_to_sql import Generator, write_sql
@@ -84,7 +84,8 @@ class RouteCase(BaseModel):
 
     id: str
     question: str
-    route: Route
+    # "none" for a question about something else altogether: declined before any tool.
+    route: ReplyRoute
     tools: tuple[Tool, ...] = ()  # what a mixed question needs; one route needs its own tool
     sql: str | None = None  # a reference for the data part the SQL set does not hold
     model: str | None = None  # the model a prediction is for
@@ -97,6 +98,8 @@ class RouteCase(BaseModel):
     def _expectations_fit_the_route(self) -> Self:
         if not self.answerable and (self.sql or self.model or self.tools):
             raise ValueError(f"{self.id}: an unanswerable question has no reference to state")
+        if self.route == "none" and self.answerable:
+            raise ValueError(f"{self.id}: a question no tool is for has no answer")
         if (self.route == "mixed") != bool(self.tools):
             raise ValueError(f"{self.id}: list the tools of a mixed question, and only then")
         if ("prediction" in self.needs) != bool(self.model and self.item):
@@ -105,7 +108,9 @@ class RouteCase(BaseModel):
 
     @property
     def needs(self) -> tuple[Tool, ...]:
-        """The tools a right answer needs."""
+        """The tools a right answer needs: none for a question declined before any."""
+        if self.route == "none":
+            return ()
         return self.tools or (self.route,)  # type: ignore[return-value]
 
 

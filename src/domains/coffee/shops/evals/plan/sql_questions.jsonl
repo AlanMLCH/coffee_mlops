@@ -1,0 +1,1 @@
+{"id": "p-one-01", "question": "What share of my tickets, in percent, were takeaway in July 2026?", "sql": "SELECT 100.0 * count(DISTINCT ticket_id) FILTER (WHERE channel = 'takeaway') / count(DISTINCT ticket_id) AS takeaway_pct FROM clean.sales WHERE date >= DATE '2026-07-01' AND date < DATE '2026-08-01'"}

@@ -95,6 +95,10 @@ def test_every_shop_is_a_file_and_shares_the_rest(shop_adapter: CoffeeShopAdapte
     ]
     assert barrio.shop.zone_id != paso.shop.zone_id
     assert shop_adapter.config == barrio
+    # Each shop's agent answers about it, by name, and plans every question.
+    assert barrio.agent.subject is not None and paso.agent.subject is not None
+    assert barrio.agent.subject.startswith("the coffee shop Café de Barrio (demo) - its sales")
+    assert "Café de Paso" in paso.agent.subject and barrio.agent.planner
 
 
 def test_a_shops_file_describes_its_shop_and_nothing_else(

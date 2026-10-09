@@ -32,7 +32,7 @@ def routing_context(
     ]
     topics = config.corpus.topics if config.corpus else {}
     return {
-        "subject": config.name,
+        "subject": config.agent.subject or config.name,
         "tables": "\n".join(headings),
         "models": "\n".join(f"  - {m.name}: {m.description}" for m in models),
         "topics": "\n".join(f"  - {name}: {t.description}" for name, t in topics.items()),

@@ -8,6 +8,8 @@ answer is written again and which one is kept - not a model.
 
 import asyncio
 import json
+import threading
+import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import date
@@ -30,8 +32,9 @@ import domains.coffee
 from mlops_core import cli
 from mlops_core.adapter import domain_dir, load_adapter
 from mlops_core.agent import registry
-from mlops_core.agent.graph import Agent
-from mlops_core.agent.prompts import PROMPTS
+from mlops_core.agent.graph import Agent, Reply
+from mlops_core.agent.planner import StepResult
+from mlops_core.agent.prompts import PROMPTS, PlannedStep
 from mlops_core.agent.registry import PREFIX, register_prompts
 from mlops_core.agent.sql import QueryResult, read_only, views
 from mlops_core.agent.study_cards import StudyCard, StudyFinder
@@ -48,7 +51,7 @@ from mlops_core.agent.text_to_sql import (
     write_sql,
     writes_prose,
 )
-from mlops_core.agent.tools import predict
+from mlops_core.agent.tools import PredictionAnswer, predict
 from mlops_core.agent.verify import cited_ids, figures, problems
 from mlops_core.config import CHUNKS_TABLE, DOCUMENTS_TABLE, Settings, SqlGuard
 from mlops_core.data.corpus import CHUNKS_COLUMNS
@@ -133,6 +136,7 @@ def agent(
     library: bool = True,
     studies: StudyFinder | None = None,
     check_result: bool = False,
+    planner: bool = False,
 ) -> Agent:
     return Agent(
         generator,
@@ -148,6 +152,7 @@ def agent(
         library=library,
         studies=studies,
         check_result=check_result,
+        planner=planner,
     )
 
 
@@ -966,6 +971,242 @@ def test_a_result_that_holds_something_else_is_no_answer(
     assert answered.answered and answered.sql is not None and answered.sql.result is not None
     assert partly.answered and partly.prediction is not None
     assert "it holds something else" in mixed.asked("AnswerReply")[0]
+
+
+# --- The planner ------------------------------------------------------------------------
+
+
+def planned(*steps: tuple[str, str, str, list[str]], in_scope: bool = True) -> dict[str, Any]:
+    return {
+        "in_scope": in_scope,
+        "steps": [
+            {"id": i, "tool": tool, "ask": ask, "uses": uses} for i, tool, ask, uses in steps
+        ],
+    }
+
+
+def test_a_question_about_something_else_is_declined_before_any_tool(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    generator = Scripted(StepPlan=lambda p: planned(in_scope=False))
+
+    reply = agent(generator, session, planner=True).ask("Who won the 2022 World Cup?")
+
+    assert reply.route == "none" and not reply.answered and reply.steps == ()
+    assert reply.text.startswith("That is not something I can answer: I answer questions about")
+    assert [name for name, _ in generator.prompts] == ["StepPlan"]
+    plan_prompt = generator.asked("StepPlan")[0]
+    assert "- data: the domain's tables" in plan_prompt and "- knowledge:" in plan_prompt
+
+
+def test_a_step_that_needs_another_runs_after_it_and_is_handed_what_it_found(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """The prediction is asked with the altitude the tables found: a number the question
+    never states, kept because a step it needs found it."""
+    generator = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "data", "At what altitude does the top state grow?", []),
+            ("s2", "prediction", "What would a Kenyan lot at the altitude s1 finds score?", ["s1"]),
+        ),
+        SqlReply=lambda p: {
+            "sql": "SELECT 1450.0 AS altitude_m FROM clean.mexico_production LIMIT 1"
+        },
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya", "altitude_m": 1450.0},
+        AnswerReply=lambda p: {
+            "text": "At 1450 m [sql], 1324.93 [prediction].",
+            "citations": ["sql", "prediction"],
+        },
+    )
+
+    reply = agent(generator, session, planner=True).ask(
+        "At the top state's altitude, a Kenyan lot?"
+    )
+
+    assert reply.route == "mixed" and [s.step.id for s in reply.steps] == ["s1", "s2"]
+    names = [name for name, _ in generator.prompts]
+    assert names.index("SqlReply") < names.index("Lot")
+    described_item = generator.asked("Lot")[0]
+    assert "Found by the steps this one uses:\n[s1] At what altitude" in described_item
+    assert reply.prediction is not None and reply.prediction.request["altitude_m"] == 1450.0
+    assert reply.answered and reply.verified
+    assert reply.sources == [
+        "[sql] the tables, with the query below",
+        "[prediction] the review model, v5",
+    ]
+
+
+def test_steps_that_need_nothing_from_each_other_run_at_once(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    threads: set[int] = set()
+
+    def query(prompt: str) -> dict[str, Any]:
+        threads.add(threading.get_ident())
+        time.sleep(0.05)
+        return {"sql": TOP}
+
+    generator = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "data", "Which state grows most?", []),
+            ("s2", "data", "Which state grows most, again?", []),
+        ),
+        SqlReply=query,
+        AnswerReply=lambda p: {
+            "text": "Chiapas [sql], Chiapas [sql2].",
+            "citations": ["sql", "sql2"],
+        },
+    )
+
+    reply = agent(generator, session, planner=True).ask("Which state grows most, twice?")
+
+    assert len(threads) == 2
+    evidence = generator.asked("AnswerReply")[0]
+    assert '[sql] Query result for "Which state grows most?"' in evidence
+    assert '[sql2] Query result for "Which state grows most, again?"' in evidence
+    assert reply.route == "data" and reply.sources == [
+        "[sql] the tables, with the query below",
+        "[sql2] the tables, with the query below",
+    ]
+
+
+def test_a_step_whose_need_found_nothing_is_not_run_and_the_reply_says_why(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    generator = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "data", "What altitude does Iceland grow at?", []),
+            ("s2", "prediction", "What would a lot at that altitude score?", ["s1"]),
+        ),
+        SqlReply=lambda p: {
+            "sql": "SELECT state FROM clean.mexico_production WHERE state = 'Iceland'"
+        },
+    )
+
+    reply = agent(generator, session, planner=True).ask("Iceland's altitude, and a lot there?")
+
+    assert not reply.answered and reply.steps[1].skipped is not None
+    assert "s2: not looked up (it needs what s1 found, and that found nothing)." in reply.text
+    assert "s1: The tables: the query ran and found nothing." in reply.text
+    assert not generator.asked("Lot")
+
+
+def test_a_plan_that_cannot_run_is_asked_again_then_left_to_the_router(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    wrong = planned(("s1", "data", "Which state?", ["s0"]))
+    right = planned(("s1", "data", "Which state grows most?", []))
+    answer = {"text": "Chiapas [sql].", "citations": ["sql"]}
+    twice = Scripted(StepPlan=[wrong, wrong], RouteReply=lambda p: {"route": "data"},
+                     SqlReply=lambda p: {"sql": TOP}, AnswerReply=lambda p: answer)  # fmt: skip
+    again = Scripted(StepPlan=[wrong, right], SqlReply=lambda p: {"sql": TOP},
+                     AnswerReply=lambda p: answer)  # fmt: skip
+
+    routed = agent(twice, session, planner=True).ask("Which state grows most?")
+    replanned = agent(again, session, planner=True).ask("Which state grows most?")
+
+    told = "Your plan could not be run:\n- Step s1 uses s0, which is not a step planned before it."
+    assert told in twice.asked("StepPlan")[1]
+    assert routed.answered and routed.route == "data" and len(twice.asked("RouteReply")) == 1
+    assert [s.step.ask for s in routed.steps] == ["Which state grows most?"]
+    assert replanned.answered and not again.asked("RouteReply")
+
+
+def test_two_predictions_are_each_read_from_their_own_step(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """The asker's words hold both items: each step's own words hold one."""
+    generator = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "prediction", "What would a Kenyan lot score?", []),
+            ("s2", "prediction", "What would an Ethiopian lot score?", []),
+        ),
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya" if "Kenyan" in p.split("Question:")[-1] else "Ethiopia"},
+        AnswerReply=lambda p: {
+            "text": "1324.93 [prediction], 1324.93 [prediction2].",
+            "citations": ["prediction", "prediction2"],
+        },
+    )
+
+    reply = agent(generator, session, planner=True).ask("A Kenyan lot and an Ethiopian one?")
+
+    asked = [prompt.split("Question:")[-1] for prompt in generator.asked("Lot")]
+    assert any("Kenyan lot score" in a and "Ethiopian" not in a for a in asked)
+    assert any("Ethiopian lot score" in a and "Kenyan" not in a for a in asked)
+    assert {s.prediction.request["country"] for s in reply.steps if s.prediction} == {
+        "Kenya",
+        "Ethiopia",
+    }
+    assert reply.route == "prediction" and "[prediction2] the review model, v5" in reply.sources
+
+
+def test_documents_in_a_plan_and_what_each_step_found_when_none_is_evidence(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """Two searches that find the same passage give it once; and when no step finds
+    anything usable, the reply says, step by step, what each came back with."""
+    found = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "knowledge", "Why does altitude matter?", []),
+            ("s2", "knowledge", "How does altitude change the cup?", []),
+        ),
+        AnswerReply=lambda p: {"text": "It slows ripening [c1].", "citations": ["c1"]},
+    )
+    far = PASSAGE | {"score": 0.2}
+    nothing = Scripted(
+        StepPlan=lambda p: planned(
+            ("s1", "prediction", "What would a Kenyan lot score?", []),
+            ("s2", "knowledge", "Why?", []),
+        ),
+        ModelChoice=lambda p: {"model": "review"},
+        Lot=lambda p: {"country": "Kenya"},
+    )
+    down = Agent(
+        nothing, domains.coffee.adapter(), session, "",
+        {"subject": "coffee", "tables": "", "models": "  - review: a cup score", "topics": ""},
+        lambda question, k: [far], api(lambda r: httpx.Response(503)), {}, {}, planner=True,
+    )  # fmt: skip
+
+    answered = agent(found, session, planner=True).ask("Why does altitude matter?")
+    missed = down.ask("A Kenyan lot's score, and why?")
+
+    assert answered.answered and len(answered.passages) == 1 and answered.route == "knowledge"
+    assert not missed.answered
+    assert "s1: the models: no prediction (The prediction service failed:" in missed.text
+    assert "s2: the documents: no passage is close enough to the question." in missed.text
+
+
+def test_ask_lists_each_step_of_a_plan(
+    stood_in: Callable[[Script], None], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sql = SqlAnswer(TOP, QueryResult(TOP, ["state"], [("Chiapas",)], False), None, 1)
+    item = PredictionAnswer("review", {"country": "Kenya"}, PREDICTED, None)
+    steps = (
+        StepResult(PlannedStep(id="s1", tool="data", ask="Top state?", uses=[]), sql=sql),
+        StepResult(PlannedStep(id="s2", tool="prediction", ask="Score?", uses=[]), prediction=item),
+        StepResult(PlannedStep(id="s3", tool="data", ask="Again?", uses=["s1"]), skipped="no"),
+    )
+    reply = Reply("Q?", "mixed", "Chiapas [sql].", ["[sql] the tables, with the query below"],
+                  sql, item, [], [], steps=steps)  # fmt: skip
+
+    @contextmanager
+    def session(*args: Any, **kwargs: Any) -> Iterator[tuple[Any, str]]:
+        yield type("Stub", (), {"ask": staticmethod(lambda question: reply)})(), "stub"
+
+    monkeypatch.setenv(
+        "MLOPS_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'ask-mlflow.db').as_posix()}"
+    )
+    monkeypatch.setattr(cli, "agent_session", session)
+    result = CliRunner().invoke(cli.app, ["agent", "ask", "Q?"])
+
+    assert result.exit_code == 0, result.output
+    assert "step s1 (data): Top state?\n  sql: SELECT state" in result.output
+    assert (
+        "step s2 (prediction): Score?\n  prediction (review): {'country': 'Kenya'}" in result.output
+    )
+    assert "step s3 (data): Again?\n  not run: no" in result.output
 
 
 def test_the_prediction_api_is_reached_at_the_configured_address() -> None:

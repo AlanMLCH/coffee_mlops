@@ -251,6 +251,8 @@ def log_evaluation(
 
 
 def _tools_that_ran(reply: Reply) -> set[str]:
+    if reply.steps:  # a planner's: every step that ran, each with its tool
+        return {step.tool for step in reply.steps if step.skipped is None}
     return (
         ({"data"} if reply.sql is not None else set())
         | ({"prediction"} if reply.prediction is not None else set())
@@ -280,9 +282,16 @@ def _item_errors(case: RouteCase, prediction: PredictionAnswer | None) -> list[s
 
 
 def _same(expected: str | float, got: object) -> bool:
+    """A stated value written as stated; a figure copied from a result, with fewer
+    decimals than it has (12.29 for 12.287356...), is the same figure."""
     if isinstance(expected, str):
         return isinstance(got, str) and got.strip().casefold() == expected.casefold()
-    return isinstance(got, int | float) and not isinstance(got, bool) and got == expected
+    if not isinstance(got, int | float) or isinstance(got, bool):
+        return False
+    if got == expected:
+        return True
+    decimals = len(f"{got:.10f}".rstrip("0").split(".")[1])
+    return 0 < decimals < 6 and round(expected, decimals) == got
 
 
 def _share(verdicts: pl.Series) -> float:

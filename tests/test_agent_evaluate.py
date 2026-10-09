@@ -31,6 +31,8 @@ from mlops_core.agent.evaluate import (
     versus,
 )
 from mlops_core.agent.graph import Reply
+from mlops_core.agent.planner import StepResult
+from mlops_core.agent.prompts import PlannedStep
 from mlops_core.agent.sql import QueryResult, read_only
 from mlops_core.agent.text_to_sql import SqlAnswer
 from mlops_core.agent.tools import PredictionAnswer
@@ -310,6 +312,46 @@ def test_questions_asked_at_once_come_back_in_order_each_with_its_own_trace(
     assert table["case_id"].to_list() == ["data-01", "data-02", "data-03", "data-04"]
     assert table["trace_id"].to_list() == [f"tr-data-0{n}?" for n in range(1, 5)]
     assert len(threads) > 1 and table["sql_ok"].all()
+
+
+def test_a_question_declined_before_any_tool_and_the_tools_a_plan_ran(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A question about something else is right when declined; and a plan's tools are the
+    steps that ran - not one skipped for want of what it needed."""
+    outside = case("out-01", "none", answerable=False)
+    declined = Reply("q", "none", "Not one to answer.", [], None, None, [], [], False)
+    data = PlannedStep(id="s1", tool="data", ask="How many?", uses=[])
+    later = PlannedStep(id="s2", tool="prediction", ask="Then?", uses=["s1"])
+    sql = SqlAnswer("SELECT 1", QueryResult("SELECT 1", ["n"], [(1,)], False), None, 1)
+    planned = replace(
+        reply(rows=[(1,)]),
+        steps=(StepResult(data, sql=sql), StepResult(later, skipped="it needs s1")),
+    )
+
+    verdict = check(Truth(outside, None, ()), declined, session)
+    assert verdict["correct"] and verdict["route_ok"] and outside.needs == ()
+    assert check(Truth(case("d-01", "data"), None, ()), planned, session)["tools"] == "data"
+    with pytest.raises(ValidationError, match="a question no tool is for has no answer"):
+        case("out-02", "none")
+
+
+def test_a_figure_copied_from_a_result_with_fewer_decimals_is_the_same_figure(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    item = {"tickets_in_hour": 12.28735632183908, "hour": 10}
+    truth = Truth(case("p-01", "prediction", model="order_minutes", item=item), None, ())
+
+    def asked(tickets: float) -> Reply:
+        request = {"tickets_in_hour": tickets, "hour": 10}
+        made = PredictionAnswer("order_minutes", request, {"prediction": 4.2}, None)
+        return reply(route="prediction", prediction=made)
+
+    assert check(truth, asked(12.29), session)["item_ok"]
+    assert check(truth, asked(12.3), session)["item_ok"]
+    assert check(truth, asked(12.28735632183908), session)["item_ok"]
+    assert not check(truth, asked(12), session)["item_ok"]  # rounded away, not copied
+    assert not check(truth, asked(12.4), session)["item_ok"]
 
 
 def test_a_question_that_breaks_the_agent_is_a_wrong_answer_not_a_lost_run(

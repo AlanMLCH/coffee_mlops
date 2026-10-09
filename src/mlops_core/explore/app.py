@@ -81,6 +81,7 @@ ROUTES = {
     "prediction": "answered by a model",
     "knowledge": "answered from the documents",
     "mixed": "answered with several tools",
+    "none": "declined: not about this domain",
 }
 
 settings = Settings()
@@ -784,10 +785,18 @@ def about_tab() -> None:
     for model in config.models:
         st.markdown(f"- **{model.name}** - {model.description}")
     st.subheader("How an answer is made")
-    st.markdown(
-        "1. **Route**: the local model decides what the question needs - the tables, a "
+    first = (
+        "1. **Plan**: the model first decides whether the question is about this at all - "
+        "if not, it says so and runs nothing - and splits it into steps, each with the one "
+        "source that answers it (the tables, a model's prediction, the documents) and the "
+        "steps it needs. Steps that need nothing from each other run at once; a step that "
+        "needs another is handed what it found.\n"
+        if config.agent.planner
+        else "1. **Route**: the local model decides what the question needs - the tables, a "
         "model's prediction, the documents, or several.\n"
-        "2. **Tools**: it writes one SELECT, run in a read-only session that cannot touch "
+    )
+    st.markdown(
+        first + "2. **Tools**: it writes one SELECT, run in a read-only session that cannot touch "
         "anything but the published tables (a failed query goes back to it, twice at most); "
         "or it describes the item for the prediction API; or it searches the documents.\n"
         "3. **Answer and check**: every figure in the answer must be in the evidence and "

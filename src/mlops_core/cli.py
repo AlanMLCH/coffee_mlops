@@ -666,10 +666,20 @@ def ask(
     typer.echo(reply.text)
     for source in reply.sources:
         typer.echo(source)
-    if reply.sql is not None:
-        typer.echo(f"sql: {reply.sql.sql}")
-    if reply.prediction is not None:
-        typer.echo(f"prediction ({reply.prediction.model}): {reply.prediction.request}")
+    if len(reply.steps) > 1:  # a plan of several steps: each with what it ran
+        for step in reply.steps:
+            typer.echo(f"step {step.step.id} ({step.tool}): {step.step.ask}")
+            if step.skipped is not None:
+                typer.echo(f"  not run: {step.skipped}")
+            if step.sql is not None:
+                typer.echo(f"  sql: {step.sql.sql}")
+            if step.prediction is not None:
+                typer.echo(f"  prediction ({step.prediction.model}): {step.prediction.request}")
+    else:
+        if reply.sql is not None:
+            typer.echo(f"sql: {reply.sql.sql}")
+        if reply.prediction is not None:
+            typer.echo(f"prediction ({reply.prediction.model}): {reply.prediction.request}")
     for problem in reply.problems:
         typer.echo(f"unverified: {problem}", err=True)
     typer.echo(f"route: {reply.route} | trace: {mlflow.get_last_active_trace_id()}")
@@ -1064,6 +1074,7 @@ def agent_session(
                 library=config.corpus is not None,
                 studies=studies,
                 check_result=config.agent.check_result,
+                planner=config.agent.planner,
             ),
             identity,
         )

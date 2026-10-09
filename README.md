@@ -45,7 +45,12 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   where a price may go - are found the same way and shown to the steps that choose a
   tool, so a question about what would happen reads the study instead of asking a model
   for one hour; and a query's result is checked against the question before it counts
-  as evidence (a business's own prices are no answer to what its competitors charge). Every
+  as evidence (a business's own prices are no answer to what its competitors charge). A
+  domain can plan instead of route (the coffee shops do): one call decides whether the
+  question is about the domain at all - declining it before any tool runs when not - and
+  splits it into steps, each with its tool and the steps it needs (ReWOO, LLMCompiler);
+  steps that need nothing from each other run at once, and one that needs another is
+  handed what it found. Every
   figure in an answer is checked against its evidence before it is shown, and when the
   tools find nothing it says so instead of writing an answer. Free tiers of hosted models
   (Gemini, Groq, OpenRouter) can answer first, each set aside when its quota runs

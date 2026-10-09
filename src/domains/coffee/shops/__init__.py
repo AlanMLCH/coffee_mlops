@@ -38,9 +38,10 @@ def shop_config(name: str) -> CoffeeShopConfig:
     for model in shared["models"]:
         training = model["training"]
         training["registered_model"] = f"{prefix}-{training['registered_model']}"
-    # Its explorer is titled after it and opens on it.
+    # Its explorer is titled after it and opens on it, and its agent answers about it.
     shop = own["shop"]
     shared["explore"]["title"] = shop["name"]
+    shared["agent"]["subject"] = shared["agent"]["subject"].format(name=shop["name"])
     shared["explore"]["view"] |= {"latitude": shop["latitude"], "longitude": shop["longitude"]}
     return CoffeeShopConfig.model_validate({**shared, **own, "name": name})
 
