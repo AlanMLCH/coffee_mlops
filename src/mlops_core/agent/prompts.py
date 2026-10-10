@@ -274,7 +274,10 @@ Question: {question}
 # generator tried answered from it (2026-10-07). Shown no description of the tables, the
 # check took a count of tickets named `customers` for customers, and turned down three
 # values to compare because they were not compared yet (2026-10-08): it reads the
-# sections of the tables the query read, and the two rules below.
+# sections of the tables the query read, and the two rules below. And it turned down the
+# highest daily composite price of a month - exactly what was asked, the router's query to
+# the letter - saying it held "the highest daily composite price" (2026-10-10): a refusal
+# needs a plain difference, said, and a doubt keeps the result.
 HOLDS = """A question about {subject}, a query of the tables written for it, and what the
 query returned. The tables it read are described below.
 
@@ -283,8 +286,10 @@ very things it names? Or something else in its place: another quantity, other th
 wider or a narrower scope? Judge each column by what the query computes it from, as the
 tables' descriptions say, never by the name the query gives it. A result that holds the
 figures the answer needs holds it, even when the answer must still compare, round or
-rank them, or when it has more columns than asked. If it does not, say in a few words
-what it holds instead.
+rank them, or when it has more columns than asked. Say it does not only when the result
+plainly measures something else, and say in a few words what: what it holds, against
+what the question asks. When in doubt, or when what it holds is what the question asks
+in other words, it holds it.
 
 {tables}
 
@@ -305,7 +310,9 @@ Question: {question}
 # steps that need nothing from each other run at once (ReWOO, LLMCompiler). And it says
 # when a question is about none of the domain: declined before any tool runs. An ask that
 # named the business ("sales for <its name>") was written into the query as a filter on
-# the product's name, and found nothing (2026-10-09).
+# the product's name, and found nothing (2026-10-09). A model's mean error, asked for
+# once, was planned as three queries of its inputs, none of which computed it
+# (2026-10-10): one computed figure is one step.
 PLANNER = """You plan how to answer a question about {subject} with the sources below.
 
 {sources}
@@ -327,6 +334,10 @@ Plan the question:
   have empty `uses`: they are found at once.
 - A study already computed answers a what-if for the whole business: that is data. A
   model is for one item the question describes, one at a time.
+- A figure the records compute - a count, a share, an average, the error between two
+  columns, a difference between two years - is one step: one query computes it, however
+  many columns or tables it reads. Steps are for things to find apart, not for the parts
+  of one calculation.
 - Comparing or combining what the steps find is left to the answer: it is not a step.
 
 Question: {question}

@@ -33,7 +33,11 @@ SOURCES = {
     "computed from them.{studies}",
     "prediction": "- prediction: models that estimate one item the question describes, each "
     "asked with the inputs listed:\n{models}",
-    "knowledge": "- knowledge: documents that explain how and why, on:\n{topics}",
+    # A how or a why is the documents', whatever the tables call their columns: asked how
+    # moisture changes in processing, the plan read a moisture column (2026-10-10).
+    "knowledge": "- knowledge: documents that explain how and why, on:\n{topics}\n  A "
+    "question about how or why - a process, a cause, a practice - is theirs, even when a "
+    "table has a column of the same name.",
 }
 
 

@@ -971,6 +971,7 @@ def test_a_result_that_holds_something_else_is_no_answer(
     checked = elsewhere.asked("HoldsReply")[0]
     assert "Question: What do importers pay?" in checked
     assert "## `clean.mexico_production` — coffee grown" in checked  # the table it read
+    assert "When in doubt" in checked  # a refusal needs a plain difference
     assert answered.answered and answered.sql is not None and answered.sql.result is not None
     assert partly.answered and partly.prediction is not None
     assert "it holds something else" in mixed.asked("AnswerReply")[0]
@@ -1002,6 +1003,8 @@ def test_a_question_about_something_else_is_declined_before_any_tool(
     assert "- data: the domain's tables" in plan_prompt and "- knowledge:" in plan_prompt
     # An ask never names whose records it reads: a name becomes a filter.
     assert "Every source already holds coffee and nothing else" in plan_prompt
+    # One computed figure is one step, however many columns it reads.
+    assert "is one step: one query computes it" in plan_prompt
 
 
 def test_a_step_that_needs_another_runs_after_it_and_is_handed_what_it_found(

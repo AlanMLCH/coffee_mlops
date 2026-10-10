@@ -148,3 +148,5 @@ def test_the_planner_is_told_only_the_sources_the_domain_has() -> None:
     assert "studies already computed from them. Studies: x." in told
     assert "  - demand: tickets" in told and "  - roasting: how" in told
     assert "knowledge" not in sources("  - demand: tickets", "", "", library=False)
+    # A how or a why is the documents', whatever a column is called: said where they are.
+    assert "A question about how or why" in told
