@@ -946,6 +946,14 @@ def mcp_server(
         ),
     ] = False,
     port: Annotated[int, typer.Option(help="The HTTP port, with --http")] = 8765,
+    with_agent: Annotated[
+        bool,
+        typer.Option(
+            "--agent",
+            help="Also offer ask_agent: the project's own agent, which plans, checks and "
+            "cites - it needs MLflow, and may ask hosted models first",
+        ),
+    ] = False,
 ) -> None:
     """Serve the agent's tools over MCP, on stdio: for Claude Desktop, Claude Code or an IDE.
 
@@ -956,9 +964,13 @@ def mcp_server(
     the protocol, so everything else goes to stderr.
     """
     with _needs_extra("mcp"):
-        from mlops_core.agent.dictionary import domain_dictionary, schema_context
-        from mlops_core.agent.mcp_server import build_server
+        import mlflow
+
+        from mlops_core.agent.dictionary import domain_dictionary, offered, schema_context
+        from mlops_core.agent.mcp_server import build_server, source_finder
+        from mlops_core.agent.model_cards import ModelFinder, model_cards, served_models
         from mlops_core.agent.sql import read_only, views
+        from mlops_core.agent.study_cards import StudyFinder, study_cards
         from mlops_core.agent.tools import cite
         from mlops_core.explore.layers import areas_if_built
         from mlops_core.rag.llm import LocalModel, ollama_client
@@ -970,9 +982,22 @@ def mcp_server(
     con = read_only(_data_dir(config), config.parent)
     areas = areas_if_built(con, config.explore)
     dictionary = domain_dictionary(config)
-    with ollama_client(settings.ollama_url) as http, _api_client(settings.api_url) as api:
+    with (
+        ollama_client(settings.ollama_url) as http,
+        _api_client(settings.api_url) as api,
+        ExitStack() as stack,
+    ):
         embedder = LocalModel(http, EMBEDDING_MODEL, QUERY_OPTIONS)
         passages, titles = _documents(config, settings, embedder)
+        # The agent's own retrieval over the catalogue: every study and served model.
+        studies = StudyFinder(study_cards(offered(dictionary, views(con))), embedder.embed, 3)
+        models = ModelFinder(model_cards(adapter, served_models(adapter, api)), embedder.embed)
+        ask = None
+        if with_agent:
+            mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+            mlflow.set_experiment(f"{config.name}-agent")
+            agent, _ = stack.enter_context(agent_session(adapter, settings))
+            ask = agent.ask
         server = build_server(
             adapter,
             con,
@@ -983,6 +1008,8 @@ def mcp_server(
             areas,
             _data_dir(config),
             settings.explore_url,
+            finder=source_finder(studies, models),
+            ask=ask,
         )
         if over_http:
             # Bound to this machine only: the tools read the data, and nothing here asks

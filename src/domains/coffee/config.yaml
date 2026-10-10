@@ -1693,6 +1693,17 @@ agent:
   # No model is kept from it (2026-10-03): it is shown the two served models closest to
   # each question, with their inputs (`agent.model_cards`), not the list of all of them.
   hidden_models: []
+  # The agent as it should be for a capable model (2026-10-09; the 4B is the demo's): each
+  # question planned - in scope or not, as steps that need each other - instead of routed;
+  # the three studies closest to it shown as answers already computed; a query's result
+  # checked against the question before it is evidence.
+  planner: true
+  study_cards: 3
+  check_result: true
+  subject: >-
+    coffee - where it grows and what growers are paid, what green coffee costs in the world
+    and in pesos, what roasters and shelves charge, Mexico City's coffee shops and the people
+    around them, and how coffee is grown, processed, roasted, brewed and tasted
   hidden_tables:
     - clean.census_zones
     - clean.transit_stations
@@ -2302,7 +2313,7 @@ explore:
                round(area_trend_pct, 1) AS area_trend_pct
         FROM analysis.municipality_type_profiles
       kind: table
-    - title: Who buys coffee to drink at home
+    - title: Who buys coffee to drink at home, borough by borough
       text: >-
         In ENIGH's week, 13.7% of Mexico's households bought coffee to make at home. A
         model of their state, size and income beats each state's own share, but barely

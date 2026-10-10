@@ -728,7 +728,7 @@ class ExploreFinding(BaseModel):
     title: str
     text: str
     sql: str
-    kind: Literal["bar", "line", "scatter", "areas", "table"] | None = None
+    kind: Literal["bar", "line", "scatter", "heatmap", "areas", "table"] | None = None
     x: str | None = None
     y: str | None = None
     color: str | None = None
@@ -797,6 +797,16 @@ class ExploreConfig(BaseModel):
         ]
         if drawn:
             raise ValueError(f"Layers {drawn} draw areas, but `explore.areas` names none")
+        return self
+
+    @model_validator(mode="after")
+    def _every_finding_has_a_title_of_its_own(self) -> Self:
+        """A title names a finding on the page and its prompt over MCP: two of the same
+        read as one, and one prompt hides the other."""
+        titles = [finding.title for finding in self.findings]
+        twice = sorted({title for title in titles if titles.count(title) > 1})
+        if twice:
+            raise ValueError(f"Findings share a title: {twice}")
         return self
 
 

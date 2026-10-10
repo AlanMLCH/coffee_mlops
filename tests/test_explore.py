@@ -308,6 +308,26 @@ def test_areas_are_coloured_by_looking_up_the_result_by_key_or_by_name() -> None
     assert by_key["data"]["values"] is AREAS.shapes
 
 
+def test_a_heatmap_is_a_grid_of_two_categories_shaded_by_a_number() -> None:
+    waits = pl.DataFrame({"hour": [7, 8, 7, 8], "weekday": ["1", "1", "2", "2"],
+                          "wait": [6.5, 9.0, 7.1, 11.0]})  # fmt: skip
+    chart = Chart(kind="heatmap", x="hour", y="weekday", color="wait")
+    spec = vega_lite(chart, waits)
+
+    assert check_chart(chart, waits) == []
+    assert spec is not None and spec["mark"] == {"type": "rect"}
+    assert (
+        spec["encoding"]["x"]["type"] == "ordinal" and spec["encoding"]["y"]["field"] == "weekday"
+    )
+    assert spec["encoding"]["color"]["type"] == "quantitative"
+    assert check_chart(Chart(kind="heatmap", x="hour", y="weekday"), waits) == [
+        "a heatmap chart needs color"
+    ]
+    assert check_chart(Chart(kind="heatmap", x="hour", y="wait", color="weekday"), waits) == [
+        "a heatmap's color must be a number; 'weekday' is not"
+    ]
+
+
 def test_a_table_is_not_drawn() -> None:
     assert vega_lite(Chart(kind="table"), PRICES) is None
 
@@ -337,6 +357,15 @@ def test_a_layer_of_areas_needs_the_areas_it_draws() -> None:
     zones = {"table": "clean.zones", "id": "zone_id", "name": "zone_id", "boundary": "shape"}
     finer = ExploreConfig(title="t", view=view, layers=[layer | {"areas": zones}])  # type: ignore[arg-type]
     assert finer.layers[0].areas is not None and finer.areas is None
+
+
+def test_every_finding_has_a_title_of_its_own() -> None:
+    """A title names a finding on the page and its prompt over MCP."""
+    view = {"latitude": 19.4, "longitude": -99.1, "zoom": 10}
+    finding = {"title": "Who buys", "text": "t", "sql": "SELECT 1"}
+
+    with pytest.raises(ValidationError, match=r"Findings share a title: \['Who buys'\]"):
+        ExploreConfig(title="t", view=view, findings=[finding, finding])  # type: ignore[arg-type]
 
 
 # --- The map's data, through the agent's locked session -------------------------------------

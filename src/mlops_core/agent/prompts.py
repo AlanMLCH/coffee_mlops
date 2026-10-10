@@ -303,7 +303,9 @@ Question: {question}
 # which needed what the tables found first, never made (2026-10-09). The plan names
 # what each step needs from another, so a step runs once what it needs is found and
 # steps that need nothing from each other run at once (ReWOO, LLMCompiler). And it says
-# when a question is about none of the domain: declined before any tool runs.
+# when a question is about none of the domain: declined before any tool runs. An ask that
+# named the business ("sales for <its name>") was written into the query as a filter on
+# the product's name, and found nothing (2026-10-09).
 PLANNER = """You plan how to answer a question about {subject} with the sources below.
 
 {sources}
@@ -317,6 +319,8 @@ Plan the question:
   in scope: the tools will say what they found.
 - steps: one step per thing to find, each with the one source that finds it and an `ask`
   written as a question that reads alone. A question one source answers is one step.
+- Every source already holds {subject} and nothing else: an `ask` says what to find, never
+  whose it is - a name in it would be read as a filter on the records.
 - A step that needs another step's result - a value it is asked with, the thing it is
   about - lists that step's id in `uses` and says in its `ask` what it takes from it ("the
   hour s1 finds", "that many tickets, from s1"). Steps that need nothing from each other

@@ -60,7 +60,7 @@ from mlops_core.explore.segments import (
 from mlops_core.explore.studies import domain_figures, domain_studies, figure, lineage
 from mlops_core.explore.style import CSS
 
-KINDS = ["bar", "line", "scatter", "points", "areas", "table"]
+KINDS = ["bar", "line", "scatter", "heatmap", "points", "areas", "table"]
 RANKED = 25  # areas ranked beside the map
 NONE = "(none)"
 MAP_HEIGHT = 620

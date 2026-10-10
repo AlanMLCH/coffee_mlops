@@ -34,7 +34,7 @@ MANY_BARS = 12  # upright bars side by side before their names start to be skipp
 BAR_STEP = 24  # pixels per lying bar: room for its name, which is never skipped
 LABEL_PIXELS = 220  # how much of a lying bar's name shows before it is cut
 
-ChartKind = Literal["bar", "line", "scatter", "points", "areas", "table"]
+ChartKind = Literal["bar", "line", "scatter", "heatmap", "points", "areas", "table"]
 
 
 class Chart(BaseModel):
@@ -42,20 +42,24 @@ class Chart(BaseModel):
 
     kind: ChartKind = Field(
         description="bar: a number per category; line: a number over time; scatter: two "
-        "numbers; points: rows with latitude and longitude, on a map; areas: a number per "
-        "area, as a map; table: the rows as they are"
+        "numbers; heatmap: a number for each pair of two categories (x across, y down, "
+        "color the number); points: rows with latitude and longitude, on a map; areas: a "
+        "number per area, as a map; table: the rows as they are"
     )
     x: str | None = Field(
         default=None,
-        description="bar: the category column; line: the time column; scatter: a number",
+        description="bar: the category column; line: the time column; scatter: a number; "
+        "heatmap: the category across",
     )
     y: str | None = Field(
         default=None,
-        description="The number drawn: bar height, line, scatter's vertical axis, colour",
+        description="The number drawn: bar height, line, scatter's vertical axis, colour; "
+        "a heatmap's category down",
     )
     color: str | None = Field(
         default=None,
-        description=f"A column whose values split the marks into series, {MAX_SERIES} at most",
+        description=f"A column whose values split the marks into series, {MAX_SERIES} at "
+        "most; a heatmap's number, drawn as each cell's shade",
     )
     title: str = ""
 
@@ -109,7 +113,8 @@ def check_chart(chart: Chart, result: pl.DataFrame, areas: Areas | None = None) 
     if missing:
         return missing
     problems = []
-    needs = {"bar": ("x", "y"), "line": ("x", "y"), "scatter": ("x", "y"), "areas": ("y",)}
+    needs = {"bar": ("x", "y"), "line": ("x", "y"), "scatter": ("x", "y"), "areas": ("y",),
+             "heatmap": ("x", "y", "color")}  # fmt: skip
     problems += [f"a {chart.kind} chart needs {role}" for role in needs.get(chart.kind, ())
                  if getattr(chart, role) is None]  # fmt: skip
     numeric = set(_numbers(result))
@@ -122,6 +127,10 @@ def check_chart(chart: Chart, result: pl.DataFrame, areas: Areas | None = None) 
     if chart.kind == "areas" and _area_column(result, areas) is None:
         known = f"{areas.id!r} or {areas.name!r}" if areas else "an area table"
         problems.append(f"areas need a column naming the area: {known}")
+    if chart.kind == "heatmap":  # its colour is a number's shade, not a few series
+        if chart.color and chart.color not in numeric:
+            problems.append(f"a heatmap's color must be a number; {chart.color!r} is not")
+        return problems
     if chart.color and result[chart.color].n_unique() > MAX_SERIES:
         problems.append(f"{chart.color!r} has more than {MAX_SERIES} values to colour by")
     return problems
@@ -186,6 +195,24 @@ def vega_lite(
                     {"field": "properties.name", "type": "nominal", "title": "area"},
                     {"field": chart.y, "type": "quantitative"},
                 ],
+            },
+        }
+    if chart.kind == "heatmap":
+        # Two categories in their own order - hours, weekdays - and the number as a shade:
+        # a grid reads where seven lines over the same hours tangle.
+        return spec | {
+            "data": {"values": records},
+            "mark": {"type": "rect"},
+            "encoding": {
+                "x": {"field": chart.x, "type": "ordinal", "title": _title(chart.x)},
+                "y": {"field": chart.y, "type": "ordinal", "title": _title(chart.y)},
+                "color": {
+                    "field": chart.color,
+                    "type": "quantitative",
+                    "scale": {"range": SEQUENTIAL},
+                    "title": _title(chart.color),
+                },
+                "tooltip": tooltip,
             },
         }
     if color:

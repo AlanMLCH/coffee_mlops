@@ -504,8 +504,10 @@ def test_ask_answers_with_its_sources_and_the_trace_it_left(
     ask: Callable[[str, Script], Any],
 ) -> None:
     def script(shape: dict[str, Any]) -> dict[str, Any]:
-        if "route" in shape:
-            return {"route": "knowledge"}
+        if "steps" in shape:  # coffee plans its questions
+            ask = "Why does altitude matter?"
+            return {"in_scope": True, "steps": [{"id": "s1", "tool": "knowledge", "ask": ask,
+                                                 "uses": []}]}  # fmt: skip
         return {"text": "Altitude delays ripening [c1].", "citations": ["c1"]}
 
     result = ask("Why does altitude matter?", script)
@@ -520,11 +522,12 @@ def test_ask_shows_the_query_the_item_and_what_it_could_not_verify(
     ask: Callable[[str, Script], Any],
 ) -> None:
     def script(shape: dict[str, Any]) -> dict[str, Any]:
-        if "route" in shape:
-            return {"route": "mixed"}
-        if "parts" in shape:
-            parts = [("How many chunks?", "data"), ("Price?", "prediction")]
-            return {"parts": [{"question": q, "tool": tool} for q, tool in parts]}
+        if "steps" in shape:
+            steps = [("s1", "How many chunks?", "data"), ("s2", "Price?", "prediction")]
+            return {"in_scope": True, "steps": [{"id": i, "tool": tool, "ask": q, "uses": []}
+                                                for i, q, tool in steps]}  # fmt: skip
+        if "holds" in shape:
+            return {"holds": True, "instead": ""}
         if "sql" in shape:
             return {"sql": "SELECT count(*) AS n FROM clean.document_chunks"}
         if "model" in shape:
@@ -997,6 +1000,8 @@ def test_a_question_about_something_else_is_declined_before_any_tool(
     assert [name for name, _ in generator.prompts] == ["StepPlan"]
     plan_prompt = generator.asked("StepPlan")[0]
     assert "- data: the domain's tables" in plan_prompt and "- knowledge:" in plan_prompt
+    # An ask never names whose records it reads: a name becomes a filter.
+    assert "Every source already holds coffee and nothing else" in plan_prompt
 
 
 def test_a_step_that_needs_another_runs_after_it_and_is_handed_what_it_found(
@@ -1190,16 +1195,25 @@ def test_ask_lists_each_step_of_a_plan(
     )
     reply = Reply("Q?", "mixed", "Chiapas [sql].", ["[sql] the tables, with the query below"],
                   sql, item, [], [], steps=steps)  # fmt: skip
+    # One step, or the router's: the query and the item, each on a line of its own.
+    single = Reply("Q?", "mixed", "Chiapas [sql].", [], sql, item, [], [], steps=steps[:1])
+    replies = iter([reply, single])
 
     @contextmanager
     def session(*args: Any, **kwargs: Any) -> Iterator[tuple[Any, str]]:
-        yield type("Stub", (), {"ask": staticmethod(lambda question: reply)})(), "stub"
+        answer = next(replies)
+        yield type("Stub", (), {"ask": staticmethod(lambda question: answer)})(), "stub"
 
     monkeypatch.setenv(
         "MLOPS_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'ask-mlflow.db').as_posix()}"
     )
     monkeypatch.setattr(cli, "agent_session", session)
     result = CliRunner().invoke(cli.app, ["agent", "ask", "Q?"])
+    one = CliRunner().invoke(cli.app, ["agent", "ask", "Q?"])
+
+    assert one.exit_code == 0, one.output
+    assert "\nsql: SELECT state" in one.output and "\nprediction (review): {'country'" in one.output
+    assert "step s1" not in one.output
 
     assert result.exit_code == 0, result.output
     assert "step s1 (data): Top state?\n  sql: SELECT state" in result.output
@@ -1253,11 +1267,12 @@ def test_evaluate_asks_every_question_and_compares_with_the_last_run(
 
     def run(sql: str) -> Any:
         def script(shape: dict[str, Any]) -> dict[str, Any]:
-            if "route" in shape:
-                return {"route": "mixed"}
-            if "parts" in shape:
-                parts = [("Top state?", "data"), ("Why altitude?", "knowledge")]
-                return {"parts": [{"question": q, "tool": tool} for q, tool in parts]}
+            if "steps" in shape:
+                steps = [("s1", "Top state?", "data"), ("s2", "Why altitude?", "knowledge")]
+                return {"in_scope": True, "steps": [{"id": i, "tool": tool, "ask": q, "uses": []}
+                                                    for i, q, tool in steps]}  # fmt: skip
+            if "holds" in shape:
+                return {"holds": True, "instead": ""}
             if "sql" in shape:
                 return {"sql": sql}
             return {"text": "It is so [sql] [c1].", "citations": ["sql", "c1"]}
@@ -1327,6 +1342,84 @@ def test_the_mcp_server_offers_the_agents_tools_all_read_only(
     assert "The roaster, as the catalogues name it" in offer
     assert tools["predict_offer"].description.startswith("Predict the price per kilogram")
     assert "`clean.mexico_production`" in next(iter(resource)).content
+
+
+def test_mcp_offers_the_sources_closest_to_a_question_and_the_agent_itself(
+    session: duckdb.DuckDBPyConnection,
+) -> None:
+    """A domain with no documents has nothing to search; the catalogue's closest studies
+    and models, and the agent's own answer with every step, are tools of their own."""
+    from mlops_core.agent.mcp_server import build_server, replied, source_finder
+    from mlops_core.agent.model_cards import ModelCard, ModelFinder
+
+    card = StudyCard("analysis.scenarios", "a day with every price moved", "", ("change_pct",))
+    studies = StudyFinder([card], lambda texts: np.ones((len(texts), 2)), shown=1)
+    models = ModelFinder([ModelCard("demand", "Tickets an hour.", ["weekday", "hour"])], None)  # type: ignore[arg-type]
+    find = source_finder(studies, models)
+    sql = SqlAnswer(TOP, QueryResult(TOP, ["state"], [("Chiapas",)], False), None, 1)
+    step = StepResult(PlannedStep(id="s1", tool="data", ask="Top state?", uses=[]), sql=sql)
+    scored = PredictionAnswer("review", {"country": "Kenya"}, PREDICTED, None)
+    later = StepResult(
+        PlannedStep(id="s2", tool="prediction", ask="Score?", uses=["s1"]), prediction=scored
+    )
+    reply = Reply("Q?", "mixed", "Chiapas [sql].", ["[sql] the tables"], sql, None, [], [],
+                  steps=(step, later))  # fmt: skip
+    shop = load_adapter("coffee/cafe_de_barrio")
+    server = build_server(shop, session, "", lambda q, k: [], api(lambda r: httpx.Response(200)),
+                          lambda p: "", finder=find, ask=lambda question: reply)  # fmt: skip
+
+    tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
+    sources = asyncio.run(server.call_tool("find_sources", {"question": "What if prices rose?"}))
+    answer = asyncio.run(server.call_tool("ask_agent", {"question": "Q?"}))
+
+    assert "search_documents" not in tools  # the shops have no documents
+    assert tools["ask_agent"].annotations is not None
+    assert tools["ask_agent"].annotations.open_world_hint  # it may ask hosted models
+    assert find("x") == {
+        "studies": [
+            {
+                "table": "analysis.scenarios",
+                "what": "a day with every price moved",
+                "holds": ["change_pct"],
+            }
+        ],
+        "models": [
+            {"tool": "predict_demand", "what": "Tickets an hour.", "inputs": ["weekday", "hour"]}
+        ],
+    }
+    assert "analysis.scenarios" in str(sources) and "predict_demand" in str(sources)
+    told = replied(reply)
+    assert told["steps"][0] == {"id": "s1", "tool": "data", "ask": "Top state?", "sql": TOP,
+                                "prediction": None, "skipped": None}  # fmt: skip
+    assert told["steps"][1]["prediction"] == {"model": "review", "item": {"country": "Kenya"}}
+    assert told["answered"] and told["sql"] == TOP and "Chiapas [sql]." in str(answer)
+
+
+def test_mcp_with_the_agent_offers_it_as_a_tool(
+    stood_in: Callable[[Script], None], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mcp.server.mcpserver import MCPServer
+
+    stood_in(lambda shape: {})
+    served: list[list[str]] = []
+
+    @contextmanager
+    def session(*args: Any, **kwargs: Any) -> Iterator[tuple[Any, str]]:
+        yield type("Stub", (), {"ask": staticmethod(lambda question: None)})(), "stub"
+
+    def run(self: MCPServer, transport: str, **options: Any) -> None:
+        served.append([t.name for t in asyncio.run(self.list_tools())])
+
+    monkeypatch.setenv(
+        "MLOPS_MLFLOW_TRACKING_URI", f"sqlite:///{(tmp_path / 'mcp-mlflow.db').as_posix()}"
+    )
+    monkeypatch.setattr(cli, "agent_session", session)
+    monkeypatch.setattr(MCPServer, "run", run)
+
+    result = CliRunner().invoke(cli.app, ["mcp", "--agent"])
+
+    assert result.exit_code == 0, result.output
+    assert served[0][-3:] == ["ask_agent", "explore_segment", "map_layer"]
 
 
 def test_mcp_sql_keeps_its_guardrails_whoever_calls(session: duckdb.DuckDBPyConnection) -> None:
@@ -1457,6 +1550,7 @@ def test_the_mcp_command_serves_on_stdio(
         "predict_green_price",
         *NEW_PREDICTIONS,
         "search_documents",
+        "find_sources",
         "explore_segment",
         "map_layer",
     ]
