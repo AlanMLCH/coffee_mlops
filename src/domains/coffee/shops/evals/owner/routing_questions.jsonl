@@ -1,0 +1,11 @@
+{"id": "o-data-01", "question": "How much was left after staff, rent and services last month?", "route": "data"}
+{"id": "o-data-02", "question": "What share of my sales, in percent, went to ingredients and staff together last month?", "route": "data"}
+{"id": "o-data-03", "question": "How much did card fees cost me in August 2026?", "route": "data"}
+{"id": "o-data-04", "question": "What was my operating margin, in percent, in July 2026?", "route": "data"}
+{"id": "o-data-05", "question": "How much will I sell next month?", "route": "data"}
+{"id": "o-data-06", "question": "How much revenue should I expect in December 2026?", "route": "data"}
+{"id": "o-data-07", "question": "How many tickets will next month bring in total?", "route": "data"}
+{"id": "o-data-08", "question": "In which month of the coming year will I sell the most?", "route": "data"}
+{"id": "o-data-09", "question": "How much will I sell each month next year?", "route": "data"}
+{"id": "o-none-01", "route": "data", "answerable": false, "question": "How much will a new competitor opening next door cut my sales next year?"}
+{"id": "o-out-01", "route": "none", "answerable": false, "question": "What will the peso-dollar exchange rate be next year?"}

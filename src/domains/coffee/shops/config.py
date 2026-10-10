@@ -89,6 +89,14 @@ class ShopConfig(BaseModel):
     price_changes: list[PriceChange] = []
     shifts: list[Shift] = Field(min_length=1)
     hourly_wage_mxn: float = Field(gt=0)
+    # What the shop pays every month whatever it sells - its premises (rent and
+    # maintenance) and its services (electricity, gas, water, internet) - in pesos of
+    # `fixed_costs_as_of`, moved back and forth with the consumer price index; and what a
+    # card terminal keeps of every card sale, its commission and the VAT on it, %.
+    rent_mxn: float = Field(ge=0)
+    services_mxn: float = Field(ge=0)
+    fixed_costs_as_of: date
+    card_fee_pct: float = Field(ge=0, lt=100)
     seed: int
     # The owner's aims, which the studies judge the shop against: the gross margin each
     # category of the menu should keep (price less what goes into it, % of the price), and
@@ -161,12 +169,13 @@ class StudiesConfig(BaseModel):
     radii_m: list[float] = Field(min_length=1)  # coffee shops counted within each of these
     resamples: int = Field(ge=100)  # of whole weeks, for the price response's interval
     seed: int
+    sales_months: int = Field(ge=1)  # how far the sales outlook looks ahead
+    backtest_months: int = Field(ge=1)  # the horizons its past forecasts are judged at
     # The parent's tables each study reads, by the names the shop reads them by.
     green_outlook: str  # where green coffee may be in some months, in a range
     coffee_shops: str
     zones: str  # one row per urban AGEB: residents, density, schooling, internet
     zone_expectations: str  # how many coffee shops an AGEB like each would have
-    roaster_offers: str  # what the city's roasters charge for a kilogram
 
 
 class CoffeeShopConfig(DomainConfig):
@@ -187,7 +196,7 @@ class CoffeeShopConfig(DomainConfig):
                 raise ValueError(f"The simulation reads {name}, which `parent` does not list")
         studies = self.studies
         for name in (studies.green_outlook, studies.coffee_shops, studies.zones,
-                     studies.zone_expectations, studies.roaster_offers):  # fmt: skip
+                     studies.zone_expectations):  # fmt: skip
             if name not in self.parent_tables:
                 raise ValueError(f"The studies read {name}, which `parent` does not list")
         return self

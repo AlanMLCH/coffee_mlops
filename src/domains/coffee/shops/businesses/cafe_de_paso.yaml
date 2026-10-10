@@ -59,6 +59,16 @@ shop:
   # Assumed, April 2025: an hour of staff, wage and the employer's share. Follows the
   # consumer price index.
   hourly_wage_mxn: 68
+  # Assumed, August 2026: a 30 m² counter. Asking rents for retail premises in Gustavo A.
+  # Madero ran from 270 to 550 MXN/m² a month, most at 300 to 350, with maintenance of
+  # about 25 MXN/m² - listing portals' search summaries, October 2026: 30 x (320 + 25) =
+  # 10,350.
+  rent_mxn: 10350
+  # Assumed: a smaller machine and no tables - the low end of the guides' 5,000 to 10,000.
+  services_mxn: 5000
+  fixed_costs_as_of: 2026-08-01
+  # Mercado Pago Point's commission in 2026, 3.5% plus the VAT on it: 4.06% of a card sale.
+  card_fee_pct: 4.06
   # The owner's aims (assumed): thinner margins at lower prices; a counter's promise is
   # speed - five minutes from order to cup.
   target_margins: {espresso: 70, milk: 65, filter: 70, pastry: 45}

@@ -1,7 +1,8 @@
 """What a shop's own data says, for its owner: what each product earns and how inflation and
 green coffee move it, how its customers answer a price and what a change would do, when to
-raise, which products carry the menu, where its hands fall short, and how its corner of the
-city compares with the rest.
+raise, which products carry the menu, where its hands fall short, how its corner of the
+city compares with the rest, what is left each month after every cost, and what the
+coming year's sales look like at today's demand and prices.
 
 Studies, not models: each is a small, explainable computation an owner can check by hand,
 with its uncertainty where it has one. A price change is weighed with an elasticity fitted
@@ -9,6 +10,7 @@ on the shop's own price history - a structural assumption said as such - because
 fitted on that history cannot say what a price it never saw would do.
 """
 
+import calendar
 import math
 from collections.abc import Collection, Mapping
 from datetime import date
@@ -49,6 +51,39 @@ SCENARIOS = {
     "versus_now_low_pct": pl.Float64,
     "versus_now_high_pct": pl.Float64,
 }
+RESULTS = {
+    "month": pl.Date,
+    "revenue_mxn": pl.Float64,
+    "ingredients_mxn": pl.Float64,  # what went into what was sold, waste included
+    "card_fees_mxn": pl.Float64,
+    "staff_mxn": pl.Float64,
+    "rent_mxn": pl.Float64,
+    "services_mxn": pl.Float64,
+    "operating_profit_mxn": pl.Float64,  # before taxes, the owner's own pay, equipment's wear
+    "operating_margin_pct": pl.Float64,
+    "prime_cost_pct": pl.Float64,  # ingredients and staff, % of revenue
+}
+OUTLOOK = {
+    "month": pl.Date,
+    "horizon_months": pl.Int64,
+    "days_open": pl.Int64,
+    "tickets": pl.Float64,
+    "revenue_mxn": pl.Float64,
+    "revenue_low_mxn": pl.Float64,  # the outlook's own past misses, 1 in 10 months below
+    "revenue_high_mxn": pl.Float64,  # and 1 in 10 above
+}
+BACKTEST = {
+    "origin": pl.Date,  # the last month the forecast knew
+    "month": pl.Date,
+    "horizon_months": pl.Int64,
+    "forecast_mxn": pl.Float64,
+    "actual_mxn": pl.Float64,
+    "error_pct": pl.Float64,
+    "naive_mxn": pl.Float64,  # the origin month's sales, repeated
+    "naive_error_pct": pl.Float64,
+}
+OUTLOOK_RANGE = (0.1, 0.9)  # the outlook's range: eight months in ten, by its past misses
+MIN_MISSES = 6  # past forecasts needed before their misses make a range
 NEIGHBOURHOOD = {
     "measure": pl.String,
     "shop": pl.Float64,  # the shop's, or its AGEB's
@@ -74,6 +109,7 @@ def studies(clean: Mapping[str, pl.DataFrame], config: CoffeeShopConfig) -> dict
         settings.seed,
     )
     cpi = clean.get(config.simulation.inflation)
+    outlook, backtest = sales_outlook(clean["shop_hours"], shop, settings)
     return {
         "profile": profile(shop),
         "product_margins": margins,
@@ -94,7 +130,10 @@ def studies(clean: Mapping[str, pl.DataFrame], config: CoffeeShopConfig) -> dict
         "staffing": staffing(
             clean["shop_hours"], clean["orders"], clean["shifts"], shop.wait_target_minutes
         ),
-        "neighbourhood": neighbourhood(shop, clean, clean["purchases"], beans, settings),
+        "neighbourhood": neighbourhood(shop, clean, settings),
+        "monthly_results": monthly_results(clean["sales"], margins, clean["shifts"], shop, cpi),
+        "sales_outlook": outlook,
+        "sales_backtest": backtest,
     }
 
 
@@ -565,16 +604,12 @@ def staffing(
 
 
 def neighbourhood(
-    shop: ShopConfig,
-    clean: Mapping[str, pl.DataFrame],
-    purchases: pl.DataFrame,
-    beans: Collection[str],
-    settings: StudiesConfig,
+    shop: ShopConfig, clean: Mapping[str, pl.DataFrame], settings: StudiesConfig
 ) -> pl.DataFrame:
     """The shop's corner against its borough and the city, from the parent's tables: the
-    coffee shops around it, how many an AGEB like its own would have, who lives there, and
-    what it pays for its beans against what the city's roasters charge. A measure whose
-    parent table is not built is left out."""
+    coffee shops around it, how many an AGEB like its own would have, and who lives there.
+    A measure whose parent table is not built is left out. (What it pays for its beans is
+    not here: against the roasters' shelf prices, a wholesale price read as a bargain.)"""
     rows: list[dict[str, object]] = []
     places = clean.get(settings.coffee_shops)
     if places is not None:
@@ -617,23 +652,192 @@ def neighbourhood(
                 "places",
             )
         )
-    offers = clean.get(settings.roaster_offers)
-    bought = purchases.filter(pl.col("ingredient").is_in(list(beans)), pl.col("unit") == "g")
-    if offers is not None and bought.height:
-        latest = bought.filter(pl.col("date") == bought["date"].max())
-        fair = offers.filter(
-            ~pl.col("price_outlier"), pl.col("snapshot") == offers["snapshot"].max()
-        )
-        rows.append(
-            _row(
-                "beans, a kilogram",
-                1000 * float(latest["unit_cost_mxn"][0]),
-                None,
-                fair["price_mxn_per_kg"].median(),
-                "MXN (city: roasters' shelf price)",
-            )
-        )
     return pl.DataFrame(rows, schema=NEIGHBOURHOOD)
+
+
+# --- What is left each month -----------------------------------------------------------------
+
+
+def monthly_results(
+    sales: pl.DataFrame,
+    margins: pl.DataFrame,
+    shifts: pl.DataFrame,
+    shop: ShopConfig,
+    cpi: pl.DataFrame | None,
+) -> pl.DataFrame:
+    """Each month: what was sold, what went into it (waste included), what the card
+    terminal kept, what staff cost, the rent and the services - and what was left: the
+    operating profit, before taxes, the owner's own pay and the equipment's wear. And the
+    prime cost, ingredients and staff over sales, which owners read first.
+
+    Rent and services are the shop file's, in pesos of the month it gives, moved with the
+    consumer price index to each month's (the latest index published by then); without
+    the index, as given."""
+    month = pl.col("date").dt.truncate("1mo").alias("month")
+    sold = sales.group_by(month).agg(
+        pl.col("line_total_mxn").sum().alias("revenue_mxn"),
+        pl.col("line_total_mxn").filter(pl.col("payment") == "card").sum().alias("card_mxn"),
+    )
+    goods = margins.group_by("month").agg(
+        (pl.col("units") * pl.col("unit_cost_mxn")).sum().alias("ingredients_mxn")
+    )
+    staff = shifts.group_by(month).agg(pl.col("cost_mxn").sum().alias("staff_mxn"))
+    table = (
+        sold.join(goods, on="month", how="left")
+        .join(staff, on="month", how="left")
+        .with_columns(pl.col("ingredients_mxn", "staff_mxn").fill_null(0.0))
+        .sort("month")
+    )
+    factor = _price_factor(table["month"], shop.fixed_costs_as_of, cpi)
+    table = table.with_columns(
+        (pl.col("card_mxn") * shop.card_fee_pct / 100).alias("card_fees_mxn"),
+        (factor * shop.rent_mxn).alias("rent_mxn"),
+        (factor * shop.services_mxn).alias("services_mxn"),
+    )
+    costs = sum(
+        pl.col(c)
+        for c in ("ingredients_mxn", "card_fees_mxn", "staff_mxn", "rent_mxn", "services_mxn")
+    )
+    profit = pl.col("revenue_mxn") - costs
+    return table.select(
+        "month",
+        "revenue_mxn",
+        "ingredients_mxn",
+        "card_fees_mxn",
+        "staff_mxn",
+        "rent_mxn",
+        "services_mxn",
+        profit.alias("operating_profit_mxn"),
+        (100 * profit / pl.col("revenue_mxn")).alias("operating_margin_pct"),
+        (100 * (pl.col("ingredients_mxn") + pl.col("staff_mxn")) / pl.col("revenue_mxn")).alias(
+            "prime_cost_pct"
+        ),
+    ).cast(RESULTS)  # type: ignore[arg-type]
+
+
+def _price_factor(months: pl.Series, as_of: date, cpi: pl.DataFrame | None) -> pl.Series:
+    """Each month's prices against `as_of`'s month, by the consumer price index: the
+    latest index published by then, for both. Ones without the index."""
+    if cpi is None or cpi.is_empty():
+        return pl.Series([1.0] * months.len())
+    index = cpi.sort("month")
+
+    def latest(day: date) -> float:
+        known = index.filter(pl.col("month") <= day)
+        row = known if known.height else index.head(1)
+        return float(row["index"][-1])
+
+    base = latest(as_of.replace(day=1))
+    return pl.Series([latest(m) / base for m in months.to_list()])
+
+
+# --- What the coming year's sales look like ------------------------------------------------
+
+
+def sales_outlook(
+    hours: pl.DataFrame, shop: ShopConfig, settings: StudiesConfig
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """The next `sales_months` months' tickets and sales at today's demand and prices -
+    what each weekday brought on average over the last `baseline_weeks` weeks, times the
+    days the shop opens in each month - with a range from the same forecast's own misses.
+
+    Judged first, then trusted as far as it was right: at every past month end with
+    enough weeks behind it, the same forecast is made for the next `backtest_months`
+    months and set against what they sold, and against the plainest forecast there is - the
+    month just closed, repeated. The range is the misses' 10th and 90th percentiles, put on
+    the forecast. It holds today's prices and today's crowd: a price change, a competitor
+    or a season the history does not hold is not in it."""
+    daily = hours.group_by("date", "weekday").agg(
+        pl.col("tickets").sum(), pl.col("revenue_mxn").sum()
+    )
+    first, last = daily["date"].min(), daily["date"].max()
+    assert isinstance(first, date) and isinstance(last, date)
+    opens = set(shop.opens)
+    months = sorted({d.replace(day=1) for d in daily["date"].to_list()})
+    backtest = []
+    for origin in months[:-1]:
+        end = _month_end(origin)
+        if (end - first).days < 7 * settings.baseline_weeks:  # not weeks enough to know a level
+            continue
+        level = _level(daily, end, settings.baseline_weeks)
+        naive = float(
+            daily.filter(pl.col("date").dt.truncate("1mo") == origin)["revenue_mxn"].sum()
+        )
+        for ahead in range(1, settings.backtest_months + 1):
+            month = _months_after(origin, ahead)
+            if month not in months or _month_end(month) > last:
+                break
+            actual = float(
+                daily.filter(pl.col("date").dt.truncate("1mo") == month)["revenue_mxn"].sum()
+            )
+            forecast = _forecast(level, month, opens)[1]
+            backtest.append(
+                {
+                    "origin": origin,
+                    "month": month,
+                    "horizon_months": ahead,
+                    "forecast_mxn": forecast,
+                    "actual_mxn": actual,
+                    "error_pct": 100 * (forecast / actual - 1),
+                    "naive_mxn": naive,
+                    "naive_error_pct": 100 * (naive / actual - 1),
+                }
+            )
+    judged = pl.DataFrame(backtest, schema=BACKTEST)
+    ratios = judged["actual_mxn"] / judged["forecast_mxn"]
+    low, high = (
+        (float(ratios.quantile(OUTLOOK_RANGE[0])), float(ratios.quantile(OUTLOOK_RANGE[1])))  # type: ignore[arg-type]
+        if judged.height >= MIN_MISSES
+        else (None, None)
+    )
+    level = _level(daily, last, settings.baseline_weeks)
+    rows = []
+    for ahead in range(1, settings.sales_months + 1):
+        month = _months_after(last.replace(day=1), ahead)
+        tickets, revenue, days = _forecast(level, month, opens)
+        rows.append(
+            {
+                "month": month,
+                "horizon_months": ahead,
+                "days_open": days,
+                "tickets": tickets,
+                "revenue_mxn": revenue,
+                "revenue_low_mxn": revenue * low if low is not None else None,
+                "revenue_high_mxn": revenue * high if high is not None else None,
+            }
+        )
+    return pl.DataFrame(rows, schema=OUTLOOK), judged
+
+
+def _level(daily: pl.DataFrame, until: date, weeks: int) -> dict[int, tuple[float, float]]:
+    """Each weekday's tickets and sales on an average day of the `weeks` weeks to `until`."""
+    since = date.fromordinal(until.toordinal() - 7 * weeks + 1)
+    recent = daily.filter(pl.col("date").is_between(since, until))
+    means = recent.group_by("weekday").agg(pl.col("tickets").mean(), pl.col("revenue_mxn").mean())
+    return {int(w): (float(t), float(r)) for w, t, r in means.iter_rows()}
+
+
+def _forecast(
+    level: Mapping[int, tuple[float, float]], month: date, opens: Collection[int]
+) -> tuple[float, float, int]:
+    """A month's tickets and sales at `level`: each day it opens, its weekday's average."""
+    days = [
+        date(month.year, month.month, day)
+        for day in range(1, calendar.monthrange(month.year, month.month)[1] + 1)
+    ]
+    open_days = [d for d in days if d.isoweekday() in opens]
+    tickets = sum(level.get(d.isoweekday(), (0.0, 0.0))[0] for d in open_days)
+    revenue = sum(level.get(d.isoweekday(), (0.0, 0.0))[1] for d in open_days)
+    return tickets, revenue, len(open_days)
+
+
+def _month_end(month: date) -> date:
+    return date(month.year, month.month, calendar.monthrange(month.year, month.month)[1])
+
+
+def _months_after(month: date, n: int) -> date:
+    index = month.year * 12 + month.month - 1 + n
+    return date(index // 12, index % 12 + 1, 1)
 
 
 def once(places: pl.DataFrame) -> pl.DataFrame:

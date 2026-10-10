@@ -72,6 +72,18 @@ shop:
   # City and the employer's share (social security, Christmas bonus, holidays). Follows the
   # consumer price index.
   hourly_wage_mxn: 75
+  # Assumed, August 2026: 60 m² at street level. Listing portals' asking rent for retail
+  # premises in Benito Juárez averaged about 387 MXN/m² a month that month, with
+  # maintenance around 60 MXN/m² more - read from their search summaries in October 2026,
+  # since their pages refuse a script: 60 x (387 + 60) = 26,820.
+  rent_mxn: 26820
+  # Assumed: electricity (an espresso machine, a grinder, refrigeration), gas, water and
+  # internet. Guides to opening a small coffee shop in Mexico put them at 5,000 to 10,000
+  # MXN a month; a full machine and tables, toward the top.
+  services_mxn: 8000
+  fixed_costs_as_of: 2026-08-01
+  # Mercado Pago Point's commission in 2026, 3.5% plus the VAT on it: 4.06% of a card sale.
+  card_fee_pct: 4.06
   # The owner's aims (assumed): a specialty drink keeps three quarters of its price, a
   # pastry bought in a little over half; nobody waits more than eight minutes.
   target_margins: {espresso: 78, milk: 72, filter: 75, chocolate: 70, pastry: 55}

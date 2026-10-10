@@ -139,7 +139,9 @@ studies:
   coffee_shops: coffee.clean.coffee_shops
   zones: coffee.features.zones_features
   zone_expectations: coffee.predictions.zones_predictions
-  roaster_offers: coffee.clean.roaster_offers
+  # The sales outlook: a year ahead, its past forecasts judged one to three months out.
+  sales_months: 12
+  backtest_months: 3
 
 # Kept from the local agent (2026-10-05): the tables the map and the studies read, not an
 # owner's questions - the AGEBs' outlines, the zones model's batch scores, and the shop's
@@ -198,12 +200,25 @@ explore:
       trend: >-
         SELECT sum(revenue_mxn) / sum(tickets) FROM clean.shop_hours
         GROUP BY month ORDER BY month
-    - label: Gross margin
-      sql: SELECT gross_margin_pct FROM analysis.inflation_impact ORDER BY month DESC LIMIT 1
+    - label: Left last month
+      sql: SELECT operating_profit_mxn FROM analysis.monthly_results ORDER BY month DESC LIMIT 1
+      unit: MXN
+      help: >-
+        Sales less ingredients, card fees, staff, rent and services, the last month; before
+        taxes, the owner's own pay and the equipment's wear. Rent and services are assumed
+      trend: SELECT operating_profit_mxn FROM analysis.monthly_results ORDER BY month
+    - label: Prime cost
+      sql: SELECT prime_cost_pct FROM analysis.monthly_results ORDER BY month DESC LIMIT 1
       unit: "%"
       decimals: 1
-      help: Revenue less what went into what was sold, waste included, the last month; before staff and rent
-      trend: SELECT gross_margin_pct FROM analysis.inflation_impact ORDER BY month
+      help: Ingredients and staff together, % of the last month's sales
+      trend: SELECT prime_cost_pct FROM analysis.monthly_results ORDER BY month
+    - label: Sales next month (forecast)
+      sql: SELECT revenue_mxn FROM analysis.sales_outlook WHERE horizon_months = 1
+      unit: MXN
+      help: >-
+        At today's demand and prices, by the days it opens; eight months in ten fall within
+        the range the year-ahead finding draws
     - label: Nine orders in ten ready within
       sql: >-
         SELECT quantile_cont(minutes, 0.9) FROM clean.orders
@@ -291,6 +306,51 @@ explore:
       dimensions: [month, product, category]
       filters: [category, product]
   findings:
+    - title: What is left each month
+      text: >-
+        Sales, every cost against them, and what was left - before taxes, the owner's own
+        pay and the equipment's wear. Rent and services are the shop's file's assumptions
+        (listing portals' asking rents, small coffee shops' guides, 2026), moved with the
+        consumer price index; the card fee is a terminal's commission and its VAT.
+      sql: >-
+        SELECT month, 'sales' AS series, round(revenue_mxn) AS mxn FROM analysis.monthly_results
+        UNION ALL SELECT month, 'ingredients and card fees', round(ingredients_mxn + card_fees_mxn)
+        FROM analysis.monthly_results
+        UNION ALL SELECT month, 'staff', round(staff_mxn) FROM analysis.monthly_results
+        UNION ALL SELECT month, 'rent and services', round(rent_mxn + services_mxn)
+        FROM analysis.monthly_results
+        UNION ALL SELECT month, 'left', round(operating_profit_mxn) FROM analysis.monthly_results
+        ORDER BY month
+      kind: line
+      x: month
+      y: mxn
+      color: series
+    - title: The year ahead
+      text: >-
+        Each month's sales so far, and the next twelve at today's demand and prices - each
+        weekday's average day of the last eight weeks, times the days the shop opens - with
+        the range its own misses on past months give. It holds today's prices and crowd: a
+        price change, a competitor or a season the history does not hold is not in it.
+      sql: >-
+        SELECT month, 'sold' AS series, round(revenue_mxn) AS mxn FROM analysis.monthly_results
+        UNION ALL SELECT month, 'forecast', round(revenue_mxn) FROM analysis.sales_outlook
+        UNION ALL SELECT month, 'low', round(revenue_low_mxn) FROM analysis.sales_outlook
+        UNION ALL SELECT month, 'high', round(revenue_high_mxn) FROM analysis.sales_outlook
+        ORDER BY month
+      kind: line
+      x: month
+      y: mxn
+      color: series
+    - title: How far off the outlook has been
+      text: >-
+        The same forecast made at every past month end and set against what the next months
+        sold: its average miss, against repeating the month just closed. It earns its place
+        by missing less.
+      sql: >-
+        SELECT horizon_months, round(avg(abs(error_pct)), 1) AS outlook_miss_pct,
+               round(avg(abs(naive_error_pct)), 1) AS last_month_miss_pct, count(*) AS months
+        FROM analysis.sales_backtest GROUP BY horizon_months ORDER BY horizon_months
+      kind: table
     - title: When to raise
       text: >-
         Each product's gross margin in the last month against the one its category should
@@ -312,13 +372,15 @@ explore:
         straddles zero means the shop's history cannot tell; past the levels the menu has had,
         the constant elasticity is an assumption.
       sql: >-
-        SELECT change_pct, round(versus_now_pct, 1) AS versus_now_pct,
-               round(versus_now_low_pct, 1) AS low_pct, round(versus_now_high_pct, 1) AS high_pct,
-               round(tickets_per_day) AS tickets_per_day, within_history
-        FROM analysis.price_scenarios ORDER BY change_pct
+        SELECT change_pct, 'central' AS series, round(versus_now_pct, 1) AS versus_now_pct
+        FROM analysis.price_scenarios
+        UNION ALL SELECT change_pct, 'low', round(versus_now_low_pct, 1) FROM analysis.price_scenarios
+        UNION ALL SELECT change_pct, 'high', round(versus_now_high_pct, 1) FROM analysis.price_scenarios
+        ORDER BY change_pct
       kind: line
       x: change_pct
       y: versus_now_pct
+      color: series
     - title: The menu, as menu engineering reads it
       text: >-
         The last three months: how much of the items each product sells against its margin
@@ -333,16 +395,16 @@ explore:
       color: class
     - title: Where the hands fall short
       text: >-
-        Nine orders in ten are ready within this many minutes, hour by hour, each day of the
-        week (1 is Monday): where the line climbs past the owner's target, the slot has too
+        Nine orders in ten are ready within this many minutes, in each hour of each day of
+        the week (1 is Monday): where a cell runs past the owner's target, the slot has too
         few hands for its crowd - and a customer facing the queue may leave unrecorded.
       sql: >-
-        SELECT hour, CAST(weekday AS VARCHAR) AS weekday, round(wait_p90_minutes, 1) AS wait_p90_minutes
+        SELECT hour, weekday, round(wait_p90_minutes, 1) AS wait_p90_minutes
         FROM analysis.staffing WHERE wait_p90_minutes IS NOT NULL ORDER BY weekday, hour
-      kind: line
+      kind: heatmap
       x: hour
-      y: wait_p90_minutes
-      color: weekday
+      y: weekday
+      color: wait_p90_minutes
     - title: What inflation did
       text: >-
         The menu's level and the cost of the mix of products against the month the shop
@@ -376,7 +438,9 @@ explore:
     read from the tables this shop lists and nothing else.
 
     **What is assumed.** The menu, its prices and recipes, the hours, the staff and their
-    cost, the waste, the price changes and the owner's targets: the shop's file. **What is
+    cost, the waste, the price changes, the rent and services (listing portals' asking
+    rents and small coffee shops' guides, 2026), the card terminal's fee and the owner's
+    targets: the shop's file. **What is
     simulated**: every ticket, its items and minute, the queue - a customer who would wait
     past their patience leaves, unrecorded - the weekly purchases and the shifts.
 
@@ -385,6 +449,8 @@ explore:
     whole menu's, and constant past the prices the menu has had. No public source gives a
     coffee shop's drink prices in Mexico City.
   examples:
+    - How much will I sell each month next year?
+    - How much was left after staff and rent last month?
     - Which products should I raise, and by how much?
     - What would a 10% rise in every price do to a day's gross profit?
     - At which hours do nine orders in ten take longer than eight minutes?

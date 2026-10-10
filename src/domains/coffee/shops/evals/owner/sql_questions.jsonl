@@ -1,0 +1,9 @@
+{"id": "o-data-01", "question": "How much was left after staff, rent and services last month?", "sql": "SELECT operating_profit_mxn FROM analysis.monthly_results WHERE month = (SELECT max(month) FROM analysis.monthly_results)"}
+{"id": "o-data-02", "question": "What share of my sales, in percent, went to ingredients and staff together last month?", "sql": "SELECT prime_cost_pct FROM analysis.monthly_results WHERE month = (SELECT max(month) FROM analysis.monthly_results)"}
+{"id": "o-data-03", "question": "How much did card fees cost me in August 2026?", "sql": "SELECT card_fees_mxn FROM analysis.monthly_results WHERE month = DATE '2026-08-01'"}
+{"id": "o-data-04", "question": "What was my operating margin, in percent, in July 2026?", "sql": "SELECT operating_margin_pct FROM analysis.monthly_results WHERE month = DATE '2026-07-01'"}
+{"id": "o-data-05", "question": "How much will I sell next month?", "sql": "SELECT revenue_mxn FROM analysis.sales_outlook WHERE horizon_months = 1"}
+{"id": "o-data-06", "question": "How much revenue should I expect in December 2026?", "sql": "SELECT revenue_mxn FROM analysis.sales_outlook WHERE month = DATE '2026-12-01'"}
+{"id": "o-data-07", "question": "How many tickets will next month bring in total?", "sql": "SELECT tickets FROM analysis.sales_outlook WHERE horizon_months = 1"}
+{"id": "o-data-08", "question": "In which month of the coming year will I sell the most?", "sql": "SELECT month FROM analysis.sales_outlook ORDER BY revenue_mxn DESC LIMIT 1"}
+{"id": "o-data-09", "question": "How much will I sell each month next year?", "sql": "SELECT month, revenue_mxn FROM analysis.sales_outlook ORDER BY month"}

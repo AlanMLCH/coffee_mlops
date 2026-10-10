@@ -46,7 +46,7 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   tool, so a question about what would happen reads the study instead of asking a model
   for one hour; and a query's result is checked against the question before it counts
   as evidence (a business's own prices are no answer to what its competitors charge). A
-  domain can plan instead of route (the coffee shops do): one call decides whether the
+  domain can plan instead of route (coffee and its shops do): one call decides whether the
   question is about the domain at all - declining it before any tool runs when not - and
   splits it into steps, each with its tool and the steps it needs (ReWOO, LLMCompiler);
   steps that need nothing from each other run at once, and one that needs another is
@@ -56,9 +56,10 @@ Everything runs locally, on a laptop with a 6 GB GPU. No cloud, no recurring cos
   (Gemini, Groq, OpenRouter) can answer first, each set aside when its quota runs
   out; the local model is always the last, so the agent never runs dry.
 - **Serves it three ways**: a FastAPI prediction service, an MCP server for Claude
-  Desktop, Claude Code or an IDE (the agent's tools with its own checks, the explorer's
-  slices and maps without SQL, the findings, studies and model cards as resources, each
-  result linked to the explorer), and an explorer app - the price ladder at a glance, a
+  Desktop, Claude Code or an IDE (the agent's tools with its own checks, the studies and
+  models closest to a question, the agent itself with `--agent`, the explorer's slices and
+  maps without SQL, the findings, studies and model cards as resources, each result
+  linked to the explorer), and an explorer app - the price ladder at a glance, a
   deck.gl map of the city, questions to the agent with a chart of every answer, the
   tables sliced by hand, the findings, and each model's evidence.
 
@@ -232,7 +233,12 @@ owner:
 - what inflation did;
 - which products carry the menu;
 - where its hands fall short;
-- its corner of the city against the rest.
+- its corner of the city against the rest;
+- what is left each month after ingredients, card fees, staff, rent and services (rent
+  and services assumed from listing portals' asking rents and small shops' guides);
+- the coming year's sales at today's demand and prices, judged first on the months that
+  had already happened (it misses by about 4-5% a month, against 6-7% for repeating the
+  last one).
 
 It also gets two served models: how many tickets an hour brings, and how long an order
 takes for a given crowd and staffing.

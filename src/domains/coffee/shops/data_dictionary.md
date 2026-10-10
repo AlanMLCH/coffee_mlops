@@ -292,10 +292,64 @@ for a drink in Mexico City: the shop's prices are compared with nobody's.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `measure` | String | `coffee shops within <r> m` (DENUE's and OSM's coffee shops, each place once: one both list is counted by DENUE's row), `residents`, `density`, `schooling`, `homes with internet`, `coffee shops listed in the AGEB`, `coffee shops an AGEB like it would have` (the `zones` model, held out), `beans, a kilogram` |
+| `measure` | String | `coffee shops within <r> m` (DENUE's and OSM's coffee shops, each place once: one both list is counted by DENUE's row), `residents`, `density`, `schooling`, `homes with internet`, `coffee shops listed in the AGEB`, `coffee shops an AGEB like it would have` (the `zones` model, held out) |
 | `shop` | Float | The shop's, or its AGEB's |
-| `borough`, `city` | Float? | The median AGEB of its borough, of the city; for beans, the city's roasters' median shelf price |
+| `borough`, `city` | Float? | The median AGEB of its borough, of the city; null for the counts within a radius |
 | `unit` | String | What the numbers count |
+
+## `analysis.monthly_results` — what was left each month, after every cost
+
+One row a month: what was sold and every cost against it. Rent and services are the
+shop's file's assumptions (from listing portals' asking rents and small coffee shops'
+guides, 2026), moved with the consumer price index; the card fee is a terminal's
+commission and its VAT on the card sales. **The answer to "how much did I make" and
+"what was left"**: `operating_profit_mxn`, before taxes, the owner's own pay and the
+equipment's wear.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `month` | Date | First day of the month |
+| `revenue_mxn` | Float | What was sold, pesos |
+| `ingredients_mxn` | Float | What went into what was sold, waste included |
+| `card_fees_mxn` | Float | What the card terminal kept |
+| `staff_mxn` | Float | Every shift's cost, the employer's share included |
+| `rent_mxn`, `services_mxn` | Float | The premises (rent and maintenance), and electricity, gas, water and internet |
+| `operating_profit_mxn` | Float | `revenue_mxn` less every cost above |
+| `operating_margin_pct` | Float | The same, % of revenue |
+| `prime_cost_pct` | Float | Ingredients and staff together, % of revenue: what owners read first |
+
+## `analysis.sales_outlook` — the coming months' sales, at today's demand and prices
+
+**The answer to "how much will I sell" next month or in a month ahead.** The next twelve
+months after the last one the tables hold: each weekday's tickets and sales on an average
+day of the last eight weeks, times the days the shop opens in the month. Its range comes
+from its own misses on months that had already happened (`analysis.sales_backtest`). It
+holds today's prices and crowd: a price change, a competitor or a season the history does
+not hold is not in it.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `month` | Date | First day of the month forecast |
+| `horizon_months` | Int | Months after the last one the tables hold: 1 is next month |
+| `days_open` | Int | Days the shop opens that month |
+| `tickets` | Float | Tickets the month would bring |
+| `revenue_mxn` | Float | What it would sell, pesos |
+| `revenue_low_mxn`, `revenue_high_mxn` | Float? | Its range: one month in ten fell below, one in ten above, by the forecast's past misses |
+
+## `analysis.sales_backtest` — how the outlook did on months that had happened
+
+At every past month end with eight weeks behind it, the same forecast for the next one to
+three months, set against what they sold - and against the month just closed, repeated
+(`naive_mxn`): the forecast earns its place by missing less.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `origin` | Date | The last month the forecast knew |
+| `month` | Date | The month forecast |
+| `horizon_months` | Int | Months after `origin` |
+| `forecast_mxn`, `actual_mxn` | Float | What it said, and what was sold |
+| `error_pct` | Float | `forecast_mxn` against `actual_mxn`, %; above zero is too high |
+| `naive_mxn`, `naive_error_pct` | Float | The origin month's sales, repeated, and how far that was |
 
 ## Raw layer
 

@@ -339,29 +339,9 @@ def test_the_neighbourhood_is_read_from_the_parent_tables_the_shop_lists(
                 "held_out_prediction": [6.0, 2.0, 1.0],
             }
         ),
-        settings.roaster_offers: pl.DataFrame(
-            {
-                "price_outlier": [False, False, True],
-                "snapshot": ["s2", "s2", "s2"],
-                "price_mxn_per_kg": [800.0, 1000.0, 9000.0],
-            }
-        ),
     }
-    purchases = pl.DataFrame(
-        {
-            "date": [JAN, FEB],
-            "ingredient": ["coffee_beans"] * 2,
-            "unit": ["g", "g"],
-            "unit_cost_mxn": [0.40, 0.42],
-        }
-    )
 
-    rows = {
-        row["measure"]: row
-        for row in neighbourhood(shop, clean, purchases, {"coffee_beans"}, settings).rows(
-            named=True
-        )
-    }
+    rows = {row["measure"]: row for row in neighbourhood(shop, clean, settings).rows(named=True)}
 
     # Each place once: the near shop both registers list counts one, the far two are two.
     assert [rows[f"coffee shops within {r:g} m"]["shop"] for r in settings.radii_m] == [1, 1, 3]
@@ -372,9 +352,82 @@ def test_the_neighbourhood_is_read_from_the_parent_tables_the_shop_lists(
     )
     expected = rows["coffee shops an AGEB like it would have"]
     assert (expected["shop"], expected["borough"], expected["city"]) == (6.0, 4.0, 2.0)
-    assert rows["beans, a kilogram"]["shop"] == pytest.approx(420.0)
-    assert rows["beans, a kilogram"]["city"] == 900.0
-    assert neighbourhood(shop, {}, purchases, {"coffee_beans"}, settings).is_empty()
+    assert not any("beans" in measure for measure in rows)  # a wholesale price is no neighbour's
+    assert neighbourhood(shop, {}, settings).is_empty()
+
+
+def test_what_is_left_each_month_is_every_cost_taken_from_the_sales(
+    shop_adapter: CoffeeShopAdapter,
+) -> None:
+    """Rent and services are given in pesos of one month and moved with the index to the
+    others; the card terminal keeps its fee of the card sales only."""
+    shop = shop_adapter.config.shop.model_copy(
+        update={
+            "rent_mxn": 1100.0,
+            "services_mxn": 110.0,
+            "fixed_costs_as_of": FEB,
+            "card_fee_pct": 4.0,
+        }
+    )
+    sales = pl.DataFrame(
+        {
+            "date": [JAN, JAN, FEB],
+            "line_total_mxn": [1000.0, 500.0, 2000.0],
+            "payment": ["card", "cash", "card"],
+        }
+    )
+    margins = pl.DataFrame({"month": [JAN, FEB], "units": [10, 10], "unit_cost_mxn": [20.0, 30.0]})
+    shifts = pl.DataFrame({"date": [JAN, FEB], "cost_mxn": [100.0, 150.0]})
+    cpi = pl.DataFrame({"month": [JAN, FEB], "index": [100.0, 110.0]})
+
+    jan, feb = analysis.monthly_results(sales, margins, shifts, shop, cpi).rows(named=True)
+
+    assert jan["card_fees_mxn"] == pytest.approx(40.0) and jan["rent_mxn"] == pytest.approx(1000.0)
+    assert jan["services_mxn"] == pytest.approx(100.0)
+    assert jan["operating_profit_mxn"] == pytest.approx(1500 - 200 - 40 - 100 - 1000 - 100)
+    assert jan["operating_margin_pct"] == pytest.approx(4.0)
+    assert jan["prime_cost_pct"] == pytest.approx(20.0)
+    assert (feb["rent_mxn"], feb["operating_profit_mxn"]) == (
+        pytest.approx(1100.0),
+        pytest.approx(260.0),
+    )
+    assert feb["prime_cost_pct"] == pytest.approx(22.5)
+    # No index: as given. An index that starts later: its first month stands for before.
+    plain = analysis.monthly_results(sales, margins, shifts, shop, None)
+    assert plain["rent_mxn"].to_list() == [1100.0, 1100.0]
+    later = analysis.monthly_results(
+        sales, margins, shifts, shop, cpi.filter(pl.col("month") == FEB)
+    )
+    assert later["rent_mxn"].to_list() == [pytest.approx(1100.0)] * 2
+
+
+def test_the_sales_outlook_is_judged_on_past_months_before_it_is_trusted(
+    shop_adapter: CoffeeShopAdapter,
+) -> None:
+    """A steady crowd: every weekday's average day, times the days a month opens. Its past
+    forecasts miss nothing, and repeating last month misses by the calendar alone."""
+    config = shop_adapter.config
+    shop, settings = config.shop, config.studies  # open every day of the week
+    hours = hours_at(
+        [1.0], weeks_each=26
+    )  # 6 Jan to 6 Jul 2025: 100 tickets, 6,000 MXN; Sundays +20%
+
+    outlook, backtest = analysis.sales_outlook(hours, shop, settings)
+
+    august = outlook.row(0, named=True)
+    assert (august["month"], august["horizon_months"], august["days_open"]) == (
+        date(2025, 8, 1), 1, 31,
+    )  # fmt: skip
+    assert august["tickets"] == pytest.approx(26 * 100 + 5 * 120)  # five Sundays
+    assert august["revenue_mxn"] == pytest.approx(26 * 6000 + 5 * 7200)
+    assert august["revenue_low_mxn"] == pytest.approx(august["revenue_mxn"])  # it never missed
+    assert outlook.height == settings.sales_months
+    assert backtest.height == 6 and backtest["origin"].min() == date(2025, 3, 1)
+    assert backtest["error_pct"].abs().max() == pytest.approx(0.0, abs=1e-9)
+    assert backtest["naive_error_pct"].abs().max() > 1  # a 31-day month for a 30-day one
+
+    short, judged = analysis.sales_outlook(hours_at([1.0], weeks_each=12), shop, settings)
+    assert judged.height < analysis.MIN_MISSES and short["revenue_low_mxn"].null_count() == 12
 
 
 def test_every_study_runs_on_a_simulated_shop(shop_adapter: CoffeeShopAdapter) -> None:
@@ -394,6 +447,9 @@ def test_every_study_runs_on_a_simulated_shop(shop_adapter: CoffeeShopAdapter) -
         "menu_engineering",
         "staffing",
         "neighbourhood",
+        "monthly_results",
+        "sales_outlook",
+        "sales_backtest",
     }
     assert tables["price_response"]["price_levels"].to_list() == [1, 1]  # one price: no answer
     assert tables["price_scenarios"].is_empty()
